@@ -33,11 +33,14 @@
          .expense-header { display: none; }
          .expense-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
          .expense-label { font-size: 12px; color: #6b7280; font-weight: 600; }
+         .payment-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+         .payment-row:hover { background: #f9fafb; }
          @media (min-width: 768px) {
-            .expense-row { grid-template-columns: 1.5fr 1.2fr 0.7fr 0.8fr 1fr 1fr 1fr 0.7fr 80px; gap: 12px; padding: 16px; border: none; border-bottom: 1px solid #f3f4f6; border-radius: 0; margin-bottom: 0; box-shadow: none; }
+            .expense-row { grid-template-columns: 1.5fr 1fr 1fr 0.9fr 0.9fr 0.9fr 0.6fr 0.5fr 90px; gap: 8px; padding: 16px; border: none; border-bottom: 1px solid #f3f4f6; border-radius: 0; margin-bottom: 0; box-shadow: none; }
             .expense-header { display: grid; font-weight: 700; color: #374151; background: #f9fafb; border-radius: 8px; }
             .expense-item { display: block; padding: 0; }
             .expense-label { display: none; }
+            .payment-row { grid-template-columns: 1fr 1fr 1fr 2fr 80px; gap: 12px; padding: 16px; border: none; border-bottom: 1px solid #f3f4f6; border-radius: 0; margin-bottom: 0; box-shadow: none; }
          }
          .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
          .badge-llc { background: #dcfce7; color: #166534; }
@@ -88,7 +91,11 @@
                   <h1 class="text-2xl md:text-4xl font-bold mb-1 md:mb-2"><i class="fas fa-chart-line mr-2 md:mr-3"></i>Budget Tracker</h1>
                   <p class="text-purple-100 text-xs md:text-base">Amar & Priya</p>
                </div>
-               <div class="flex gap-2">
+               <div class="flex items-center gap-2 md:gap-4">
+                  <button onclick="showMismatchNotifications()" class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700 relative" title="Notifications" id="notificationBtn">
+                     <i class="fas fa-bell"></i>
+                     <span id="notificationBadge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold" style="display: none;">0</span>
+                  </button>
                   <button onclick="openSettings()" class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700" title="Settings"><i class="fas fa-cog"></i><span class="hidden md:inline ml-2">Settings</span></button>
                   <button onclick="openAddExpenseModal()" class="desktop-only btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700"><i class="fas fa-plus mr-2"></i>Add Expense</button>
                </div>
@@ -139,44 +146,99 @@
             <div class="card p-6">
                <div class="flex items-center justify-between mb-4">
                   <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-user-circle text-blue-500 mr-2"></i>Amar's Share</h3>
-                  <span class="text-2xl font-bold text-blue-600" id="amarShare">$0</span>
+                  <div class="text-right">
+                     <div class="text-2xl font-bold text-blue-600" id="amarShare">$0</div>
+                     <div class="text-xs text-gray-500">Share: 50%</div>
+                  </div>
                </div>
-               <div class="progress-bar">
-                  <div class="progress-fill" id="amarProgress" style="width: 0%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+               <div class="mb-3">
+                  <div class="flex justify-between text-sm mb-1">
+                     <span class="text-gray-600">Contributed</span>
+                     <span class="font-semibold text-blue-600"><span id="amarContribution">$0</span> (<span id="amarContributionPercent">0</span>%)</span>
+                  </div>
+                  <div class="progress-bar">
+                     <div class="progress-fill" id="amarContributionProgress" style="width: 0%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+                  </div>
                </div>
-               <p class="text-sm text-gray-500 mt-2">50% of total expenses</p>
+               <div class="mb-3">
+                  <div class="flex justify-between text-sm mb-1">
+                     <span class="text-gray-600">Remaining</span>
+                     <span class="font-semibold text-gray-700" id="amarRemaining">$0</span>
+                  </div>
+                  <div class="progress-bar">
+                     <div class="progress-fill" id="amarRemainingProgress" style="width: 100%; background: #e5e7eb;"></div>
+                  </div>
+               </div>
+               <button onclick="openContributionModal('Amar')" class="btn-primary w-full text-sm py-2"><i class="fas fa-plus mr-2"></i>Add Payment</button>
             </div>
             <div class="card p-6">
                <div class="flex items-center justify-between mb-4">
                   <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-user-circle text-pink-500 mr-2"></i>Priya's Share</h3>
-                  <span class="text-2xl font-bold text-pink-600" id="priyaShare">$0</span>
+                  <div class="text-right">
+                     <div class="text-2xl font-bold text-pink-600" id="priyaShare">$0</div>
+                     <div class="text-xs text-gray-500">Share: 50%</div>
+                  </div>
                </div>
-               <div class="progress-bar">
-                  <div class="progress-fill" id="priyaProgress" style="width: 0%; background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);"></div>
+               <div class="mb-3">
+                  <div class="flex justify-between text-sm mb-1">
+                     <span class="text-gray-600">Contributed</span>
+                     <span class="font-semibold text-pink-600"><span id="priyaContribution">$0</span> (<span id="priyaContributionPercent">0</span>%)</span>
+                  </div>
+                  <div class="progress-bar">
+                     <div class="progress-fill" id="priyaContributionProgress" style="width: 0%; background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);"></div>
+                  </div>
                </div>
-               <p class="text-sm text-gray-500 mt-2">50% of total expenses</p>
+               <div class="mb-3">
+                  <div class="flex justify-between text-sm mb-1">
+                     <span class="text-gray-600">Remaining</span>
+                     <span class="font-semibold text-gray-700" id="priyaRemaining">$0</span>
+                  </div>
+                  <div class="progress-bar">
+                     <div class="progress-fill" id="priyaRemainingProgress" style="width: 100%; background: #e5e7eb;"></div>
+                  </div>
+               </div>
+               <button onclick="openContributionModal('Priya')" class="btn-primary w-full text-sm py-2" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"><i class="fas fa-plus mr-2"></i>Add Payment</button>
             </div>
          </div>
          <div class="card mb-8">
             <div class="border-b border-gray-200 px-3 md:px-6 overflow-x-auto">
-               <div class="flex gap-2 min-w-max"><button class="tab-button active" onclick="switchTab('expenses')"><i class="fas fa-list mr-1 md:mr-2"></i><span class="hidden md:inline">Expenses</span><span class="md:hidden">List</span></button><button class="tab-button" onclick="switchTab('category')"><i class="fas fa-filter mr-1 md:mr-2"></i><span class="hidden md:inline">Category</span><span class="md:hidden">Cat</span></button><button class="tab-button" onclick="switchTab('analytics')"><i class="fas fa-chart-pie mr-1 md:mr-2"></i><span class="hidden md:inline">Analytics</span><span class="md:hidden">Charts</span></button><button class="tab-button" onclick="switchTab('trends')"><i class="fas fa-chart-line mr-1 md:mr-2"></i>Trends</button><button class="tab-button" onclick="switchTab('insights')"><i class="fas fa-lightbulb mr-1 md:mr-2"></i>Insights</button></div>
+               <div class="flex gap-2 min-w-max"><button class="tab-button active" onclick="switchTab('expenses')"><i class="fas fa-list mr-1 md:mr-2"></i><span class="hidden md:inline">Expenses</span><span class="md:hidden">List</span></button><button class="tab-button" onclick="switchTab('payments')"><i class="fas fa-hand-holding-usd mr-1 md:mr-2"></i><span class="hidden md:inline">Payments</span><span class="md:hidden">Pay</span></button><button class="tab-button" onclick="switchTab('category')"><i class="fas fa-filter mr-1 md:mr-2"></i><span class="hidden md:inline">Category</span><span class="md:hidden">Cat</span></button><button class="tab-button" onclick="switchTab('analytics')"><i class="fas fa-chart-pie mr-1 md:mr-2"></i><span class="hidden md:inline">Analytics</span><span class="md:hidden">Charts</span></button><button class="tab-button" onclick="switchTab('trends')"><i class="fas fa-chart-line mr-1 md:mr-2"></i>Trends</button><button class="tab-button" onclick="switchTab('insights')"><i class="fas fa-lightbulb mr-1 md:mr-2"></i>Insights</button></div>
             </div>
             <div id="expensesTab" class="p-3 md:p-6">
                <div class="expense-row expense-header">
                   <div>Item</div>
                   <div>Category</div>
-                  <div>Year</div>
-                  <div>Month</div>
+                  <div>Date</div>
                   <div>Budget</div>
                   <div>Actual</div>
                   <div>Variance</div>
                   <div>LLC</div>
+                  <div>Receipt</div>
                   <div>Actions</div>
                </div>
                <div id="expensesList">
                   <div class="text-center py-12 text-gray-400">
                      <div class="loading mx-auto mb-4"></div>
                      <p>Loading expenses...</p>
+                  </div>
+               </div>
+            </div>
+            <div id="paymentsTab" class="p-3 md:p-6" style="display: none;">
+               <div class="flex justify-between items-center mb-6">
+                  <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-hand-holding-usd mr-2 text-green-500"></i>Payment History</h3>
+                  <button onclick="openContributionModal('Amar')" class="btn-primary"><i class="fas fa-plus mr-2"></i>Add Payment</button>
+               </div>
+               <div class="payment-row expense-header">
+                  <div>Date</div>
+                  <div>Person</div>
+                  <div>Amount</div>
+                  <div>Description</div>
+                  <div>Actions</div>
+               </div>
+               <div id="paymentsList">
+                  <div class="text-center py-12 text-gray-400">
+                     <div class="loading mx-auto mb-4"></div>
+                     <p>Loading payments...</p>
                   </div>
                </div>
             </div>
@@ -229,16 +291,22 @@
                </div>
                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div>
-                     <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-chart-bar mr-2 text-green-500"></i>Budget vs Actual by Category</h3>
+                     <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-chart-bar mr-2 text-green-500"></i>Spending Per Category Per Month</h3>
                      <div class="chart-container">
-                        <canvas id="budgetActualChart"></canvas>
+                        <canvas id="categoryMonthlyChart"></canvas>
                      </div>
                   </div>
                   <div>
-                     <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-percentage mr-2 text-orange-500"></i>Budget Utilization</h3>
+                     <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-hand-holding-usd mr-2 text-blue-500"></i>Contributions Per Month</h3>
                      <div class="chart-container">
-                        <canvas id="utilizationChart"></canvas>
+                        <canvas id="contributionsMonthlyChart"></canvas>
                      </div>
+                  </div>
+               </div>
+               <div class="mt-6">
+                  <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-percentage mr-2 text-purple-500"></i>Contribution Coverage Per Year</h3>
+                  <div class="chart-container">
+                     <canvas id="contributionCoverageChart"></canvas>
                   </div>
                </div>
             </div>
@@ -287,6 +355,12 @@
                   <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-trophy mr-2 text-yellow-500"></i>Top Spending Categories</h3>
                   <div id="topCategories"></div>
                </div>
+               <div class="card p-6 mb-6">
+                  <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-hand-holding-usd mr-2 text-green-500"></i>Contribution Trends</h3>
+                  <div class="chart-container">
+                     <canvas id="contributionTrendChart"></canvas>
+                  </div>
+               </div>
                <div class="card p-6">
                   <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-lightbulb mr-2 text-blue-500"></i>Smart Recommendations</h3>
                   <div id="recommendations" class="space-y-3"></div>
@@ -310,7 +384,7 @@
                   <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label><input type="text" id="category" class="input-field" list="categoryList" required placeholder="e.g., Grocery, Gas, Utilities">
                   <datalist id="categoryList"></datalist>
                </div>
-               <div class="grid grid-cols-2 gap-4 mb-4">
+               <div class="grid grid-cols-3 gap-4 mb-4">
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Year</label><select id="year" class="input-field" required></select></div>
                   <div>
                      <label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
@@ -329,12 +403,13 @@
                         <option value="12">December</option>
                      </select>
                   </div>
+                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Day</label><input type="number" id="day" class="input-field" min="1" max="31" required placeholder="1-31"></div>
                </div>
                <div class="grid grid-cols-2 gap-4 mb-4">
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Budget Amount</label><input type="number" id="budget" class="input-field" step="0.01" required placeholder="0.00"></div>
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Actual Amount</label><input type="number" id="actual" class="input-field" step="0.01" placeholder="0.00"></div>
                </div>
-               <div class="mb-6">
+               <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">LLC Account</label>
                   <select id="llc" class="input-field">
                      <option value="No">No - Personal Expense</option>
@@ -342,13 +417,117 @@
                   </select>
                   <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Select "Yes" if this expense should be paid through LLC account</p>
                </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2"><i class="fas fa-receipt mr-2 text-purple-500"></i>Receipt</label>
+                  <input type="file" id="receiptFile" class="input-field" accept="image/*,.pdf" capture="environment">
+                  <p class="text-xs text-gray-500 mt-1"><i class="fas fa-camera mr-1"></i>Take photo or upload file (images, PDF)</p>
+                  <div id="currentReceipt" class="mt-3" style="display: none;">
+                     <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div class="flex items-center gap-3">
+                           <i class="fas fa-file-image text-purple-500 text-xl"></i>
+                           <div>
+                              <p class="text-sm font-semibold text-gray-800" id="receiptFileName">Current Receipt</p>
+                              <a id="receiptViewLink" href="#" target="_blank" class="text-xs text-blue-600 hover:underline">View Receipt</a>
+                           </div>
+                        </div>
+                        <button type="button" onclick="removeReceipt()" class="text-red-500 hover:text-red-700" title="Remove receipt">
+                           <i class="fas fa-times-circle text-xl"></i>
+                        </button>
+                     </div>
+                  </div>
+               </div>
+               <div class="border-t pt-4 mb-6">
+                  <h3 class="text-lg font-semibold text-gray-800 mb-3"><i class="fas fa-hand-holding-usd text-green-500 mr-2"></i>Contributions</h3>
+                  <div class="grid grid-cols-2 gap-4">
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Amar's Contribution</label>
+                        <input type="number" id="amarContributionInput" class="input-field" step="0.01" placeholder="0.00">
+                     </div>
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Priya's Contribution</label>
+                        <input type="number" id="priyaContributionInput" class="input-field" step="0.01" placeholder="0.00">
+                     </div>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Enter the amount each person has contributed towards their share</p>
+               </div>
                <div class="flex gap-3"><button type="submit" class="btn-primary flex-1"><i class="fas fa-save mr-2"></i>Save Expense</button><button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button></div>
             </form>
+         </div>
+      </div>
+      <div id="contributionModal" class="modal">
+         <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-hand-holding-usd mr-2 text-green-500"></i><span id="contributionModalTitle">Add Payment</span></h2>
+               <button onclick="closeContributionModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-2xl"></i></button>
+            </div>
+            <form id="contributionForm" onsubmit="saveStandaloneContribution(event)">
+               <input type="hidden" id="contributionPerson">
+               <input type="hidden" id="paymentRecordId">
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Person</label>
+                  <select id="contributionPersonSelect" class="input-field" required onchange="updateContributionPerson()">
+                     <option value="Amar">Amar</option>
+                     <option value="Priya">Priya</option>
+                  </select>
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
+                  <input type="number" id="contributionAmount" class="input-field" step="0.01" required placeholder="0.00" autofocus>
+                  <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Enter the payment amount</p>
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Description (Optional)</label>
+                  <input type="text" id="contributionDescription" class="input-field" placeholder="e.g., Bank transfer, Cash payment">
+               </div>
+               <div class="grid grid-cols-2 gap-4 mb-4">
+                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Year</label><select id="contributionYear" class="input-field" required></select></div>
+                  <div>
+                     <label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
+                     <select id="contributionMonth" class="input-field" required>
+                        <option value="01">January</option>
+                        <option value="02">February</option>
+                        <option value="03">March</option>
+                        <option value="04">April</option>
+                        <option value="05">May</option>
+                        <option value="06">June</option>
+                        <option value="07">July</option>
+                        <option value="08">August</option>
+                        <option value="09">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                     </select>
+                  </div>
+               </div>
+               <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+                  <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>This will create a payment record without linking to a specific expense.</p>
+               </div>
+               <div class="flex gap-3"><button type="submit" class="btn-primary flex-1"><i class="fas fa-save mr-2"></i>Save Payment</button><button type="button" onclick="closeContributionModal()" class="btn-secondary">Cancel</button></div>
+            </form>
+         </div>
+      </div>
+      <div id="mismatchModal" class="modal">
+         <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-exclamation-triangle mr-2 text-red-500"></i>Contribution Mismatches</h2>
+               <button onclick="closeMismatchModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-2xl"></i></button>
+            </div>
+            <div id="mismatchList" class="space-y-4">
+               <div class="text-center py-8 text-gray-400">
+                  <i class="fas fa-check-circle text-6xl text-green-500 mb-4"></i>
+                  <p class="text-lg">No mismatches found!</p>
+                  <p class="text-sm mt-2">All contributions match spending for each month.</p>
+               </div>
+            </div>
+            <div class="mt-6">
+               <button onclick="closeMismatchModal()" class="btn-secondary w-full">Close</button>
+            </div>
          </div>
       </div>
       <script>
          // Airtable Configuration - Multiple storage methods for reliability
          const TABLE_NAME = 'Budget';
+         const PAYMENTS_TABLE = 'Payments';
          
          // Try to get credentials from URL parameters first (works in private mode!)
          const urlParams = new URLSearchParams(window.location.search);
@@ -390,7 +569,9 @@
          }
          
          let allExpenses = [];
-         let charts = { pie: null, llc: null, line: null, budgetActual: null, utilization: null, yearComparison: null, categoryTrend: null };
+         let allPayments = [];
+         let currentReceiptData = null; // Store current receipt for editing
+         let charts = { pie: null, llc: null, line: null, categoryMonthly: null, contributionsMonthly: null, contributionCoverage: null, yearComparison: null, categoryTrend: null, contributionTrend: null };
          
          document.addEventListener('DOMContentLoaded', function() {
              populateYearDropdown();
@@ -411,19 +592,37 @@
          
          async function loadData() {
              try {
-                 const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`, {
+                 // Load expenses
+                 const expensesResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`, {
                      headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
                  });
-                 if (!response.ok) throw new Error('Failed to fetch data');
-                 const data = await response.json();
-                 allExpenses = data.records;
+                 if (!expensesResponse.ok) throw new Error('Failed to fetch expenses');
+                 const expensesData = await expensesResponse.json();
+                 allExpenses = expensesData.records;
+                 
+                 // Load payments
+                 try {
+                     const paymentsResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
+                         headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+                     });
+                     if (paymentsResponse.ok) {
+                         const paymentsData = await paymentsResponse.json();
+                         allPayments = paymentsData.records;
+                     }
+                 } catch (e) {
+                     console.log('Payments table not found - will be created on first payment');
+                     allPayments = [];
+                 }
+                 
                  populateFilters();
                  populateCategorySelector();
                  populateCategoryDatalist();
                  populateItemDatalist();
                  renderExpenses();
+                 renderPayments();
                  updateStats();
                  updateCharts();
+                 updateMismatchNotification();
                  showNotification('Data loaded successfully!', 'success');
              } catch (error) {
                  console.error('Error:', error);
@@ -460,6 +659,7 @@
          
          function filterByPeriod() {
              renderExpenses();
+             renderPayments();
              updateStats();
              updateCharts();
              updateInsights();
@@ -481,8 +681,16 @@
                  container.innerHTML = `<div class="text-center py-12 text-gray-400"><i class="fas fa-inbox text-6xl mb-4"></i><p class="text-lg">No expenses found</p><button onclick="openAddExpenseModal()" class="btn-primary mt-4"><i class="fas fa-plus mr-2"></i>Add Your First Expense</button></div>`;
                  return;
              }
+             
+             // Sort by date (newest first)
+             const sortedExpenses = [...filteredExpenses].sort((a, b) => {
+                 const dateA = `${a.fields.Year}-${String(a.fields.Month).padStart(2, '0')}-${String(a.fields.Day || 1).padStart(2, '0')}`;
+                 const dateB = `${b.fields.Year}-${String(b.fields.Month).padStart(2, '0')}-${String(b.fields.Day || 1).padStart(2, '0')}`;
+                 return dateB.localeCompare(dateA);
+             });
+             
              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-             container.innerHTML = filteredExpenses.map(expense => {
+             container.innerHTML = sortedExpenses.map(expense => {
                  const fields = expense.fields;
                  const budget = fields.Budget || 0;
                  const actual = fields.Actual || 0;
@@ -490,18 +698,67 @@
                  const varianceClass = variance >= 0 ? 'text-green-600' : 'text-red-600';
                  const varianceIcon = variance >= 0 ? 'fa-arrow-down' : 'fa-arrow-up';
                  const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
+                 const day = fields.Day || 1;
+                 const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
+                 
                  return `
                     <div class="expense-row">
                         <div class="expense-item"><span class="expense-label">Item:</span><span class="font-semibold text-gray-800">${fields.Item || 'Unnamed'}</span></div>
                         <div class="expense-item"><span class="expense-label">Category:</span><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">${fields.Category || 'N/A'}</span></div>
-                        <div class="expense-item"><span class="expense-label">Date:</span><span class="text-gray-600">${monthDisplay} ${fields.Year || 'N/A'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Date:</span><span class="text-gray-600">${dateDisplay}</span></div>
                         <div class="expense-item"><span class="expense-label">Budget:</span><span class="font-semibold text-gray-700">$${budget.toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">Actual:</span><span class="font-semibold ${actual > budget ? 'text-red-600' : 'text-gray-700'}">$${actual.toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">Variance:</span><span class="${varianceClass} font-semibold"><i class="fas ${varianceIcon} mr-1"></i>$${Math.abs(variance).toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<a href="${fields.Receipt[0].url}" target="_blank" class="text-purple-600 hover:text-purple-800" title="View Receipt"><i class="fas fa-receipt text-xl"></i></a>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
                             <button onclick="editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
                             <button onclick="deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
+                        </div></div>
+                    </div>
+                `;
+             }).join('');
+         }
+         
+         function renderPayments() {
+             const container = document.getElementById('paymentsList');
+             
+             // Apply year/month filter
+             const selectedYear = document.getElementById('yearSelector').value;
+             const selectedMonth = document.getElementById('monthSelector').value;
+             let filteredPayments = allPayments;
+             if (selectedYear !== 'all') {
+                 filteredPayments = filteredPayments.filter(p => String(p.fields.Year) === selectedYear);
+             }
+             if (selectedMonth !== 'all') {
+                 filteredPayments = filteredPayments.filter(p => p.fields.Month === selectedMonth);
+             }
+             
+             if (filteredPayments.length === 0) {
+                 container.innerHTML = `<div class="text-center py-12 text-gray-400"><i class="fas fa-inbox text-6xl mb-4"></i><p class="text-lg">No payments found</p><button onclick="openContributionModal('Amar')" class="btn-primary mt-4"><i class="fas fa-plus mr-2"></i>Add First Payment</button></div>`;
+                 return;
+             }
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             const sortedPayments = [...filteredPayments].sort((a, b) => {
+                 const dateA = `${a.fields.Year}-${a.fields.Month}`;
+                 const dateB = `${b.fields.Year}-${b.fields.Month}`;
+                 return dateB.localeCompare(dateA);
+             });
+             
+             container.innerHTML = sortedPayments.map(payment => {
+                 const fields = payment.fields;
+                 const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
+                 const personColor = fields.Person === 'Amar' ? 'text-blue-600' : 'text-pink-600';
+                 const personBg = fields.Person === 'Amar' ? 'bg-blue-100' : 'bg-pink-100';
+                 return `
+                    <div class="payment-row">
+                        <div class="expense-item"><span class="expense-label">Date:</span><span class="text-gray-600">${monthDisplay} ${fields.Year || 'N/A'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Person:</span><span class="inline-block px-3 py-1 ${personBg} ${personColor} rounded-full text-sm font-semibold">${fields.Person || 'N/A'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Amount:</span><span class="font-bold text-green-600 text-lg">$${(fields.Amount || 0).toFixed(2)}</span></div>
+                        <div class="expense-item"><span class="expense-label">Description:</span><span class="text-gray-700">${fields.Description || 'Payment'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
+                            <button onclick="editPayment('${payment.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button onclick="deletePayment('${payment.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
                         </div></div>
                     </div>
                 `;
@@ -516,24 +773,69 @@
              const remaining = totalBudget - totalActual;
              const amarShare = totalActual / 2;
              const priyaShare = totalActual / 2;
+             
+             // Calculate contributions (from expenses + standalone payments)
+             // Filter payments by same year/month as expenses
+             const yearFilterEl = document.getElementById('yearSelector');
+             const monthFilterEl = document.getElementById('monthSelector');
+             const selectedYear = yearFilterEl ? yearFilterEl.value : 'all';
+             const selectedMonth = monthFilterEl ? monthFilterEl.value : 'all';
+             
+             let filteredPayments = allPayments;
+             if (selectedYear !== 'all') {
+                 filteredPayments = filteredPayments.filter(p => String(p.fields.Year) === selectedYear);
+             }
+             if (selectedMonth !== 'all') {
+                 filteredPayments = filteredPayments.filter(p => p.fields.Month === selectedMonth);
+             }
+             
+             const amarContribFromExpenses = expenses.reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             const priyaContribFromExpenses = expenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
+             // Only count standalone payments (not from expenses, to avoid double counting)
+             const amarContribFromPayments = filteredPayments.filter(p => p.fields.Person === 'Amar' && !p.fields.FromExpense).reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             const priyaContribFromPayments = filteredPayments.filter(p => p.fields.Person === 'Priya' && !p.fields.FromExpense).reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             const amarContribTotal = amarContribFromExpenses + amarContribFromPayments;
+             const priyaContribTotal = priyaContribFromExpenses + priyaContribFromPayments;
+             
+             // Debug logging
+             console.log('Filter:', selectedYear, selectedMonth);
+             console.log('Amar - From Expenses:', amarContribFromExpenses, 'From Payments:', amarContribFromPayments, 'Total:', amarContribTotal);
+             console.log('Priya - From Expenses:', priyaContribFromExpenses, 'From Payments:', priyaContribFromPayments, 'Total:', priyaContribTotal);
+             console.log('Filtered Payments Count:', filteredPayments.length);
+             const amarRemaining = amarShare - amarContribTotal;
+             const priyaRemaining = priyaShare - priyaContribTotal;
+             const amarContribPercent = amarShare > 0 ? (amarContribTotal / amarShare) * 100 : 0;
+             const priyaContribPercent = priyaShare > 0 ? (priyaContribTotal / priyaShare) * 100 : 0;
+             
              document.getElementById('totalBudget').textContent = `$${totalBudget.toFixed(2)}`;
              document.getElementById('totalActual').textContent = `$${totalActual.toFixed(2)}`;
              document.getElementById('llcTotal').textContent = `$${llcTotal.toFixed(2)}`;
              document.getElementById('remaining').textContent = `$${remaining.toFixed(2)}`;
+             
+             // Update Amar's stats
              document.getElementById('amarShare').textContent = `$${amarShare.toFixed(2)}`;
+             document.getElementById('amarContribution').textContent = `$${amarContribTotal.toFixed(2)}`;
+             document.getElementById('amarContributionPercent').textContent = amarContribPercent.toFixed(0);
+             document.getElementById('amarRemaining').textContent = `$${amarRemaining.toFixed(2)}`;
+             document.getElementById('amarContributionProgress').style.width = `${Math.min(amarContribPercent, 100)}%`;
+             document.getElementById('amarRemainingProgress').style.width = `${Math.min(100 - amarContribPercent, 100)}%`;
+             
+             // Update Priya's stats
              document.getElementById('priyaShare').textContent = `$${priyaShare.toFixed(2)}`;
-             const amarProgress = totalBudget > 0 ? (amarShare / totalBudget) * 100 : 0;
-             const priyaProgress = totalBudget > 0 ? (priyaShare / totalBudget) * 100 : 0;
-             document.getElementById('amarProgress').style.width = `${Math.min(amarProgress, 100)}%`;
-             document.getElementById('priyaProgress').style.width = `${Math.min(priyaProgress, 100)}%`;
+             document.getElementById('priyaContribution').textContent = `$${priyaContribTotal.toFixed(2)}`;
+             document.getElementById('priyaContributionPercent').textContent = priyaContribPercent.toFixed(0);
+             document.getElementById('priyaRemaining').textContent = `$${priyaRemaining.toFixed(2)}`;
+             document.getElementById('priyaContributionProgress').style.width = `${Math.min(priyaContribPercent, 100)}%`;
+             document.getElementById('priyaRemainingProgress').style.width = `${Math.min(100 - priyaContribPercent, 100)}%`;
          }
          
          function updateCharts() {
              updatePieChart();
              updateLLCChart();
              updateLineChart();
-             updateBudgetActualChart();
-             updateUtilizationChart();
+             updateCategoryMonthlyChart();
+             updateContributionsMonthlyChart();
+             updateContributionCoverageChart();
              updateYearComparisonChart();
          }
          
@@ -572,56 +874,227 @@
              });
          }
          
-         function updateBudgetActualChart() {
-             const ctx = document.getElementById('budgetActualChart');
+         function updateCategoryMonthlyChart() {
+             const ctx = document.getElementById('categoryMonthlyChart');
              if (!ctx) return;
-             const expenses = getFilteredExpenses();
-             const categoryData = {};
+             const expenses = allExpenses;
+             
+             // Group by month and category
+             const monthlyData = {};
              expenses.forEach(exp => {
-                 const item = exp.fields.Item || 'Other';
-                 if (!categoryData[item]) categoryData[item] = { budget: 0, actual: 0 };
-                 categoryData[item].budget += exp.fields.Budget || 0;
-                 categoryData[item].actual += exp.fields.Actual || 0;
+                 const monthKey = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+                 const category = exp.fields.Category || 'Other';
+                 if (!monthlyData[monthKey]) monthlyData[monthKey] = {};
+                 if (!monthlyData[monthKey][category]) monthlyData[monthKey][category] = 0;
+                 monthlyData[monthKey][category] += exp.fields.Actual || 0;
              });
-             const labels = Object.keys(categoryData);
-             if (charts.budgetActual) charts.budgetActual.destroy();
-             charts.budgetActual = new Chart(ctx, {
+             
+             // Get last 6 months
+             const sortedMonths = Object.keys(monthlyData).sort().slice(-6);
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             const labels = sortedMonths.map(m => {
+                 const [year, month] = m.split('-');
+                 return `${monthNames[parseInt(month) - 1]} ${year}`;
+             });
+             
+             // Get all categories and sort by total spending (highest first)
+             const categoryTotals = {};
+             expenses.forEach(e => {
+                 const category = e.fields.Category || 'Other';
+                 categoryTotals[category] = (categoryTotals[category] || 0) + (e.fields.Actual || 0);
+             });
+             const categories = Object.keys(categoryTotals).sort((a, b) => categoryTotals[b] - categoryTotals[a]);
+             const colors = ['#667eea', '#f5576c', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+             
+             const datasets = categories.map((category, index) => ({
+                 label: category,
+                 data: sortedMonths.map(m => monthlyData[m][category] || 0),
+                 backgroundColor: colors[index % colors.length]
+             }));
+             
+             if (charts.categoryMonthly) charts.categoryMonthly.destroy();
+             charts.categoryMonthly = new Chart(ctx, {
                  type: 'bar',
-                 data: {
-                     labels: labels,
-                     datasets: [
-                         { label: 'Budget', data: labels.map(l => categoryData[l].budget), backgroundColor: '#667eea' },
-                         { label: 'Actual', data: labels.map(l => categoryData[l].actual), backgroundColor: '#f5576c' }
-                     ]
-                 },
-                 options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                 data: { labels, datasets },
+                 options: { 
+                     responsive: true, 
+                     maintainAspectRatio: false, 
+                     scales: { 
+                         x: { stacked: false },
+                         y: { beginAtZero: true, stacked: false }
+                     }
+                 }
              });
          }
          
-         function updateUtilizationChart() {
-             const ctx = document.getElementById('utilizationChart');
+         function updateContributionsMonthlyChart() {
+             const ctx = document.getElementById('contributionsMonthlyChart');
              if (!ctx) return;
-             const expenses = getFilteredExpenses();
-             const categoryData = {};
-             expenses.forEach(exp => {
-                 const item = exp.fields.Item || 'Other';
-                 if (!categoryData[item]) categoryData[item] = { budget: 0, actual: 0 };
-                 categoryData[item].budget += exp.fields.Budget || 0;
-                 categoryData[item].actual += exp.fields.Actual || 0;
+             
+             // Group contributions by month (from expenses + standalone payments)
+             const monthlyData = {};
+             allExpenses.forEach(exp => {
+                 const monthKey = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+                 if (!monthlyData[monthKey]) {
+                     monthlyData[monthKey] = { amar: 0, priya: 0 };
+                 }
+                 monthlyData[monthKey].amar += (exp.fields.AmarContribution || 0);
+                 monthlyData[monthKey].priya += (exp.fields.PriyaContribution || 0);
              });
-             const labels = Object.keys(categoryData);
-             const utilizationData = labels.map(l => {
-                 const b = categoryData[l].budget;
-                 return b > 0 ? (categoryData[l].actual / b) * 100 : 0;
+             
+             // Add standalone payments (exclude FromExpense to avoid double counting)
+             allPayments.forEach(payment => {
+                 if (!payment.fields.FromExpense) {
+                     const monthKey = `${payment.fields.Year}-${String(payment.fields.Month).padStart(2, '0')}`;
+                     if (!monthlyData[monthKey]) {
+                         monthlyData[monthKey] = { amar: 0, priya: 0 };
+                     }
+                     if (payment.fields.Person === 'Amar') {
+                         monthlyData[monthKey].amar += (payment.fields.Amount || 0);
+                     } else if (payment.fields.Person === 'Priya') {
+                         monthlyData[monthKey].priya += (payment.fields.Amount || 0);
+                     }
+                 }
              });
-             if (charts.utilization) charts.utilization.destroy();
-             charts.utilization = new Chart(ctx, {
+             
+             // Get last 6 months
+             const sortedMonths = Object.keys(monthlyData).sort().slice(-6);
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             const labels = sortedMonths.map(m => {
+                 const [year, month] = m.split('-');
+                 return `${monthNames[parseInt(month) - 1]} ${year}`;
+             });
+             
+             const amarData = sortedMonths.map(m => monthlyData[m].amar);
+             const priyaData = sortedMonths.map(m => monthlyData[m].priya);
+             
+             if (charts.contributionsMonthly) charts.contributionsMonthly.destroy();
+             charts.contributionsMonthly = new Chart(ctx, {
                  type: 'bar',
                  data: {
-                     labels: labels,
-                     datasets: [{ label: 'Utilization %', data: utilizationData, backgroundColor: utilizationData.map(v => v > 100 ? '#ef4444' : v > 90 ? '#f59e0b' : '#10b981') }]
+                     labels,
+                     datasets: [
+                         {
+                             label: 'Amar',
+                             data: amarData,
+                             backgroundColor: '#4facfe'
+                         },
+                         {
+                             label: 'Priya',
+                             data: priyaData,
+                             backgroundColor: '#f093fb'
+                         }
+                     ]
                  },
-                 options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 120 } } }
+                 options: { 
+                     responsive: true, 
+                     maintainAspectRatio: false, 
+                     scales: { 
+                         y: { beginAtZero: true }
+                     }
+                 }
+             });
+         }
+         
+         function updateContributionCoverageChart() {
+             const ctx = document.getElementById('contributionCoverageChart');
+             if (!ctx) return;
+             
+             // Group by year
+             const yearlyData = {};
+             
+             // Calculate total spending and individual contributions per year
+             allExpenses.forEach(exp => {
+                 const year = exp.fields.Year;
+                 if (!yearlyData[year]) {
+                     yearlyData[year] = { spending: 0, amar: 0, priya: 0 };
+                 }
+                 yearlyData[year].spending += (exp.fields.Actual || 0);
+                 yearlyData[year].amar += (exp.fields.AmarContribution || 0);
+                 yearlyData[year].priya += (exp.fields.PriyaContribution || 0);
+             });
+             
+             // Add standalone payments (exclude FromExpense to avoid double counting)
+             allPayments.forEach(payment => {
+                 if (!payment.fields.FromExpense) {
+                     const year = payment.fields.Year;
+                     if (!yearlyData[year]) {
+                         yearlyData[year] = { spending: 0, amar: 0, priya: 0 };
+                     }
+                     if (payment.fields.Person === 'Amar') {
+                         yearlyData[year].amar += (payment.fields.Amount || 0);
+                     } else if (payment.fields.Person === 'Priya') {
+                         yearlyData[year].priya += (payment.fields.Amount || 0);
+                     }
+                 }
+             });
+             
+             // Calculate percentages for each person
+             const years = Object.keys(yearlyData).sort();
+             const amarPercentages = years.map(year => {
+                 const spending = yearlyData[year].spending;
+                 return spending > 0 ? (yearlyData[year].amar / spending) * 100 : 0;
+             });
+             const priyaPercentages = years.map(year => {
+                 const spending = yearlyData[year].spending;
+                 return spending > 0 ? (yearlyData[year].priya / spending) * 100 : 0;
+             });
+             
+             if (charts.contributionCoverage) charts.contributionCoverage.destroy();
+             charts.contributionCoverage = new Chart(ctx, {
+                 type: 'bar',
+                 data: {
+                     labels: years,
+                     datasets: [
+                         {
+                             label: 'Amar',
+                             data: amarPercentages,
+                             backgroundColor: '#4facfe',
+                             borderColor: '#2196f3',
+                             borderWidth: 2
+                         },
+                         {
+                             label: 'Priya',
+                             data: priyaPercentages,
+                             backgroundColor: '#f093fb',
+                             borderColor: '#e91e63',
+                             borderWidth: 2
+                         }
+                     ]
+                 },
+                 options: { 
+                     responsive: true, 
+                     maintainAspectRatio: false,
+                     plugins: {
+                         tooltip: {
+                             callbacks: {
+                                 label: function(context) {
+                                     const year = context.label;
+                                     const person = context.dataset.label;
+                                     const percentage = context.parsed.y.toFixed(1);
+                                     const amount = person === 'Amar' ? yearlyData[year].amar : yearlyData[year].priya;
+                                     const spending = yearlyData[year].spending;
+                                     return [
+                                         `${person}: ${percentage}%`,
+                                         `Amount: $${amount.toFixed(2)}`,
+                                         `Total Spending: $${spending.toFixed(2)}`
+                                     ];
+                                 }
+                             }
+                         }
+                     },
+                     scales: { 
+                         y: { 
+                             beginAtZero: true,
+                             max: 100,
+                             ticks: {
+                                 callback: function(value) {
+                                     return value + '%';
+                                 }
+                             }
+                         }
+                     }
+                 }
              });
          }
          
@@ -688,6 +1161,7 @@
              updateBudgetAlerts();
              updateTopCategories();
              updateRecommendations();
+             updateContributionTrendChart();
          }
          
          function updateTrendIndicator() {
@@ -785,6 +1259,126 @@
                  recs.push(`<div class="p-4 bg-blue-50 border-l-4 border-blue-500 rounded"><i class="fas fa-building text-blue-500 mr-2"></i><strong>Maximize LLC</strong><p class="text-sm mt-1">Only ${llcPct.toFixed(0)}% through LLC. Review business expenses.</p></div>`);
              }
              container.innerHTML = recs.join('');
+         }
+         
+         function updateContributionTrendChart() {
+             const ctx = document.getElementById('contributionTrendChart');
+             if (!ctx) return;
+             
+             // Group contributions by month (from expenses)
+             const monthlyData = {};
+             allExpenses.forEach(exp => {
+                 const key = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+                 if (!monthlyData[key]) {
+                     monthlyData[key] = { amar: 0, priya: 0, amarShare: 0, priyaShare: 0 };
+                 }
+                 monthlyData[key].amar += (exp.fields.AmarContribution || 0);
+                 monthlyData[key].priya += (exp.fields.PriyaContribution || 0);
+                 monthlyData[key].amarShare += (exp.fields.Actual || 0) / 2;
+                 monthlyData[key].priyaShare += (exp.fields.Actual || 0) / 2;
+             });
+             
+             // Add standalone payments
+             allPayments.forEach(payment => {
+                 const key = `${payment.fields.Year}-${String(payment.fields.Month).padStart(2, '0')}`;
+                 if (!monthlyData[key]) {
+                     monthlyData[key] = { amar: 0, priya: 0, amarShare: 0, priyaShare: 0 };
+                 }
+                 if (payment.fields.Person === 'Amar') {
+                     monthlyData[key].amar += (payment.fields.Amount || 0);
+                 } else if (payment.fields.Person === 'Priya') {
+                     monthlyData[key].priya += (payment.fields.Amount || 0);
+                 }
+             });
+             
+             const sortedMonths = Object.keys(monthlyData).sort().slice(-12); // Last 12 months
+             const labels = sortedMonths.map(m => {
+                 const [year, month] = m.split('-');
+                 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                 return `${monthNames[parseInt(month) - 1]} ${year}`;
+             });
+             
+             const amarContribData = sortedMonths.map(m => monthlyData[m].amar);
+             const priyaContribData = sortedMonths.map(m => monthlyData[m].priya);
+             const amarShareData = sortedMonths.map(m => monthlyData[m].amarShare);
+             const priyaShareData = sortedMonths.map(m => monthlyData[m].priyaShare);
+             
+             if (charts.contributionTrend) charts.contributionTrend.destroy();
+             charts.contributionTrend = new Chart(ctx, {
+                 type: 'line',
+                 data: {
+                     labels: labels,
+                     datasets: [
+                         {
+                             label: 'Amar\'s Contribution',
+                             data: amarContribData,
+                             borderColor: '#4facfe',
+                             backgroundColor: 'rgba(79, 172, 254, 0.1)',
+                             borderWidth: 3,
+                             tension: 0.4,
+                             fill: true
+                         },
+                         {
+                             label: 'Priya\'s Contribution',
+                             data: priyaContribData,
+                             borderColor: '#f093fb',
+                             backgroundColor: 'rgba(240, 147, 251, 0.1)',
+                             borderWidth: 3,
+                             tension: 0.4,
+                             fill: true
+                         },
+                         {
+                             label: 'Amar\'s Share (Target)',
+                             data: amarShareData,
+                             borderColor: '#4facfe',
+                             backgroundColor: 'transparent',
+                             borderWidth: 2,
+                             borderDash: [5, 5],
+                             tension: 0.4,
+                             fill: false,
+                             pointRadius: 0
+                         },
+                         {
+                             label: 'Priya\'s Share (Target)',
+                             data: priyaShareData,
+                             borderColor: '#f093fb',
+                             backgroundColor: 'transparent',
+                             borderWidth: 2,
+                             borderDash: [5, 5],
+                             tension: 0.4,
+                             fill: false,
+                             pointRadius: 0
+                         }
+                     ]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: {
+                             display: true,
+                             position: 'bottom'
+                         },
+                         tooltip: {
+                             callbacks: {
+                                 label: function(context) {
+                                     return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                                 }
+                             }
+                         }
+                     },
+                     scales: {
+                         y: {
+                             beginAtZero: true,
+                             ticks: {
+                                 callback: function(value) {
+                                     return '$' + value.toFixed(0);
+                                 }
+                             }
+                         }
+                     }
+                 }
+             });
          }
          
          function populateCategorySelector() {
@@ -949,13 +1543,249 @@
              document.getElementById('modalTitle').textContent = 'Add Expense';
              document.getElementById('expenseForm').reset();
              document.getElementById('recordId').value = '';
-             const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+             const now = new Date();
+             const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+             const currentDay = now.getDate();
              document.getElementById('month').value = currentMonth;
+             document.getElementById('day').value = currentDay;
+             currentReceiptData = null;
+             document.getElementById('receiptFile').value = '';
+             document.getElementById('currentReceipt').style.display = 'none';
              document.getElementById('expenseModal').classList.add('active');
          }
          
          function closeModal() {
              document.getElementById('expenseModal').classList.remove('active');
+         }
+         
+         function openContributionModal(person) {
+             document.getElementById('contributionModalTitle').textContent = `Add ${person}'s Payment`;
+             document.getElementById('contributionForm').reset();
+             document.getElementById('contributionPerson').value = person;
+             document.getElementById('contributionPersonSelect').value = person;
+             document.getElementById('paymentRecordId').value = '';
+             
+             // Populate year dropdown
+             const yearSelect = document.getElementById('contributionYear');
+             yearSelect.innerHTML = '';
+             const currentYear = new Date().getFullYear();
+             for (let year = 2025; year <= 2045; year++) {
+                 const option = document.createElement('option');
+                 option.value = year;
+                 option.textContent = year;
+                 if (year === currentYear) option.selected = true;
+                 yearSelect.appendChild(option);
+             }
+             
+             // Set current month
+             const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+             document.getElementById('contributionMonth').value = currentMonth;
+             
+             document.getElementById('contributionModal').classList.add('active');
+         }
+         
+         function closeContributionModal() {
+             document.getElementById('contributionModal').classList.remove('active');
+         }
+         
+         function closeMismatchModal() {
+             document.getElementById('mismatchModal').classList.remove('active');
+         }
+         
+         function checkContributionMismatches() {
+             const mismatches = [];
+             const monthlyData = {};
+             
+             // Group expenses and contributions by year-month
+             allExpenses.forEach(exp => {
+                 const key = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+                 if (!monthlyData[key]) {
+                     monthlyData[key] = { spending: 0, contributions: 0, year: exp.fields.Year, month: exp.fields.Month };
+                 }
+                 monthlyData[key].spending += (exp.fields.Actual || 0);
+                 monthlyData[key].contributions += (exp.fields.AmarContribution || 0) + (exp.fields.PriyaContribution || 0);
+             });
+             
+             // Add standalone payments (exclude FromExpense to avoid double counting)
+             allPayments.forEach(payment => {
+                 if (!payment.fields.FromExpense) {
+                     const key = `${payment.fields.Year}-${String(payment.fields.Month).padStart(2, '0')}`;
+                     if (!monthlyData[key]) {
+                         monthlyData[key] = { spending: 0, contributions: 0, year: payment.fields.Year, month: payment.fields.Month };
+                     }
+                     monthlyData[key].contributions += (payment.fields.Amount || 0);
+                 }
+             });
+             
+             // Check for mismatches
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             Object.keys(monthlyData).forEach(key => {
+                 const data = monthlyData[key];
+                 const diff = Math.abs(data.spending - data.contributions);
+                 
+                 // Allow small rounding differences (< $0.01)
+                 if (diff > 0.01) {
+                     const monthName = monthNames[parseInt(data.month) - 1];
+                     const type = data.contributions > data.spending ? 'over' : 'under';
+                     mismatches.push({
+                         period: `${monthName} ${data.year}`,
+                         spending: data.spending,
+                         contributions: data.contributions,
+                         difference: diff,
+                         type: type
+                     });
+                 }
+             });
+             
+             return mismatches;
+         }
+         
+         function updateMismatchNotification() {
+             const mismatches = checkContributionMismatches();
+             const badge = document.getElementById('notificationBadge');
+             const btn = document.getElementById('notificationBtn');
+             
+             if (mismatches.length > 0) {
+                 badge.textContent = mismatches.length;
+                 badge.style.display = 'flex';
+                 btn.classList.add('animate-pulse');
+             } else {
+                 badge.style.display = 'none';
+                 btn.classList.remove('animate-pulse');
+             }
+         }
+         
+         function showMismatchNotifications() {
+             const mismatches = checkContributionMismatches();
+             const container = document.getElementById('mismatchList');
+             
+             if (mismatches.length === 0) {
+                 container.innerHTML = `
+                     <div class="text-center py-8 text-gray-400">
+                         <i class="fas fa-check-circle text-6xl text-green-500 mb-4"></i>
+                         <p class="text-lg">No mismatches found!</p>
+                         <p class="text-sm mt-2">All contributions match spending for each month.</p>
+                     </div>
+                 `;
+             } else {
+                 container.innerHTML = mismatches.map(m => {
+                     const icon = m.type === 'over' ? 'fa-arrow-up' : 'fa-arrow-down';
+                     const color = 'red';
+                     const message = m.type === 'over' 
+                         ? `Contributions exceed spending by $${m.difference.toFixed(2)}`
+                         : `Contributions fall short by $${m.difference.toFixed(2)}`;
+                     
+                     return `
+                         <div class="p-4 bg-${color}-50 border-l-4 border-${color}-500 rounded">
+                             <div class="flex items-start gap-3">
+                                 <i class="fas ${icon} text-${color}-500 text-xl mt-1"></i>
+                                 <div class="flex-1">
+                                     <h3 class="font-bold text-${color}-800 mb-1">${m.period}</h3>
+                                     <p class="text-sm text-${color}-700 mb-2">${message}</p>
+                                     <div class="grid grid-cols-2 gap-2 text-xs">
+                                         <div class="bg-white/50 p-2 rounded">
+                                             <span class="text-gray-600">Spending:</span>
+                                             <span class="font-bold ml-1">$${m.spending.toFixed(2)}</span>
+                                         </div>
+                                         <div class="bg-white/50 p-2 rounded">
+                                             <span class="text-gray-600">Contributions:</span>
+                                             <span class="font-bold ml-1">$${m.contributions.toFixed(2)}</span>
+                                         </div>
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+                     `;
+                 }).join('');
+             }
+             
+             document.getElementById('mismatchModal').classList.add('active');
+         }
+         
+         function updateContributionPerson() {
+             const person = document.getElementById('contributionPersonSelect').value;
+             document.getElementById('contributionPerson').value = person;
+             const recordId = document.getElementById('paymentRecordId').value;
+             const action = recordId ? 'Edit' : 'Add';
+             document.getElementById('contributionModalTitle').textContent = `${action} ${person}'s Payment`;
+         }
+         
+         async function saveStandaloneContribution(event) {
+             event.preventDefault();
+             const recordId = document.getElementById('paymentRecordId').value;
+             const person = document.getElementById('contributionPerson').value;
+             const amount = parseFloat(document.getElementById('contributionAmount').value) || 0;
+             const description = document.getElementById('contributionDescription').value || 'Payment';
+             const year = parseInt(document.getElementById('contributionYear').value);
+             const month = document.getElementById('contributionMonth').value;
+             
+             // Save to Payments table
+             const fields = {
+                 Person: person,
+                 Amount: amount,
+                 Description: description,
+                 Year: year,
+                 Month: month
+             };
+             
+             try {
+                 const url = recordId 
+                     ? `https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}/${recordId}`
+                     : `https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`;
+                 const response = await fetch(url, {
+                     method: recordId ? 'PATCH' : 'POST',
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ fields })
+                 });
+                 if (!response.ok) throw new Error('Failed to save payment');
+                 closeContributionModal();
+                 await loadData();
+                 showNotification(recordId ? 'Payment updated!' : `${person}'s payment of $${amount.toFixed(2)} recorded!`, 'success');
+             } catch (error) {
+                 showNotification('Error: ' + error.message, 'error');
+             }
+         }
+         
+         function editPayment(id) {
+             const payment = allPayments.find(p => p.id === id);
+             if (!payment) return;
+             
+             document.getElementById('contributionModalTitle').textContent = 'Edit Payment';
+             document.getElementById('paymentRecordId').value = id;
+             document.getElementById('contributionPerson').value = payment.fields.Person || 'Amar';
+             document.getElementById('contributionPersonSelect').value = payment.fields.Person || 'Amar';
+             document.getElementById('contributionAmount').value = payment.fields.Amount || '';
+             document.getElementById('contributionDescription').value = payment.fields.Description || '';
+             
+             // Populate year dropdown
+             const yearSelect = document.getElementById('contributionYear');
+             yearSelect.innerHTML = '';
+             const currentYear = new Date().getFullYear();
+             for (let year = 2025; year <= 2045; year++) {
+                 const option = document.createElement('option');
+                 option.value = year;
+                 option.textContent = year;
+                 if (year === payment.fields.Year) option.selected = true;
+                 yearSelect.appendChild(option);
+             }
+             
+             document.getElementById('contributionMonth').value = payment.fields.Month || '';
+             document.getElementById('contributionModal').classList.add('active');
+         }
+         
+         async function deletePayment(id) {
+             if (!confirm('Delete this payment?')) return;
+             try {
+                 const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}/${id}`, {
+                     method: 'DELETE',
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+                 });
+                 if (!response.ok) throw new Error('Failed to delete payment');
+                 await loadData();
+                 showNotification('Payment deleted!', 'success');
+             } catch (error) {
+                 showNotification('Error: ' + error.message, 'error');
+             }
          }
          
          async function editExpense(id) {
@@ -967,9 +1797,25 @@
              document.getElementById('category').value = expense.fields.Category || '';
              document.getElementById('year').value = expense.fields.Year || '';
              document.getElementById('month').value = expense.fields.Month || '';
+             document.getElementById('day').value = expense.fields.Day || 1;
              document.getElementById('budget').value = expense.fields.Budget || '';
              document.getElementById('actual').value = expense.fields.Actual || '';
              document.getElementById('llc').value = expense.fields.LLC || 'No';
+             document.getElementById('amarContributionInput').value = expense.fields.AmarContribution || '';
+             document.getElementById('priyaContributionInput').value = expense.fields.PriyaContribution || '';
+             
+             // Handle receipt
+             document.getElementById('receiptFile').value = '';
+             if (expense.fields.Receipt && expense.fields.Receipt.length > 0) {
+                 currentReceiptData = expense.fields.Receipt[0];
+                 document.getElementById('receiptFileName').textContent = currentReceiptData.filename;
+                 document.getElementById('receiptViewLink').href = currentReceiptData.url;
+                 document.getElementById('currentReceipt').style.display = 'block';
+             } else {
+                 currentReceiptData = null;
+                 document.getElementById('currentReceipt').style.display = 'none';
+             }
+             
              document.getElementById('expenseModal').classList.add('active');
          }
          
@@ -981,10 +1827,89 @@
                  Category: document.getElementById('category').value,
                  Year: parseInt(document.getElementById('year').value),
                  Month: document.getElementById('month').value,
+                 Day: parseInt(document.getElementById('day').value),
                  Budget: parseFloat(document.getElementById('budget').value) || 0,
                  Actual: parseFloat(document.getElementById('actual').value) || 0,
-                 LLC: document.getElementById('llc').value
+                 LLC: document.getElementById('llc').value,
+                 AmarContribution: parseFloat(document.getElementById('amarContributionInput').value) || 0,
+                 PriyaContribution: parseFloat(document.getElementById('priyaContributionInput').value) || 0
              };
+             
+             // Handle receipt file upload
+             const receiptFile = document.getElementById('receiptFile').files[0];
+             if (receiptFile) {
+                 await uploadReceiptAndSave(recordId, fields, receiptFile);
+             } else if (currentReceiptData) {
+                 // Keep existing receipt
+                 fields.Receipt = [currentReceiptData];
+                 await saveExpenseToAirtable(recordId, fields);
+             } else {
+                 // No receipt
+                 await saveExpenseToAirtable(recordId, fields);
+             }
+         }
+         
+         async function uploadReceiptAndSave(recordId, fields, file) {
+             try {
+                 showNotification('Uploading receipt...', 'info');
+                 
+                 // Step 1: Save the expense first (without receipt)
+                 const url = recordId ? `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}/${recordId}` : `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`;
+                 const response = await fetch(url, {
+                     method: recordId ? 'PATCH' : 'POST',
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ fields })
+                 });
+                 if (!response.ok) throw new Error('Failed to save expense');
+                 const savedRecord = await response.json();
+                 const expenseRecordId = savedRecord.id;
+                 
+                 // Step 2: Convert file to base64 and upload using Airtable's upload attachment endpoint
+                 const reader = new FileReader();
+                 reader.onloadend = async function() {
+                     try {
+                         const base64 = reader.result.split(',')[1]; // Remove data:image/png;base64, prefix
+                         
+                         const uploadUrl = `https://content.airtable.com/v0/${BASE_ID}/${expenseRecordId}/Receipt/uploadAttachment`;
+                         const uploadResponse = await fetch(uploadUrl, {
+                             method: 'POST',
+                             headers: { 
+                                 'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+                                 'Content-Type': 'application/json'
+                             },
+                             body: JSON.stringify({
+                                 contentType: file.type,
+                                 file: base64,
+                                 filename: file.name
+                             })
+                         });
+                         
+                         if (!uploadResponse.ok) {
+                             const errorText = await uploadResponse.text();
+                             console.error('Upload error:', errorText);
+                             throw new Error('Failed to upload receipt: ' + uploadResponse.status);
+                         }
+                         
+                         closeModal();
+                         await loadData();
+                         showNotification('Expense and receipt saved successfully!', 'success');
+                     } catch (error) {
+                         showNotification('Error uploading receipt: ' + error.message, 'error');
+                     }
+                 };
+                 reader.readAsDataURL(file);
+             } catch (error) {
+                 showNotification('Error: ' + error.message, 'error');
+             }
+         }
+         
+         function removeReceipt() {
+             currentReceiptData = null;
+             document.getElementById('receiptFile').value = '';
+             document.getElementById('currentReceipt').style.display = 'none';
+         }
+         
+         async function saveExpenseToAirtable(recordId, fields) {
              try {
                  const url = recordId ? `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}/${recordId}` : `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`;
                  const response = await fetch(url, {
@@ -993,11 +1918,63 @@
                      body: JSON.stringify({ fields })
                  });
                  if (!response.ok) throw new Error('Failed to save');
+                 
+                 // Create payment entries for visibility (but marked to avoid double counting)
+                 await createPaymentEntriesFromContributions(fields, recordId);
+                 
                  closeModal();
                  await loadData();
                  showNotification(recordId ? 'Updated!' : 'Added!', 'success');
              } catch (error) {
                  showNotification('Error: ' + error.message, 'error');
+             }
+         }
+         
+         async function createPaymentEntriesFromContributions(fields, expenseRecordId) {
+             try {
+                 const payments = [];
+                 
+                 // Create Amar's payment if contribution > 0
+                 if (fields.AmarContribution && fields.AmarContribution > 0) {
+                     payments.push({
+                         fields: {
+                             Person: 'Amar',
+                             Amount: fields.AmarContribution,
+                             Year: fields.Year,
+                             Month: fields.Month,
+                             Description: `${fields.Item} - ${fields.Category}`,
+                             FromExpense: true  // Mark to avoid double counting
+                         }
+                     });
+                 }
+                 
+                 // Create Priya's payment if contribution > 0
+                 if (fields.PriyaContribution && fields.PriyaContribution > 0) {
+                     payments.push({
+                         fields: {
+                             Person: 'Priya',
+                             Amount: fields.PriyaContribution,
+                             Year: fields.Year,
+                             Month: fields.Month,
+                             Description: `${fields.Item} - ${fields.Category}`,
+                             FromExpense: true  // Mark to avoid double counting
+                         }
+                     });
+                 }
+                 
+                 // Save payments to Airtable
+                 if (payments.length > 0) {
+                     for (const payment of payments) {
+                         await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
+                             method: 'POST',
+                             headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
+                             body: JSON.stringify(payment)
+                         });
+                     }
+                 }
+             } catch (error) {
+                 console.error('Error creating payment entries:', error);
+                 // Don't throw - expense was saved successfully
              }
          }
          
