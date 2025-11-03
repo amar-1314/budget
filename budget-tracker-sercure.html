@@ -553,6 +553,7 @@
          // Airtable Configuration - Multiple storage methods for reliability
          const TABLE_NAME = 'Budget';
          const PAYMENTS_TABLE = 'Payments';
+         const PROFILES_TABLE = 'Profiles';
          
          // Try to get credentials from URL parameters first (works in private mode!)
          const urlParams = new URLSearchParams(window.location.search);
@@ -604,31 +605,46 @@
              loadProfilePictures();
          });
          
-         function loadProfilePictures() {
-             // Load Amar's picture
-             const amarPicture = localStorage.getItem('amarProfilePicture');
-             if (amarPicture) {
-                 document.getElementById('amarPicture').src = amarPicture;
-                 document.getElementById('amarPicture').style.display = 'block';
-                 document.getElementById('amarPictureIcon').style.display = 'none';
-             }
-             
-             // Load Priya's picture
-             const priyaPicture = localStorage.getItem('priyaProfilePicture');
-             if (priyaPicture) {
-                 document.getElementById('priyaPicture').src = priyaPicture;
-                 document.getElementById('priyaPicture').style.display = 'block';
-                 document.getElementById('priyaPictureIcon').style.display = 'none';
+         async function loadProfilePictures() {
+             try {
+                 const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}`, {
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+                 });
+                 
+                 if (!response.ok) {
+                     console.log('Profiles table not found - will be created on first upload');
+                     return;
+                 }
+                 
+                 const data = await response.json();
+                 
+                 // Find Amar's profile
+                 const amarProfile = data.records.find(r => r.fields.Person === 'Amar');
+                 if (amarProfile && amarProfile.fields.Picture && amarProfile.fields.Picture.length > 0) {
+                     document.getElementById('amarPicture').src = amarProfile.fields.Picture[0].url;
+                     document.getElementById('amarPicture').style.display = 'block';
+                     document.getElementById('amarPictureIcon').style.display = 'none';
+                 }
+                 
+                 // Find Priya's profile
+                 const priyaProfile = data.records.find(r => r.fields.Person === 'Priya');
+                 if (priyaProfile && priyaProfile.fields.Picture && priyaProfile.fields.Picture.length > 0) {
+                     document.getElementById('priyaPicture').src = priyaProfile.fields.Picture[0].url;
+                     document.getElementById('priyaPicture').style.display = 'block';
+                     document.getElementById('priyaPictureIcon').style.display = 'none';
+                 }
+             } catch (error) {
+                 console.log('Could not load profile pictures:', error);
              }
          }
          
-         function uploadProfilePicture(person, input) {
+         async function uploadProfilePicture(person, input) {
              const file = input.files[0];
              if (!file) return;
              
-             // Check file size (max 2MB)
-             if (file.size > 2 * 1024 * 1024) {
-                 alert('Image size should be less than 2MB');
+             // Check file size (max 5MB for Airtable)
+             if (file.size > 5 * 1024 * 1024) {
+                 alert('Image size should be less than 5MB');
                  return;
              }
              
@@ -638,25 +654,80 @@
                  return;
              }
              
-             const reader = new FileReader();
-             reader.onload = function(e) {
-                 const imageData = e.target.result;
-                 
-                 // Save to localStorage
-                 localStorage.setItem(`${person.toLowerCase()}ProfilePicture`, imageData);
-                 
-                 // Update display
-                 const imgElement = document.getElementById(`${person.toLowerCase()}Picture`);
-                 const iconElement = document.getElementById(`${person.toLowerCase()}PictureIcon`);
-                 
-                 imgElement.src = imageData;
-                 imgElement.style.display = 'block';
-                 iconElement.style.display = 'none';
-                 
-                 showNotification(`${person}'s picture updated!`, 'success');
-             };
+             showNotification('Uploading picture...', 'info');
              
-             reader.readAsDataURL(file);
+             try {
+                 // First, check if profile exists
+                 const listResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}`, {
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+                 });
+                 
+                 let profileId = null;
+                 if (listResponse.ok) {
+                     const data = await listResponse.json();
+                     const existingProfile = data.records.find(r => r.fields.Person === person);
+                     if (existingProfile) {
+                         profileId = existingProfile.id;
+                     }
+                 }
+                 
+                 // Create or update profile record first
+                 const profileUrl = profileId 
+                     ? `https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}/${profileId}`
+                     : `https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}`;
+                 
+                 const profileResponse = await fetch(profileUrl, {
+                     method: profileId ? 'PATCH' : 'POST',
+                     headers: { 
+                         'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+                         'Content-Type': 'application/json'
+                     },
+                     body: JSON.stringify({
+                         fields: { Person: person }
+                     })
+                 });
+                 
+                 if (!profileResponse.ok) throw new Error('Failed to create/update profile');
+                 const profileData = await profileResponse.json();
+                 const recordId = profileData.id;
+                 
+                 // Upload image as attachment
+                 const reader = new FileReader();
+                 reader.onloadend = async function() {
+                     try {
+                         const base64 = reader.result.split(',')[1];
+                         
+                         const uploadUrl = `https://content.airtable.com/v0/${BASE_ID}/${recordId}/Picture/uploadAttachment`;
+                         const uploadResponse = await fetch(uploadUrl, {
+                             method: 'POST',
+                             headers: { 
+                                 'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+                                 'Content-Type': 'application/json'
+                             },
+                             body: JSON.stringify({
+                                 contentType: file.type,
+                                 file: base64,
+                                 filename: `${person.toLowerCase()}_profile.${file.name.split('.').pop()}`
+                             })
+                         });
+                         
+                         if (!uploadResponse.ok) throw new Error('Failed to upload picture');
+                         
+                         // Reload pictures to show the new one
+                         await loadProfilePictures();
+                         showNotification(`${person}'s picture updated!`, 'success');
+                     } catch (error) {
+                         console.error('Upload error:', error);
+                         showNotification('Error uploading picture: ' + error.message, 'error');
+                     }
+                 };
+                 
+                 reader.readAsDataURL(file);
+                 
+             } catch (error) {
+                 console.error('Profile picture upload error:', error);
+                 showNotification('Error: ' + error.message, 'error');
+             }
          }
          
          function populateYearDropdown() {
