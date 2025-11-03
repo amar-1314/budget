@@ -85,6 +85,40 @@
       <div id="notification" class="notification">
          <div class="flex items-center gap-3"><i class="fas fa-check-circle text-green-500"></i><span id="notificationText"></span></div>
       </div>
+      <div id="slideMenu" class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50">
+         <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-bars mr-2"></i>Menu</h2>
+               <button onclick="toggleMenu()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <div class="space-y-3">
+               <button onclick="openFixedExpensesModal(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                  <i class="fas fa-repeat text-purple-600 text-xl"></i>
+                  <div>
+                     <div class="font-semibold text-gray-800">Fixed Expenses</div>
+                     <div class="text-xs text-gray-500">Manage recurring expenses</div>
+                  </div>
+               </button>
+               <button onclick="openLLCExpensesModal(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                  <i class="fas fa-building text-purple-600 text-xl"></i>
+                  <div>
+                     <div class="font-semibold text-gray-800">LLC Eligible Expenses</div>
+                     <div class="text-xs text-gray-500">Define business-eligible items</div>
+                  </div>
+               </button>
+               <button onclick="openSettings(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                  <i class="fas fa-cog text-purple-600 text-xl"></i>
+                  <div>
+                     <div class="font-semibold text-gray-800">Settings</div>
+                     <div class="text-xs text-gray-500">Configure your account</div>
+                  </div>
+               </button>
+            </div>
+         </div>
+      </div>
+      <div id="menuOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-40" style="display: none;" onclick="toggleMenu()"></div>
       <div class="gradient-bg text-white py-4 md:py-8 px-4 md:px-6 shadow-lg">
          <div class="max-w-7xl mx-auto">
             <div class="flex justify-between items-center">
@@ -93,6 +127,9 @@
                   <p class="text-purple-100 text-xs md:text-base">Amar & Priya</p>
                </div>
                <div class="flex items-center gap-2 md:gap-4">
+                  <button onclick="toggleMenu()" class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700" title="Menu">
+                     <i class="fas fa-bars"></i>
+                  </button>
                   <button onclick="showMismatchNotifications()" class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700 relative" title="Notifications" id="notificationBtn">
                      <i class="fas fa-bell"></i>
                      <span id="notificationBadge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold" style="display: none;">0</span>
@@ -549,11 +586,145 @@
             </div>
          </div>
       </div>
+      <div id="fixedExpensesModal" class="modal">
+         <div class="modal-content" style="max-width: 800px;">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-repeat mr-2 text-purple-600"></i>Fixed Expenses</h2>
+               <button onclick="closeFixedExpensesModal()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+               <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Fixed expenses are automatically added to each month on the 1st. Changes only affect future months.</p>
+            </div>
+            <div class="mb-6">
+               <button onclick="openAddFixedExpenseForm()" class="btn-primary w-full">
+                  <i class="fas fa-plus mr-2"></i>Add Fixed Expense
+               </button>
+            </div>
+            <div id="fixedExpensesList" class="space-y-3">
+               <div class="text-center py-8 text-gray-400">
+                  <i class="fas fa-inbox text-4xl mb-3"></i>
+                  <p>No fixed expenses yet</p>
+               </div>
+            </div>
+         </div>
+      </div>
+      <div id="addFixedExpenseModal" class="modal">
+         <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800" id="fixedExpenseModalTitle">Add Fixed Expense</h2>
+               <button onclick="closeAddFixedExpenseForm()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <form id="fixedExpenseForm" onsubmit="saveFixedExpense(event)">
+               <input type="hidden" id="fixedExpenseId">
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Item Name</label>
+                  <input type="text" id="fixedItemName" class="input-field" required placeholder="e.g., Rent, Mortgage, Insurance">
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                  <input type="text" id="fixedCategory" class="input-field" list="categoryList" required placeholder="e.g., Housing, Utilities">
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
+                  <input type="number" id="fixedAmount" class="input-field" step="0.01" required placeholder="0.00">
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">LLC Account</label>
+                  <select id="fixedLLC" class="input-field">
+                     <option value="No">No - Personal Expense</option>
+                     <option value="Yes">Yes - Business Eligible</option>
+                  </select>
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Start From</label>
+                  <div class="grid grid-cols-2 gap-4">
+                     <select id="fixedStartYear" class="input-field" required></select>
+                     <select id="fixedStartMonth" class="input-field" required>
+                        <option value="01">January</option>
+                        <option value="02">February</option>
+                        <option value="03">March</option>
+                        <option value="04">April</option>
+                        <option value="05">May</option>
+                        <option value="06">June</option>
+                        <option value="07">July</option>
+                        <option value="08">August</option>
+                        <option value="09">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                     </select>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1">This expense will be added from this month onwards</p>
+               </div>
+               <div class="flex gap-3">
+                  <button type="submit" class="btn-primary flex-1"><i class="fas fa-save mr-2"></i>Save</button>
+                  <button type="button" onclick="closeAddFixedExpenseForm()" class="btn-secondary">Cancel</button>
+               </div>
+            </form>
+         </div>
+      </div>
+      <div id="llcExpensesModal" class="modal">
+         <div class="modal-content" style="max-width: 800px;">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-building mr-2 text-purple-600"></i>LLC Eligible Expenses</h2>
+               <button onclick="closeLLCExpensesModal()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+               <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Define which expense items are eligible for LLC/business deduction. No cost needed, just item name and category.</p>
+            </div>
+            <div class="mb-6">
+               <button onclick="openAddLLCExpenseForm()" class="btn-primary w-full">
+                  <i class="fas fa-plus mr-2"></i>Add LLC Eligible Expense
+               </button>
+            </div>
+            <div id="llcExpensesList" class="space-y-3">
+               <div class="text-center py-8 text-gray-400">
+                  <i class="fas fa-inbox text-4xl mb-3"></i>
+                  <p>No LLC eligible expenses defined yet</p>
+               </div>
+            </div>
+         </div>
+      </div>
+      <div id="addLLCExpenseModal" class="modal">
+         <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800" id="llcExpenseModalTitle">Add LLC Eligible Expense</h2>
+               <button onclick="closeAddLLCExpenseForm()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <form id="llcExpenseForm" onsubmit="saveLLCExpense(event)">
+               <input type="hidden" id="llcExpenseId">
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Expense Item</label>
+                  <input type="text" id="llcItemName" class="input-field" required placeholder="e.g., Internet, Office Supplies, Software">
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                  <input type="text" id="llcCategoryName" class="input-field" list="existingCategories" required placeholder="Start typing to see existing categories">
+                  <datalist id="existingCategories"></datalist>
+                  <p class="text-xs text-gray-500 mt-1">Select existing or type new category</p>
+               </div>
+               <div class="flex gap-3">
+                  <button type="submit" class="btn-primary flex-1"><i class="fas fa-save mr-2"></i>Save</button>
+                  <button type="button" onclick="closeAddLLCExpenseForm()" class="btn-secondary">Cancel</button>
+               </div>
+            </form>
+         </div>
+      </div>
       <script>
          // Airtable Configuration - Multiple storage methods for reliability
          const TABLE_NAME = 'Budget';
          const PAYMENTS_TABLE = 'Payments';
          const PROFILES_TABLE = 'Profiles';
+         const FIXED_EXPENSES_TABLE = 'FixedExpenses';
+         const LLC_EXPENSES_TABLE = 'LLCEligibleExpenses';
          
          // Try to get credentials from URL parameters first (works in private mode!)
          const urlParams = new URLSearchParams(window.location.search);
@@ -603,6 +774,8 @@
              populateYearDropdown();
              loadData();
              loadProfilePictures();
+             loadFixedExpenses();
+             loadLLCExpenses();
          });
          
          async function loadProfilePictures() {
@@ -2168,6 +2341,375 @@
              notification.className = `notification ${type}`;
              notification.style.display = 'block';
              setTimeout(() => notification.style.display = 'none', 3000);
+         }
+         
+         function toggleMenu() {
+             const menu = document.getElementById('slideMenu');
+             const overlay = document.getElementById('menuOverlay');
+             const isOpen = menu.style.transform === 'translateX(0px)';
+             
+             if (isOpen) {
+                 menu.style.transform = 'translateX(100%)';
+                 overlay.style.display = 'none';
+             } else {
+                 menu.style.transform = 'translateX(0px)';
+                 overlay.style.display = 'block';
+             }
+         }
+         
+         let allFixedExpenses = [];
+         
+         async function loadFixedExpenses() {
+             try {
+                 const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}`, {
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+                 });
+                 
+                 if (!response.ok) {
+                     console.log('Fixed expenses table not found');
+                     allFixedExpenses = [];
+                     return;
+                 }
+                 
+                 const data = await response.json();
+                 allFixedExpenses = data.records;
+             } catch (error) {
+                 console.log('Could not load fixed expenses:', error);
+                 allFixedExpenses = [];
+             }
+         }
+         
+         function openFixedExpensesModal() {
+             renderFixedExpenses();
+             document.getElementById('fixedExpensesModal').classList.add('active');
+         }
+         
+         function closeFixedExpensesModal() {
+             document.getElementById('fixedExpensesModal').classList.remove('active');
+         }
+         
+         function openAddFixedExpenseForm() {
+             document.getElementById('fixedExpenseModalTitle').textContent = 'Add Fixed Expense';
+             document.getElementById('fixedExpenseForm').reset();
+             document.getElementById('fixedExpenseId').value = '';
+             
+             // Populate year dropdown
+             const yearSelect = document.getElementById('fixedStartYear');
+             yearSelect.innerHTML = '';
+             const currentYear = new Date().getFullYear();
+             for (let year = currentYear; year <= currentYear + 5; year++) {
+                 const option = document.createElement('option');
+                 option.value = year;
+                 option.textContent = year;
+                 if (year === currentYear) option.selected = true;
+                 yearSelect.appendChild(option);
+             }
+             
+             // Set current month
+             const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+             document.getElementById('fixedStartMonth').value = currentMonth;
+             
+             document.getElementById('addFixedExpenseModal').classList.add('active');
+         }
+         
+         function closeAddFixedExpenseForm() {
+             document.getElementById('addFixedExpenseModal').classList.remove('active');
+         }
+         
+         function renderFixedExpenses() {
+             const container = document.getElementById('fixedExpensesList');
+             
+             if (allFixedExpenses.length === 0) {
+                 container.innerHTML = `
+                     <div class="text-center py-8 text-gray-400">
+                         <i class="fas fa-inbox text-4xl mb-3"></i>
+                         <p>No fixed expenses yet</p>
+                     </div>
+                 `;
+                 return;
+             }
+             
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            container.innerHTML = allFixedExpenses.map(expense => {
+                const fields = expense.fields;
+                const startMonth = monthNames[parseInt(fields.StartMonth) - 1] || 'N/A';
+                const amount = fields.Amount || 0;
+                return `
+                    <div class="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <h4 class="font-bold text-gray-800">${fields.Item || 'Unnamed'}</h4>
+                                <p class="text-sm text-gray-600">${fields.Category || 'N/A'}</p>
+                                <p class="text-xs text-gray-500 mt-1">Starts: ${startMonth} ${fields.StartYear || 'N/A'}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-lg font-bold text-purple-600">$${amount.toFixed(2)}</p>
+                                <span class="text-xs badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="editFixedExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-sm">
+                                <i class="fas fa-edit mr-1"></i>Edit
+                            </button>
+                            <button onclick="deleteFixedExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-sm">
+                                <i class="fas fa-trash mr-1"></i>Delete
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+         }
+         
+         async function saveFixedExpense(event) {
+             event.preventDefault();
+             
+             const id = document.getElementById('fixedExpenseId').value;
+             const fields = {
+                 Item: document.getElementById('fixedItemName').value,
+                 Category: document.getElementById('fixedCategory').value,
+                 Amount: parseFloat(document.getElementById('fixedAmount').value),
+                 LLC: document.getElementById('fixedLLC').value,
+                 StartYear: parseInt(document.getElementById('fixedStartYear').value),
+                 StartMonth: document.getElementById('fixedStartMonth').value
+             };
+             
+             try {
+                 const url = id 
+                     ? `https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}/${id}`
+                     : `https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}`;
+                 
+                 const response = await fetch(url, {
+                     method: id ? 'PATCH' : 'POST',
+                     headers: { 
+                         'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+                         'Content-Type': 'application/json'
+                     },
+                     body: JSON.stringify({ fields })
+                 });
+                 
+                 if (!response.ok) throw new Error('Failed to save fixed expense');
+                 
+                 closeAddFixedExpenseForm();
+                 await loadFixedExpenses();
+                 renderFixedExpenses();
+                 showNotification(id ? 'Fixed expense updated!' : 'Fixed expense added!', 'success');
+             } catch (error) {
+                 showNotification('Error: ' + error.message, 'error');
+             }
+         }
+         
+         async function editFixedExpense(id) {
+             const expense = allFixedExpenses.find(e => e.id === id);
+             if (!expense) return;
+             
+             document.getElementById('fixedExpenseModalTitle').textContent = 'Edit Fixed Expense';
+             document.getElementById('fixedExpenseId').value = id;
+             document.getElementById('fixedItemName').value = expense.fields.Item;
+             document.getElementById('fixedCategory').value = expense.fields.Category;
+             document.getElementById('fixedAmount').value = expense.fields.Amount;
+             document.getElementById('fixedLLC').value = expense.fields.LLC || 'No';
+             
+             // Populate year dropdown
+             const yearSelect = document.getElementById('fixedStartYear');
+             yearSelect.innerHTML = '';
+             const currentYear = new Date().getFullYear();
+             for (let year = currentYear; year <= currentYear + 5; year++) {
+                 const option = document.createElement('option');
+                 option.value = year;
+                 option.textContent = year;
+                 if (year === expense.fields.StartYear) option.selected = true;
+                 yearSelect.appendChild(option);
+             }
+             
+             document.getElementById('fixedStartMonth').value = expense.fields.StartMonth;
+             document.getElementById('addFixedExpenseModal').classList.add('active');
+         }
+         
+         async function deleteFixedExpense(id) {
+             if (!confirm('Delete this fixed expense? This will not affect existing expenses.')) return;
+             
+             try {
+                 const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}/${id}`, {
+                     method: 'DELETE',
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+                 });
+                 
+                 if (!response.ok) throw new Error('Failed to delete');
+                 
+                 await loadFixedExpenses();
+                 renderFixedExpenses();
+                 showNotification('Fixed expense deleted!', 'success');
+             } catch (error) {
+                 showNotification('Error: ' + error.message, 'error');
+             }
+         }
+         
+         let allLLCExpenses = [];
+         
+         async function loadLLCExpenses() {
+             try {
+                 const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}`, {
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+                 });
+                 
+                 if (!response.ok) {
+                     console.log('LLC expenses table not found');
+                     allLLCExpenses = [];
+                     return;
+                 }
+                 
+                 const data = await response.json();
+                 allLLCExpenses = data.records;
+             } catch (error) {
+                 console.log('Could not load LLC expenses:', error);
+                 allLLCExpenses = [];
+             }
+         }
+         
+         function openLLCExpensesModal() {
+             renderLLCExpenses();
+             document.getElementById('llcExpensesModal').classList.add('active');
+         }
+         
+         function closeLLCExpensesModal() {
+             document.getElementById('llcExpensesModal').classList.remove('active');
+         }
+         
+         function openAddLLCExpenseForm() {
+             document.getElementById('llcExpenseModalTitle').textContent = 'Add LLC Eligible Expense';
+             document.getElementById('llcExpenseForm').reset();
+             document.getElementById('llcExpenseId').value = '';
+             
+             // Populate existing categories from all expenses
+             populateExistingCategories();
+             
+             document.getElementById('addLLCExpenseModal').classList.add('active');
+         }
+         
+         function closeAddLLCExpenseForm() {
+             document.getElementById('addLLCExpenseModal').classList.remove('active');
+         }
+         
+         function populateExistingCategories() {
+             const datalist = document.getElementById('existingCategories');
+             datalist.innerHTML = '';
+             
+             // Get unique categories from all expenses
+             const categories = new Set();
+             allExpenses.forEach(exp => {
+                 if (exp.fields.Category) {
+                     categories.add(exp.fields.Category);
+                 }
+             });
+             
+             // Add to datalist
+             categories.forEach(category => {
+                 const option = document.createElement('option');
+                 option.value = category;
+                 datalist.appendChild(option);
+             });
+         }
+         
+         function renderLLCExpenses() {
+             const container = document.getElementById('llcExpensesList');
+             
+             if (allLLCExpenses.length === 0) {
+                 container.innerHTML = `
+                     <div class="text-center py-8 text-gray-400">
+                         <i class="fas fa-inbox text-4xl mb-3"></i>
+                         <p>No LLC eligible expenses defined yet</p>
+                     </div>
+                 `;
+                 return;
+             }
+             
+             container.innerHTML = allLLCExpenses.map(expense => {
+                 const fields = expense.fields;
+                 return `
+                     <div class="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
+                         <div class="flex justify-between items-start">
+                             <div class="flex-1">
+                                 <h4 class="font-bold text-gray-800">${fields.Item || 'Unnamed'}</h4>
+                                 <p class="text-sm text-gray-600"><i class="fas fa-tag mr-1"></i>${fields.Category || 'N/A'}</p>
+                             </div>
+                             <div class="flex gap-2">
+                                 <button onclick="editLLCExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-sm">
+                                     <i class="fas fa-edit"></i>
+                                 </button>
+                                 <button onclick="deleteLLCExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-sm">
+                                     <i class="fas fa-trash"></i>
+                                 </button>
+                             </div>
+                         </div>
+                     </div>
+                 `;
+             }).join('');
+         }
+         
+         async function saveLLCExpense(event) {
+             event.preventDefault();
+             
+             const id = document.getElementById('llcExpenseId').value;
+             const fields = {
+                 Item: document.getElementById('llcItemName').value,
+                 Category: document.getElementById('llcCategoryName').value
+             };
+             
+             try {
+                 const url = id 
+                     ? `https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}/${id}`
+                     : `https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}`;
+                 
+                 const response = await fetch(url, {
+                     method: id ? 'PATCH' : 'POST',
+                     headers: { 
+                         'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
+                         'Content-Type': 'application/json'
+                     },
+                     body: JSON.stringify({ fields })
+                 });
+                 
+                 if (!response.ok) throw new Error('Failed to save LLC expense');
+                 
+                 closeAddLLCExpenseForm();
+                 await loadLLCExpenses();
+                 renderLLCExpenses();
+                 showNotification(id ? 'LLC expense updated!' : 'LLC expense added!', 'success');
+             } catch (error) {
+                 showNotification('Error: ' + error.message, 'error');
+             }
+         }
+         
+         async function editLLCExpense(id) {
+             const expense = allLLCExpenses.find(e => e.id === id);
+             if (!expense) return;
+             
+             document.getElementById('llcExpenseModalTitle').textContent = 'Edit LLC Eligible Expense';
+             document.getElementById('llcExpenseId').value = id;
+             document.getElementById('llcItemName').value = expense.fields.Item;
+             document.getElementById('llcCategoryName').value = expense.fields.Category;
+             
+             populateExistingCategories();
+             document.getElementById('addLLCExpenseModal').classList.add('active');
+         }
+         
+         async function deleteLLCExpense(id) {
+             if (!confirm('Delete this LLC eligible expense?')) return;
+             
+             try {
+                 const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}/${id}`, {
+                     method: 'DELETE',
+                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+                 });
+                 
+                 if (!response.ok) throw new Error('Failed to delete');
+                 
+                 await loadLLCExpenses();
+                 renderLLCExpenses();
+                 showNotification('LLC expense deleted!', 'success');
+             } catch (error) {
+                 showNotification('Error: ' + error.message, 'error');
+             }
          }
          
          function openSettings() {
