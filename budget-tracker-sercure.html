@@ -146,7 +146,19 @@
          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <div class="card p-6">
                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-user-circle text-blue-500 mr-2"></i>Amar's Share</h3>
+                  <div class="flex items-center gap-3">
+                     <div class="relative group cursor-pointer" onclick="document.getElementById('amarPictureInput').click()">
+                        <div class="w-16 h-16 rounded-full overflow-hidden bg-blue-100 flex items-center justify-center border-2 border-blue-300">
+                           <img id="amarPicture" src="" alt="Amar" class="w-full h-full object-cover" style="display: none;">
+                           <i id="amarPictureIcon" class="fas fa-user-circle text-blue-500 text-4xl"></i>
+                        </div>
+                        <div class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                           <i class="fas fa-camera text-white text-xl"></i>
+                        </div>
+                     </div>
+                     <input type="file" id="amarPictureInput" accept="image/*" style="display: none;" onchange="uploadProfilePicture('Amar', this)">
+                     <h3 class="text-xl font-bold text-gray-800">Amar's Share</h3>
+                  </div>
                   <div class="text-right">
                      <div class="text-2xl font-bold text-blue-600" id="amarShare">$0</div>
                      <div class="text-xs text-gray-500">Share: 50%</div>
@@ -174,7 +186,19 @@
             </div>
             <div class="card p-6">
                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-xl font-bold text-gray-800"><i class="fas fa-user-circle text-pink-500 mr-2"></i>Priya's Share</h3>
+                  <div class="flex items-center gap-3">
+                     <div class="relative group cursor-pointer" onclick="document.getElementById('priyaPictureInput').click()">
+                        <div class="w-16 h-16 rounded-full overflow-hidden bg-pink-100 flex items-center justify-center border-2 border-pink-300">
+                           <img id="priyaPicture" src="" alt="Priya" class="w-full h-full object-cover" style="display: none;">
+                           <i id="priyaPictureIcon" class="fas fa-user-circle text-pink-500 text-4xl"></i>
+                        </div>
+                        <div class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                           <i class="fas fa-camera text-white text-xl"></i>
+                        </div>
+                     </div>
+                     <input type="file" id="priyaPictureInput" accept="image/*" style="display: none;" onchange="uploadProfilePicture('Priya', this)">
+                     <h3 class="text-xl font-bold text-gray-800">Priya's Share</h3>
+                  </div>
                   <div class="text-right">
                      <div class="text-2xl font-bold text-pink-600" id="priyaShare">$0</div>
                      <div class="text-xs text-gray-500">Share: 50%</div>
@@ -577,7 +601,63 @@
          document.addEventListener('DOMContentLoaded', function() {
              populateYearDropdown();
              loadData();
+             loadProfilePictures();
          });
+         
+         function loadProfilePictures() {
+             // Load Amar's picture
+             const amarPicture = localStorage.getItem('amarProfilePicture');
+             if (amarPicture) {
+                 document.getElementById('amarPicture').src = amarPicture;
+                 document.getElementById('amarPicture').style.display = 'block';
+                 document.getElementById('amarPictureIcon').style.display = 'none';
+             }
+             
+             // Load Priya's picture
+             const priyaPicture = localStorage.getItem('priyaProfilePicture');
+             if (priyaPicture) {
+                 document.getElementById('priyaPicture').src = priyaPicture;
+                 document.getElementById('priyaPicture').style.display = 'block';
+                 document.getElementById('priyaPictureIcon').style.display = 'none';
+             }
+         }
+         
+         function uploadProfilePicture(person, input) {
+             const file = input.files[0];
+             if (!file) return;
+             
+             // Check file size (max 2MB)
+             if (file.size > 2 * 1024 * 1024) {
+                 alert('Image size should be less than 2MB');
+                 return;
+             }
+             
+             // Check file type
+             if (!file.type.startsWith('image/')) {
+                 alert('Please select an image file');
+                 return;
+             }
+             
+             const reader = new FileReader();
+             reader.onload = function(e) {
+                 const imageData = e.target.result;
+                 
+                 // Save to localStorage
+                 localStorage.setItem(`${person.toLowerCase()}ProfilePicture`, imageData);
+                 
+                 // Update display
+                 const imgElement = document.getElementById(`${person.toLowerCase()}Picture`);
+                 const iconElement = document.getElementById(`${person.toLowerCase()}PictureIcon`);
+                 
+                 imgElement.src = imageData;
+                 imgElement.style.display = 'block';
+                 iconElement.style.display = 'none';
+                 
+                 showNotification(`${person}'s picture updated!`, 'success');
+             };
+             
+             reader.readAsDataURL(file);
+         }
          
          function populateYearDropdown() {
              const yearSelect = document.getElementById('year');
