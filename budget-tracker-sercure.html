@@ -108,6 +108,13 @@
                      <div class="text-xs text-gray-500">Define business-eligible items</div>
                   </div>
                </button>
+               <button onclick="openMonthlySummary(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                  <i class="fas fa-chart-bar text-purple-600 text-xl"></i>
+                  <div>
+                     <div class="font-semibold text-gray-800">Monthly Summary</div>
+                     <div class="text-xs text-gray-500">View detailed monthly reports</div>
+                  </div>
+               </button>
                <button onclick="openSettings(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
                   <i class="fas fa-cog text-purple-600 text-xl"></i>
                   <div>
@@ -716,6 +723,39 @@
                   <button type="button" onclick="closeAddLLCExpenseForm()" class="btn-secondary">Cancel</button>
                </div>
             </form>
+         </div>
+      </div>
+      <div id="monthlySummaryModal" class="modal">
+         <div class="modal-content" style="max-width: 900px;">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-chart-bar mr-2 text-purple-600"></i>Monthly Summary</h2>
+               <button onclick="closeMonthlySummary()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <div class="mb-6 flex gap-4">
+               <select id="summaryYear" class="input-field flex-1" onchange="loadMonthlySummary()"></select>
+               <select id="summaryMonth" class="input-field flex-1" onchange="loadMonthlySummary()">
+                  <option value="01">January</option>
+                  <option value="02">February</option>
+                  <option value="03">March</option>
+                  <option value="04">April</option>
+                  <option value="05">May</option>
+                  <option value="06">June</option>
+                  <option value="07">July</option>
+                  <option value="08">August</option>
+                  <option value="09">September</option>
+                  <option value="10">October</option>
+                  <option value="11">November</option>
+                  <option value="12">December</option>
+               </select>
+            </div>
+            <div id="monthlySummaryContent">
+               <div class="text-center py-8 text-gray-400">
+                  <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                  <p>Loading summary...</p>
+               </div>
+            </div>
          </div>
       </div>
       <script>
@@ -2710,6 +2750,246 @@
              } catch (error) {
                  showNotification('Error: ' + error.message, 'error');
              }
+         }
+         
+         async function openMonthlySummary() {
+             // Populate year dropdown
+             const yearSelect = document.getElementById('summaryYear');
+             yearSelect.innerHTML = '';
+             const currentYear = new Date().getFullYear();
+             const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+             
+             for (let year = 2025; year <= 2045; year++) {
+                 const option = document.createElement('option');
+                 option.value = year;
+                 option.textContent = year;
+                 if (year === currentYear) option.selected = true;
+                 yearSelect.appendChild(option);
+             }
+             
+             // Set current month
+             document.getElementById('summaryMonth').value = currentMonth;
+             
+             document.getElementById('monthlySummaryModal').classList.add('active');
+             
+             // Ensure data is loaded
+             if (allExpenses.length === 0) {
+                 await loadData();
+             }
+             
+             loadMonthlySummary();
+         }
+         
+         function closeMonthlySummary() {
+             document.getElementById('monthlySummaryModal').classList.remove('active');
+         }
+         
+         async function loadMonthlySummary() {
+             const year = parseInt(document.getElementById('summaryYear').value);
+             const month = parseInt(document.getElementById('summaryMonth').value);
+             const container = document.getElementById('monthlySummaryContent');
+             
+             container.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-4xl text-purple-600"></i><p class="mt-3 text-gray-600">Loading summary...</p></div>';
+             
+             console.log('Loading summary for:', year, month);
+             console.log('Total expenses:', allExpenses.length);
+             console.log('Total payments:', allPayments.length);
+             
+             // Debug: Check format of first expense
+             if (allExpenses.length > 0) {
+                 console.log('Sample expense Year:', allExpenses[0].fields.Year, 'Type:', typeof allExpenses[0].fields.Year);
+                 console.log('Sample expense Month:', allExpenses[0].fields.Month, 'Type:', typeof allExpenses[0].fields.Month);
+             }
+             
+             // Filter expenses for selected month (handle both string and number formats)
+             const monthExpenses = allExpenses.filter(exp => {
+                 const expYear = parseInt(exp.fields.Year);
+                 const expMonth = parseInt(exp.fields.Month);
+                 return expYear === year && expMonth === month;
+             });
+             
+             const monthPayments = allPayments.filter(pay => {
+                 const payYear = parseInt(pay.fields.Year);
+                 const payMonth = parseInt(pay.fields.Month);
+                 return payYear === year && payMonth === month && !pay.fields.FromExpense;
+             });
+             
+             console.log('Month expenses:', monthExpenses.length);
+             console.log('Month payments:', monthPayments.length);
+             
+             if (monthExpenses.length === 0) {
+                 const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+                 container.innerHTML = `
+                     <div class="text-center py-8 text-gray-400">
+                         <i class="fas fa-inbox text-4xl mb-3"></i>
+                         <p class="text-lg font-semibold mb-2">No data for ${monthNames[month - 1]} ${year}</p>
+                         <p class="text-sm">Try selecting a different month or add some expenses first.</p>
+                     </div>
+                 `;
+                 return;
+             }
+             
+             // Calculate metrics
+             const totalSpending = monthExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             const expenseCount = monthExpenses.length;
+             const avgExpense = totalSpending / expenseCount;
+             
+             // Category breakdown
+             const categoryTotals = {};
+             monthExpenses.forEach(exp => {
+                 const cat = exp.fields.Category || 'Other';
+                 categoryTotals[cat] = (categoryTotals[cat] || 0) + (exp.fields.Actual || 0);
+             });
+             
+             // Contributions
+             const amarContribFromExpenses = monthExpenses.reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             const priyaContribFromExpenses = monthExpenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
+             const amarContribFromPayments = monthPayments.filter(p => p.fields.Person === 'Amar').reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             const priyaContribFromPayments = monthPayments.filter(p => p.fields.Person === 'Priya').reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             
+             const amarTotal = amarContribFromExpenses + amarContribFromPayments;
+             const priyaTotal = priyaContribFromExpenses + priyaContribFromPayments;
+             const totalContributions = amarTotal + priyaTotal;
+             
+             const amarPercentage = totalContributions > 0 ? (amarTotal / totalContributions * 100) : 0;
+             const priyaPercentage = totalContributions > 0 ? (priyaTotal / totalContributions * 100) : 0;
+             
+             // LLC expenses
+             const llcExpenses = monthExpenses.filter(exp => exp.fields.LLC === 'Yes');
+             const llcTotal = llcExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             const llcPercentage = totalSpending > 0 ? (llcTotal / totalSpending * 100) : 0;
+             
+             // Top 5 expenses
+             const sortedExpenses = [...monthExpenses].sort((a, b) => (b.fields.Actual || 0) - (a.fields.Actual || 0));
+             const top5 = sortedExpenses.slice(0, 5);
+             
+             // Contribution balance
+             const expectedEach = totalSpending / 2;
+             const amarDiff = amarTotal - expectedEach;
+             const priyaDiff = priyaTotal - expectedEach;
+             
+             // Month names
+             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+             
+             // Generate progress bars
+             const amarBar = '█'.repeat(Math.round(amarPercentage / 5)) + '░'.repeat(20 - Math.round(amarPercentage / 5));
+             const priyaBar = '█'.repeat(Math.round(priyaPercentage / 5)) + '░'.repeat(20 - Math.round(priyaPercentage / 5));
+             
+             // Render summary
+             container.innerHTML = `
+                 <div class="space-y-6">
+                     <div class="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-6 rounded-lg">
+                         <h3 class="text-2xl font-bold mb-2">${monthNames[month - 1]} ${year}</h3>
+                         <div class="text-4xl font-bold">$${totalSpending.toFixed(2)}</div>
+                         <div class="text-sm opacity-90 mt-2">${expenseCount} transactions • $${avgExpense.toFixed(2)} average</div>
+                     </div>
+                     
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-chart-pie text-purple-600"></i>
+                             Spending by Category
+                         </h3>
+                         <div class="space-y-3">
+                             ${Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]).map(([cat, amount]) => {
+                                 const percentage = (amount / totalSpending * 100).toFixed(1);
+                                 return `
+                                     <div>
+                                         <div class="flex justify-between mb-1">
+                                             <span class="font-semibold">${cat}</span>
+                                             <span class="text-gray-600">$${amount.toFixed(2)} (${percentage}%)</span>
+                                         </div>
+                                         <div class="w-full bg-gray-200 rounded-full h-2">
+                                             <div class="bg-purple-600 h-2 rounded-full" style="width: ${percentage}%"></div>
+                                         </div>
+                                     </div>
+                                 `;
+                             }).join('')}
+                         </div>
+                     </div>
+                     
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-users text-purple-600"></i>
+                             Contribution Breakdown
+                         </h3>
+                         <div class="space-y-6">
+                             <div class="p-4 bg-blue-50 rounded-lg">
+                                 <div class="flex justify-between items-center mb-2">
+                                     <span class="text-lg font-bold">👤 Amar</span>
+                                     <span class="text-2xl font-bold text-blue-600">$${amarTotal.toFixed(2)}</span>
+                                 </div>
+                                 <div class="text-sm text-gray-600 mb-2">${amarPercentage.toFixed(1)}% of total contributions</div>
+                                 <div class="font-mono text-xs bg-white p-2 rounded">${amarBar} ${amarPercentage.toFixed(0)}%</div>
+                                 <div class="mt-2 text-sm ${amarDiff >= 0 ? 'text-green-600' : 'text-red-600'}">
+                                     ${amarDiff >= 0 ? '+' : ''}$${amarDiff.toFixed(2)} vs 50/50 split
+                                 </div>
+                             </div>
+                             
+                             <div class="p-4 bg-pink-50 rounded-lg">
+                                 <div class="flex justify-between items-center mb-2">
+                                     <span class="text-lg font-bold">👤 Priya</span>
+                                     <span class="text-2xl font-bold text-pink-600">$${priyaTotal.toFixed(2)}</span>
+                                 </div>
+                                 <div class="text-sm text-gray-600 mb-2">${priyaPercentage.toFixed(1)}% of total contributions</div>
+                                 <div class="font-mono text-xs bg-white p-2 rounded">${priyaBar} ${priyaPercentage.toFixed(0)}%</div>
+                                 <div class="mt-2 text-sm ${priyaDiff >= 0 ? 'text-green-600' : 'text-red-600'}">
+                                     ${priyaDiff >= 0 ? '+' : ''}$${priyaDiff.toFixed(2)} vs 50/50 split
+                                 </div>
+                             </div>
+                             
+                             <div class="p-4 bg-gray-100 rounded-lg">
+                                 <div class="text-center">
+                                     <div class="text-sm text-gray-600 mb-1">Expected (50/50)</div>
+                                     <div class="text-lg font-bold">$${expectedEach.toFixed(2)} each</div>
+                                     <div class="mt-2 text-sm font-semibold ${Math.abs(amarDiff) > 100 ? 'text-orange-600' : 'text-green-600'}">
+                                         ${Math.abs(amarDiff) > 100 ? '⚠️ Significant imbalance' : '✓ Balanced contributions'}
+                                     </div>
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+                     
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-building text-purple-600"></i>
+                             LLC Eligible Expenses
+                         </h3>
+                         <div class="grid grid-cols-3 gap-4">
+                             <div class="text-center p-4 bg-green-50 rounded-lg">
+                                 <div class="text-2xl font-bold text-green-600">$${llcTotal.toFixed(2)}</div>
+                                 <div class="text-sm text-gray-600">Total LLC</div>
+                             </div>
+                             <div class="text-center p-4 bg-blue-50 rounded-lg">
+                                 <div class="text-2xl font-bold text-blue-600">${llcPercentage.toFixed(1)}%</div>
+                                 <div class="text-sm text-gray-600">Of Total</div>
+                             </div>
+                             <div class="text-center p-4 bg-purple-50 rounded-lg">
+                                 <div class="text-2xl font-bold text-purple-600">$${(llcTotal * 0.25).toFixed(2)}</div>
+                                 <div class="text-sm text-gray-600">Est. Savings (25%)</div>
+                             </div>
+                         </div>
+                     </div>
+                     
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-trophy text-purple-600"></i>
+                             Top 5 Expenses
+                         </h3>
+                         <div class="space-y-3">
+                             ${top5.map((exp, idx) => `
+                                 <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                                     <div class="text-2xl font-bold text-gray-400">${idx + 1}</div>
+                                     <div class="flex-1">
+                                         <div class="font-semibold">${exp.fields.Item || 'N/A'}</div>
+                                         <div class="text-sm text-gray-600">${exp.fields.Category || 'N/A'}</div>
+                                     </div>
+                                     <div class="text-lg font-bold text-purple-600">$${(exp.fields.Actual || 0).toFixed(2)}</div>
+                                 </div>
+                             `).join('')}
+                         </div>
+                     </div>
+                 </div>
+             `;
          }
          
          function openSettings() {
