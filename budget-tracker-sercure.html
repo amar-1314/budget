@@ -8,6 +8,7 @@
       <title>Family Budget Tracker Pro</title>
       <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <script src="https://cdn.tailwindcss.com"></script>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
       <style>
@@ -115,6 +116,34 @@
                      <div class="text-xs text-gray-500">View detailed monthly reports</div>
                   </div>
                </button>
+               <button onclick="openPredictiveBudgeting(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                  <i class="fas fa-crystal-ball text-purple-600 text-xl"></i>
+                  <div>
+                     <div class="font-semibold text-gray-800">Predictive Budgeting</div>
+                     <div class="text-xs text-gray-500">AI-powered spending predictions</div>
+                  </div>
+               </button>
+               <button onclick="openAIInsights(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                  <i class="fas fa-brain text-purple-600 text-xl"></i>
+                  <div>
+                     <div class="font-semibold text-gray-800">AI Insights</div>
+                     <div class="text-xs text-gray-500">Smart spending analysis & tips</div>
+                  </div>
+               </button>
+               <button onclick="openAdvancedAnalytics(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                  <i class="fas fa-chart-pie text-purple-600 text-xl"></i>
+                  <div>
+                     <div class="font-semibold text-gray-800">Advanced Analytics</div>
+                     <div class="text-xs text-gray-500">Heatmaps, trends & visualizations</div>
+                  </div>
+               </button>
+               <button onclick="openSmartSearch(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                  <i class="fas fa-search text-purple-600 text-xl"></i>
+                  <div>
+                     <div class="font-semibold text-gray-800">Smart Search</div>
+                     <div class="text-xs text-gray-500">Advanced search & filters</div>
+                  </div>
+               </button>
                <button onclick="openSettings(); toggleMenu();" class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
                   <i class="fas fa-cog text-purple-600 text-xl"></i>
                   <div>
@@ -161,7 +190,7 @@
             </select>
             <button onclick="loadData()" class="btn-secondary text-sm md:text-base"><i class="fas fa-sync-alt mr-1 md:mr-2"></i><span class="hidden md:inline">Refresh</span><i class="fas fa-sync-alt md:hidden"></i></button>
          </div>
-         <div class="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-8">
+         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-6 mb-6 md:mb-8">
             <div class="stat-card">
                <div class="relative z-10">
                   <div class="text-purple-100 text-xs md:text-sm font-semibold mb-1">BUDGET</div>
@@ -184,6 +213,16 @@
                <div class="relative z-10">
                   <div class="text-green-100 text-xs md:text-sm font-semibold mb-1">LEFT</div>
                   <div class="text-xl md:text-3xl font-bold" id="remaining">$0</div>
+               </div>
+            </div>
+            <div class="stat-card cursor-pointer" style="background: linear-gradient(135deg, #FA8BFF 0%, #2BD2FF 90%, #2BFF88 100%);" onclick="openPredictiveBudgeting()" title="Click to view detailed predictions">
+               <div class="relative z-10">
+                  <div class="text-white text-xs md:text-sm font-semibold mb-1 flex items-center gap-1">
+                     <i class="fas fa-crystal-ball"></i>
+                     <span>PREDICTED</span>
+                  </div>
+                  <div class="text-xl md:text-3xl font-bold" id="predictedTotal">$0</div>
+                  <div class="text-xs text-white opacity-75 mt-1">Next Month</div>
                </div>
             </div>
          </div>
@@ -274,6 +313,45 @@
                <div class="flex gap-2 min-w-max"><button class="tab-button active" onclick="switchTab('expenses')"><i class="fas fa-list mr-1 md:mr-2"></i><span class="hidden md:inline">Expenses</span><span class="md:hidden">List</span></button><button class="tab-button" onclick="switchTab('payments')"><i class="fas fa-hand-holding-usd mr-1 md:mr-2"></i><span class="hidden md:inline">Payments</span><span class="md:hidden">Pay</span></button><button class="tab-button" onclick="switchTab('category')"><i class="fas fa-filter mr-1 md:mr-2"></i><span class="hidden md:inline">Category</span><span class="md:hidden">Cat</span></button><button class="tab-button" onclick="switchTab('analytics')"><i class="fas fa-chart-pie mr-1 md:mr-2"></i><span class="hidden md:inline">Analytics</span><span class="md:hidden">Charts</span></button><button class="tab-button" onclick="switchTab('trends')"><i class="fas fa-chart-line mr-1 md:mr-2"></i>Trends</button><button class="tab-button" onclick="switchTab('insights')"><i class="fas fa-lightbulb mr-1 md:mr-2"></i>Insights</button></div>
             </div>
             <div id="expensesTab" class="p-3 md:p-6">
+               <div class="mb-4 space-y-3">
+                  <div class="flex gap-2">
+                     <div class="flex-1">
+                        <input type="text" id="expenseSearch" placeholder="🔍 Search expenses..." class="input-field" oninput="filterExpenses()">
+                     </div>
+                     <button onclick="toggleAdvancedFilters()" class="btn-secondary whitespace-nowrap">
+                        <i class="fas fa-filter mr-2"></i>Filters
+                     </button>
+                  </div>
+                  <div id="advancedFilters" style="display: none;" class="space-y-3 p-4 bg-gray-50 rounded-lg">
+                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                           <label class="text-xs font-semibold text-gray-600 mb-1 block">Amount Range</label>
+                           <div class="flex gap-2">
+                              <input type="number" id="minAmount" placeholder="Min $" class="input-field text-sm" oninput="filterExpenses()">
+                              <input type="number" id="maxAmount" placeholder="Max $" class="input-field text-sm" oninput="filterExpenses()">
+                           </div>
+                        </div>
+                        <div>
+                           <label class="text-xs font-semibold text-gray-600 mb-1 block">Day Range (within selected month)</label>
+                           <div class="flex gap-2">
+                              <input type="number" id="startDay" placeholder="From" min="1" max="31" class="input-field text-sm" oninput="filterExpenses()">
+                              <input type="number" id="endDay" placeholder="To" min="1" max="31" class="input-field text-sm" oninput="filterExpenses()">
+                           </div>
+                        </div>
+                        <div>
+                           <label class="text-xs font-semibold text-gray-600 mb-1 block">Tags</label>
+                           <select id="tagFilter" class="input-field text-sm" onchange="filterExpenses()">
+                              <option value="">All Tags</option>
+                           </select>
+                        </div>
+                     </div>
+                     <div class="flex justify-end">
+                        <button onclick="clearAllFilters()" class="text-sm text-purple-600 hover:text-purple-800 font-semibold">
+                           <i class="fas fa-times-circle mr-1"></i>Clear All Filters
+                        </button>
+                     </div>
+                  </div>
+               </div>
                <div class="expense-row expense-header">
                   <div>Item</div>
                   <div>Category</div>
@@ -446,11 +524,11 @@
             <form id="expenseForm" onsubmit="saveExpense(event)">
                <input type="hidden" id="recordId">
                <div class="mb-4">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Item Name</label><input type="text" id="itemName" class="input-field" list="itemList" required placeholder="e.g., Walmart, Costco">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Item Name</label><input type="text" id="itemName" class="input-field" list="itemList" autocomplete="off" required placeholder="e.g., Walmart, Costco">
                   <datalist id="itemList"></datalist>
                </div>
                <div class="mb-4">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label><input type="text" id="category" class="input-field" list="categoryList" required placeholder="e.g., Grocery, Gas, Utilities">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label><input type="text" id="category" class="input-field" list="categoryList" autocomplete="off" required placeholder="e.g., Grocery, Gas, Utilities">
                   <datalist id="categoryList"></datalist>
                </div>
                <div class="grid grid-cols-3 gap-4 mb-4">
@@ -475,7 +553,7 @@
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Day</label><input type="number" id="day" class="input-field" min="1" max="31" required placeholder="1-31"></div>
                </div>
                <div class="grid grid-cols-2 gap-4 mb-4">
-                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Budget Amount</label><input type="number" id="budget" class="input-field" step="0.01" required placeholder="0.00"></div>
+                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Budget Amount</label><input type="number" id="budget" class="input-field" step="0.01" placeholder="0.00" value="0"></div>
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Actual Amount</label><input type="number" id="actual" class="input-field" step="0.01" placeholder="0.00"></div>
                </div>
                <div class="mb-4">
@@ -485,6 +563,17 @@
                      <option value="Yes">Yes - Business Eligible</option>
                   </select>
                   <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Select "Yes" if this expense should be paid through LLC account</p>
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2"><i class="fas fa-tags mr-2 text-purple-500"></i>Tags</label>
+                  <input type="text" id="tags" class="input-field" list="tagsList" autocomplete="off" placeholder="e.g., vacation, emergency, gift (comma-separated)">
+                  <datalist id="tagsList"></datalist>
+                  <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Add tags to categorize expenses (separate with commas)</p>
+               </div>
+               <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2"><i class="fas fa-sticky-note mr-2 text-purple-500"></i>Notes</label>
+                  <textarea id="notes" class="input-field" rows="3" placeholder="Add any additional notes or details about this expense..."></textarea>
+                  <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Optional notes for reference</p>
                </div>
                <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2"><i class="fas fa-receipt mr-2 text-purple-500"></i>Receipt</label>
@@ -758,6 +847,160 @@
             </div>
          </div>
       </div>
+      <div id="predictiveBudgetingModal" class="modal">
+         <div class="modal-content" style="max-width: 1000px;">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-crystal-ball mr-2 text-purple-600"></i>Predictive Budgeting</h2>
+               <button onclick="closePredictiveBudgeting()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+               <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>AI-powered predictions based on your spending history and patterns.</p>
+            </div>
+            <div id="predictiveBudgetingContent">
+               <div class="text-center py-8 text-gray-400">
+                  <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                  <p>Analyzing your spending patterns...</p>
+               </div>
+            </div>
+         </div>
+      </div>
+      <div id="aiInsightsModal" class="modal">
+         <div class="modal-content" style="max-width: 1000px;">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-brain mr-2 text-purple-600"></i>AI Insights</h2>
+               <button onclick="closeAIInsights()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+               <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Smart analysis of your spending patterns with actionable recommendations.</p>
+            </div>
+            <div id="aiInsightsContent">
+               <div class="text-center py-8 text-gray-400">
+                  <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                  <p>Analyzing your spending data...</p>
+               </div>
+            </div>
+         </div>
+      </div>
+      <div id="advancedAnalyticsModal" class="modal">
+         <div class="modal-content" style="max-width: 1200px;">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-chart-pie mr-2 text-purple-600"></i>Advanced Analytics</h2>
+               <button onclick="closeAdvancedAnalytics()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <div id="advancedAnalyticsContent">
+               <div class="text-center py-8 text-gray-400">
+                  <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                  <p>Loading analytics...</p>
+               </div>
+            </div>
+         </div>
+      </div>
+      <div id="smartSearchModal" class="modal">
+         <div class="modal-content" style="max-width: 1000px;">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-search mr-2 text-purple-600"></i>Smart Search & Filters</h2>
+               <button onclick="closeSmartSearch()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            
+            <!-- Natural Language Search -->
+            <div class="mb-6">
+               <label class="block text-sm font-semibold text-gray-700 mb-2">
+                  <i class="fas fa-magic mr-2 text-purple-500"></i>Natural Language Search
+               </label>
+               <div class="flex gap-2">
+                  <input type="text" id="naturalSearchInput" class="input-field flex-1" 
+                         placeholder='Try: "grocery over $100 last month" or "dining in October"'>
+                  <button onclick="performNaturalSearch()" class="btn-primary">
+                     <i class="fas fa-search mr-2"></i>Search
+                  </button>
+               </div>
+               <p class="text-xs text-gray-500 mt-2">
+                  <i class="fas fa-lightbulb mr-1"></i>
+                  Examples: "mortgage in 2025", "expenses over $500", "gas last 3 months"
+               </p>
+            </div>
+            
+            <!-- Quick Filters -->
+            <div class="mb-6">
+               <label class="block text-sm font-semibold text-gray-700 mb-3">
+                  <i class="fas fa-bolt mr-2 text-yellow-500"></i>Quick Filters
+               </label>
+               <div class="flex flex-wrap gap-2">
+                  <button onclick="applyQuickFilter('dining')" class="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm font-semibold">
+                     <i class="fas fa-utensils mr-1"></i>Dining
+                  </button>
+                  <button onclick="applyQuickFilter('shopping')" class="px-4 py-2 bg-pink-100 text-pink-700 rounded-lg hover:bg-pink-200 text-sm font-semibold">
+                     <i class="fas fa-shopping-bag mr-1"></i>Shopping
+                  </button>
+                  <button onclick="applyQuickFilter('misc')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-semibold">
+                     <i class="fas fa-ellipsis-h mr-1"></i>Misc
+                  </button>
+                  <button onclick="applyQuickFilter('over100')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">
+                     Over $100
+                  </button>
+                  <button onclick="applyQuickFilter('over500')" class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">
+                     Over $500
+                  </button>
+                  <button onclick="applyQuickFilter('llcOnly')" class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm font-semibold">
+                     LLC Expenses
+                  </button>
+               </div>
+            </div>
+            
+            <!-- Advanced Filters -->
+            <div class="card p-6 mb-6">
+               <h3 class="text-lg font-bold mb-4">Advanced Filters</h3>
+               <div class="grid grid-cols-1 gap-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Amount Range</label>
+                        <div class="flex gap-2">
+                           <input type="number" id="minAmount" class="input-field" placeholder="Min" step="0.01">
+                           <input type="number" id="maxAmount" class="input-field" placeholder="Max" step="0.01">
+                        </div>
+                     </div>
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                        <select id="searchCategory" class="input-field">
+                           <option value="">All Categories</option>
+                        </select>
+                     </div>
+                  </div>
+                  <div>
+                     <label class="block text-sm font-semibold text-gray-700 mb-2">Date Range</label>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <input type="date" id="startDate" class="input-field" placeholder="Start Date">
+                        <input type="date" id="endDate" class="input-field" placeholder="End Date">
+                     </div>
+                  </div>
+               </div>
+               <div class="flex gap-3 mt-4">
+                  <button onclick="applyAdvancedFilters()" class="btn-primary">
+                     <i class="fas fa-filter mr-2"></i>Apply Filters
+                  </button>
+                  <button onclick="clearAllFilters()" class="btn-secondary">
+                     <i class="fas fa-times mr-2"></i>Clear All
+                  </button>
+               </div>
+            </div>
+            
+            <!-- Search Results -->
+            <div id="searchResults">
+               <div class="text-center py-8 text-gray-400">
+                  <i class="fas fa-search text-4xl mb-3"></i>
+                  <p>Enter search criteria above to find expenses</p>
+               </div>
+            </div>
+         </div>
+      </div>
       <script>
          // Airtable Configuration - Multiple storage methods for reliability
          const TABLE_NAME = 'Budget';
@@ -983,6 +1226,8 @@
                  populateCategorySelector();
                  populateCategoryDatalist();
                  populateItemDatalist();
+                 populateTagsDatalist();
+                 updateTagFilterDropdown();
                  renderExpenses();
                  renderPayments();
                  updateStats();
@@ -1039,6 +1284,124 @@
              return filtered;
          }
          
+         function toggleAdvancedFilters() {
+             const filters = document.getElementById('advancedFilters');
+             filters.style.display = filters.style.display === 'none' ? 'block' : 'none';
+         }
+         
+         function filterExpenses() {
+             const searchTerm = document.getElementById('expenseSearch').value.toLowerCase();
+             const minAmount = parseFloat(document.getElementById('minAmount').value) || 0;
+             const maxAmount = parseFloat(document.getElementById('maxAmount').value) || Infinity;
+             const startDay = parseInt(document.getElementById('startDay').value) || 1;
+             const endDay = parseInt(document.getElementById('endDay').value) || 31;
+             const tagFilter = document.getElementById('tagFilter').value;
+             
+             const filtered = getFilteredExpenses().filter(expense => {
+                 // Search filter
+                 const searchMatch = !searchTerm || 
+                     (expense.fields.Item || '').toLowerCase().includes(searchTerm) ||
+                     (expense.fields.Category || '').toLowerCase().includes(searchTerm) ||
+                     (expense.fields.Notes || '').toLowerCase().includes(searchTerm) ||
+                     (expense.fields.Tags || '').toLowerCase().includes(searchTerm);
+                 
+                 // Amount filter
+                 const amount = expense.fields.Actual || 0;
+                 const amountMatch = amount >= minAmount && amount <= maxAmount;
+                 
+                 // Day filter (within the already filtered month/year)
+                 const expenseDay = expense.fields.Day || 1;
+                 const dayMatch = expenseDay >= startDay && expenseDay <= endDay;
+                 
+                 // Tag filter
+                 const tagMatch = !tagFilter || (expense.fields.Tags || '').includes(tagFilter);
+                 
+                 return searchMatch && amountMatch && dayMatch && tagMatch;
+             });
+             
+             renderFilteredExpenses(filtered);
+         }
+         
+         function clearAllFilters() {
+             document.getElementById('expenseSearch').value = '';
+             document.getElementById('minAmount').value = '';
+             document.getElementById('maxAmount').value = '';
+             document.getElementById('startDay').value = '';
+             document.getElementById('endDay').value = '';
+             document.getElementById('tagFilter').value = '';
+             renderExpenses();
+         }
+         
+         function renderFilteredExpenses(expenses) {
+             const container = document.getElementById('expensesList');
+             if (expenses.length === 0) {
+                 container.innerHTML = '<div class="text-center py-12 text-gray-400"><i class="fas fa-inbox text-4xl mb-3"></i><p>No expenses match your filters</p></div>';
+                 return;
+             }
+             
+             // Sort by date (newest first) - same as renderExpenses
+             const sortedExpenses = [...expenses].sort((a, b) => {
+                 const dateA = `${a.fields.Year}-${String(a.fields.Month).padStart(2, '0')}-${String(a.fields.Day || 1).padStart(2, '0')}`;
+                 const dateB = `${b.fields.Year}-${String(b.fields.Month).padStart(2, '0')}-${String(b.fields.Day || 1).padStart(2, '0')}`;
+                 return dateB.localeCompare(dateA);
+             });
+             
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             
+             container.innerHTML = sortedExpenses.map(expense => {
+                 const fields = expense.fields;
+                 const budget = fields.Budget || 0;
+                 const actual = fields.Actual || 0;
+                 const variance = budget - actual;
+                 const varianceClass = variance >= 0 ? 'text-green-600' : 'text-red-600';
+                 const varianceIcon = variance >= 0 ? 'fa-arrow-down' : 'fa-arrow-up';
+                 const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
+                 const day = fields.Day || 1;
+                 const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
+                 const hasNotes = fields.Notes && fields.Notes.trim();
+                 const notesEscaped = hasNotes ? fields.Notes.replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
+                 
+                 return `
+                    <div class="expense-row">
+                        <div class="expense-item"><span class="expense-label">Item:</span><span class="font-semibold text-gray-800">${fields.Item || 'Unnamed'}${hasNotes ? ` <i class="fas fa-info-circle text-blue-500 cursor-pointer" title="${notesEscaped}"></i>` : ''}</span></div>
+                        <div class="expense-item"><span class="expense-label">Category:</span><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">${fields.Category || 'N/A'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Date:</span><span class="text-gray-600">${dateDisplay}</span></div>
+                        <div class="expense-item"><span class="expense-label">Budget:</span><span class="font-semibold text-gray-700">$${budget.toFixed(2)}</span></div>
+                        <div class="expense-item"><span class="expense-label">Actual:</span><span class="font-semibold ${actual > budget ? 'text-red-600' : 'text-gray-700'}">$${actual.toFixed(2)}</span></div>
+                        <div class="expense-item"><span class="expense-label">Variance:</span><span class="${varianceClass} font-semibold"><i class="fas ${varianceIcon} mr-1"></i>$${Math.abs(variance).toFixed(2)}</span></div>
+                        <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<a href="${fields.Receipt[0].url}" target="_blank" class="text-purple-600 hover:text-purple-800" title="View Receipt"><i class="fas fa-receipt text-xl"></i></a>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
+                        <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
+                            <button onclick="editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button onclick="deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
+                        </div></div>
+                    </div>
+                 `;
+             }).join('');
+             
+             // Update tag filter dropdown
+             updateTagFilterDropdown();
+         }
+         
+         function updateTagFilterDropdown() {
+             const tagFilter = document.getElementById('tagFilter');
+             const allTags = new Set();
+             
+             allExpenses.forEach(expense => {
+                 if (expense.fields.Tags) {
+                     expense.fields.Tags.split(',').forEach(tag => {
+                         const trimmed = tag.trim();
+                         if (trimmed) allTags.add(trimmed);
+                     });
+                 }
+             });
+             
+             const currentValue = tagFilter.value;
+             tagFilter.innerHTML = '<option value="">All Tags</option>' + 
+                 Array.from(allTags).sort().map(tag => `<option value="${tag}">${tag}</option>`).join('');
+             tagFilter.value = currentValue;
+         }
+         
          function renderExpenses() {
              const container = document.getElementById('expensesList');
              const filteredExpenses = getFilteredExpenses();
@@ -1065,10 +1428,12 @@
                  const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
                  const day = fields.Day || 1;
                  const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
-                 
+                 const hasNotes = fields.Notes && fields.Notes.trim();
+                 const notesEscaped = hasNotes ? fields.Notes.replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
+                
                  return `
                     <div class="expense-row">
-                        <div class="expense-item"><span class="expense-label">Item:</span><span class="font-semibold text-gray-800">${fields.Item || 'Unnamed'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Item:</span><span class="font-semibold text-gray-800">${fields.Item || 'Unnamed'}${hasNotes ? ` <i class="fas fa-info-circle text-blue-500 cursor-pointer" title="${notesEscaped}"></i>` : ''}</span></div>
                         <div class="expense-item"><span class="expense-label">Category:</span><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">${fields.Category || 'N/A'}</span></div>
                         <div class="expense-item"><span class="expense-label">Date:</span><span class="text-gray-600">${dateDisplay}</span></div>
                         <div class="expense-item"><span class="expense-label">Budget:</span><span class="font-semibold text-gray-700">$${budget.toFixed(2)}</span></div>
@@ -1176,6 +1541,9 @@
              document.getElementById('totalActual').textContent = `$${totalActual.toFixed(2)}`;
              document.getElementById('llcTotal').textContent = `$${llcTotal.toFixed(2)}`;
              document.getElementById('remaining').textContent = `$${remaining.toFixed(2)}`;
+             
+             // Update predicted total
+             updatePredictedTotal();
              
              // Update Amar's stats
              document.getElementById('amarShare').textContent = `$${amarShare.toFixed(2)}`;
@@ -1799,6 +2167,30 @@
              });
          }
          
+         function populateTagsDatalist() {
+             const datalist = document.getElementById('tagsList');
+             if (!datalist) return;
+             datalist.innerHTML = '';
+             
+             // Collect all unique tags from all expenses
+             const allTags = new Set();
+             allExpenses.forEach(exp => {
+                 if (exp.fields.Tags) {
+                     exp.fields.Tags.split(',').forEach(tag => {
+                         const trimmed = tag.trim();
+                         if (trimmed) allTags.add(trimmed);
+                     });
+                 }
+             });
+             
+             // Add each tag as an option
+             [...allTags].sort().forEach(tag => {
+                 const option = document.createElement('option');
+                 option.value = tag;
+                 datalist.appendChild(option);
+             });
+         }
+         
          function updateCategoryAnalysis() {
              const selectedCategory = document.getElementById('categorySelector').value;
              if (!selectedCategory) {
@@ -2182,10 +2574,12 @@
              document.getElementById('budget').value = expense.fields.Budget || '';
              document.getElementById('actual').value = expense.fields.Actual || '';
              document.getElementById('llc').value = expense.fields.LLC || 'No';
-             document.getElementById('amarContributionInput').value = expense.fields.AmarContribution || '';
-             document.getElementById('priyaContributionInput').value = expense.fields.PriyaContribution || '';
-             
-             // Handle receipt
+            document.getElementById('amarContributionInput').value = expense.fields.AmarContribution || '';
+            document.getElementById('priyaContributionInput').value = expense.fields.PriyaContribution || '';
+            document.getElementById('tags').value = expense.fields.Tags || '';
+            document.getElementById('notes').value = expense.fields.Notes || '';
+            
+            // Handle receipt
              document.getElementById('receiptFile').value = '';
              if (expense.fields.Receipt && expense.fields.Receipt.length > 0) {
                  currentReceiptData = expense.fields.Receipt[0];
@@ -2204,17 +2598,30 @@
              event.preventDefault();
              const recordId = document.getElementById('recordId').value;
              const fields = {
-                 Item: document.getElementById('itemName').value,
-                 Category: document.getElementById('category').value,
-                 Year: parseInt(document.getElementById('year').value),
-                 Month: document.getElementById('month').value,
-                 Day: parseInt(document.getElementById('day').value),
-                 Budget: parseFloat(document.getElementById('budget').value) || 0,
-                 Actual: parseFloat(document.getElementById('actual').value) || 0,
-                 LLC: document.getElementById('llc').value,
-                 AmarContribution: parseFloat(document.getElementById('amarContributionInput').value) || 0,
-                 PriyaContribution: parseFloat(document.getElementById('priyaContributionInput').value) || 0
-             };
+                Item: document.getElementById('itemName').value,
+                Category: document.getElementById('category').value,
+                Year: parseInt(document.getElementById('year').value),
+                Month: document.getElementById('month').value,
+                Day: parseInt(document.getElementById('day').value),
+                Budget: parseFloat(document.getElementById('budget').value) || 0,
+                Actual: parseFloat(document.getElementById('actual').value) || 0,
+                LLC: document.getElementById('llc').value,
+                AmarContribution: parseFloat(document.getElementById('amarContributionInput').value) || 0,
+                PriyaContribution: parseFloat(document.getElementById('priyaContributionInput').value) || 0,
+                Tags: document.getElementById('tags').value || '',
+                Notes: document.getElementById('notes').value || ''
+            };
+             
+             // Check for duplicates (only for new expenses, not edits)
+             if (!recordId) {
+                 const duplicates = findDuplicateExpenses(fields);
+                 if (duplicates.length > 0) {
+                     const confirmed = await showDuplicateConfirmation(duplicates, fields);
+                     if (!confirmed) {
+                         return; // User cancelled
+                     }
+                 }
+             }
              
              // Handle receipt file upload
              const receiptFile = document.getElementById('receiptFile').files[0];
@@ -2228,6 +2635,143 @@
                  // No receipt
                  await saveExpenseToAirtable(recordId, fields);
              }
+         }
+         
+         function findDuplicateExpenses(newExpense) {
+             const duplicates = [];
+             
+             allExpenses.forEach(exp => {
+                 let matchScore = 0;
+                 let reasons = [];
+                 
+                 // Check item name (case-insensitive, fuzzy match)
+                 const itemMatch = exp.fields.Item && newExpense.Item && 
+                     exp.fields.Item.toLowerCase() === newExpense.Item.toLowerCase();
+                 if (itemMatch) {
+                     matchScore += 3;
+                     reasons.push('Same item name');
+                 }
+                 
+                 // Check exact amount
+                 const amountMatch = exp.fields.Actual === newExpense.Actual && newExpense.Actual > 0;
+                 if (amountMatch) {
+                     matchScore += 2;
+                     reasons.push('Same amount');
+                 }
+                 
+                 // Check same date
+                 const dateMatch = exp.fields.Year === newExpense.Year && 
+                     exp.fields.Month === newExpense.Month && 
+                     exp.fields.Day === newExpense.Day;
+                 if (dateMatch) {
+                     matchScore += 2;
+                     reasons.push('Same date');
+                 }
+                 
+                 // Check same category
+                 const categoryMatch = exp.fields.Category === newExpense.Category;
+                 if (categoryMatch) {
+                     matchScore += 1;
+                     reasons.push('Same category');
+                 }
+                 
+                 // If match score is high enough, consider it a potential duplicate
+                 // Score >= 5 means at least: same item + same amount, or same item + same date
+                 if (matchScore >= 5) {
+                     duplicates.push({
+                         expense: exp,
+                         matchScore: matchScore,
+                         reasons: reasons
+                     });
+                 }
+             });
+             
+             // Sort by match score (highest first)
+             return duplicates.sort((a, b) => b.matchScore - a.matchScore).slice(0, 3); // Top 3
+         }
+         
+         function showDuplicateConfirmation(duplicates, newExpense) {
+             return new Promise((resolve) => {
+                 const modal = document.createElement('div');
+                 modal.className = 'modal active';
+                 modal.style.zIndex = '10001'; // Above other modals
+                 
+                 const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                 
+                 modal.innerHTML = `
+                     <div class="modal-content" style="max-width: 600px;">
+                         <div class="flex justify-between items-center mb-6">
+                             <h2 class="text-2xl font-bold text-orange-600 flex items-center gap-2">
+                                 <i class="fas fa-exclamation-triangle"></i>
+                                 Possible Duplicate Expense
+                             </h2>
+                         </div>
+                         
+                         <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6">
+                             <p class="text-sm text-yellow-800">
+                                 <i class="fas fa-info-circle mr-2"></i>
+                                 We found ${duplicates.length} similar expense${duplicates.length > 1 ? 's' : ''} that might be duplicate${duplicates.length > 1 ? 's' : ''}. 
+                                 Please review before adding.
+                             </p>
+                         </div>
+                         
+                         <div class="mb-6">
+                             <h3 class="font-bold text-gray-800 mb-3">New Expense:</h3>
+                             <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                                 <div class="grid grid-cols-2 gap-2 text-sm">
+                                     <div><span class="font-semibold">Item:</span> ${newExpense.Item}</div>
+                                     <div><span class="font-semibold">Amount:</span> $${newExpense.Actual.toFixed(2)}</div>
+                                     <div><span class="font-semibold">Date:</span> ${monthNames[newExpense.Month]} ${newExpense.Day}, ${newExpense.Year}</div>
+                                     <div><span class="font-semibold">Category:</span> ${newExpense.Category || 'None'}</div>
+                                 </div>
+                             </div>
+                         </div>
+                         
+                         <div class="mb-6">
+                             <h3 class="font-bold text-gray-800 mb-3">Similar Existing Expense${duplicates.length > 1 ? 's' : ''}:</h3>
+                             <div class="space-y-3">
+                                 ${duplicates.map(dup => `
+                                     <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                                         <div class="grid grid-cols-2 gap-2 text-sm mb-2">
+                                             <div><span class="font-semibold">Item:</span> ${dup.expense.fields.Item}</div>
+                                             <div><span class="font-semibold">Amount:</span> $${(dup.expense.fields.Actual || 0).toFixed(2)}</div>
+                                             <div><span class="font-semibold">Date:</span> ${monthNames[dup.expense.fields.Month]} ${dup.expense.fields.Day || 1}, ${dup.expense.fields.Year}</div>
+                                             <div><span class="font-semibold">Category:</span> ${dup.expense.fields.Category || 'None'}</div>
+                                         </div>
+                                         <div class="text-xs text-red-700 font-semibold">
+                                             <i class="fas fa-check-circle mr-1"></i>
+                                             Match: ${dup.reasons.join(', ')}
+                                         </div>
+                                     </div>
+                                 `).join('')}
+                             </div>
+                         </div>
+                         
+                         <div class="flex gap-3">
+                             <button id="confirmAddBtn" class="btn-primary flex-1">
+                                 <i class="fas fa-check mr-2"></i>
+                                 Add Anyway (Not a Duplicate)
+                             </button>
+                             <button id="cancelAddBtn" class="btn-secondary flex-1">
+                                 <i class="fas fa-times mr-2"></i>
+                                 Cancel
+                             </button>
+                         </div>
+                     </div>
+                 `;
+                 
+                 document.body.appendChild(modal);
+                 
+                 document.getElementById('confirmAddBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve(true);
+                 };
+                 
+                 document.getElementById('cancelAddBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve(false);
+                 };
+             });
          }
          
          async function uploadReceiptAndSave(recordId, fields, file) {
@@ -2291,14 +2835,28 @@
          }
          
          async function saveExpenseToAirtable(recordId, fields) {
-             try {
-                 const url = recordId ? `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}/${recordId}` : `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`;
-                 const response = await fetch(url, {
-                     method: recordId ? 'PATCH' : 'POST',
-                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ fields })
-                 });
-                 if (!response.ok) throw new Error('Failed to save');
+            try {
+                // Filter out empty optional fields (Tags, Notes) to avoid Airtable errors if fields don't exist
+                const cleanFields = { ...fields };
+                if (!cleanFields.Tags || cleanFields.Tags.trim() === '') {
+                    delete cleanFields.Tags;
+                }
+                if (!cleanFields.Notes || cleanFields.Notes.trim() === '') {
+                    delete cleanFields.Notes;
+                }
+                
+                const url = recordId ? `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}/${recordId}` : `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`;
+                const response = await fetch(url, {
+                    method: recordId ? 'PATCH' : 'POST',
+                    headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fields: cleanFields })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('Airtable error:', errorData);
+                    throw new Error(errorData.error?.message || 'Failed to save');
+                }
                  
                  // Create payment entries for visibility (but marked to avoid double counting)
                  await createPaymentEntriesFromContributions(fields, recordId);
@@ -2988,6 +3546,1937 @@
                              `).join('')}
                          </div>
                      </div>
+                 </div>
+             `;
+         }
+         
+         function updatePredictedTotal() {
+             // Quick calculation for dashboard tile
+             const yearFilterEl = document.getElementById('yearSelector');
+             const monthFilterEl = document.getElementById('monthSelector');
+             const selectedYear = yearFilterEl ? yearFilterEl.value : 'all';
+             const selectedMonth = monthFilterEl ? monthFilterEl.value : 'all';
+             
+             // Get expenses to analyze (last 3 months from current or filtered period)
+             let expensesToAnalyze = allExpenses;
+             
+             // If specific month/year selected, use last 3 months from that point
+             if (selectedYear !== 'all' && selectedMonth !== 'all') {
+                 const year = parseInt(selectedYear);
+                 const month = parseInt(selectedMonth);
+                 
+                 // Calculate 3 months before selected month
+                 // For month 10 (Oct): want months 7, 8, 9
+                 // For month 11 (Nov): want months 8, 9, 10
+                 expensesToAnalyze = allExpenses.filter(exp => {
+                     const expYear = exp.fields.Year;
+                     const expMonth = parseInt(exp.fields.Month);
+                     
+                     // Create comparable values: YYYYMM format
+                     const expValue = expYear * 100 + expMonth;
+                     const selectedValue = year * 100 + month;
+                     
+                     // Calculate 3 months ago
+                     let threeMonthsAgoYear = year;
+                     let threeMonthsAgoMonth = month - 3;
+                     if (threeMonthsAgoMonth <= 0) {
+                         threeMonthsAgoMonth += 12;
+                         threeMonthsAgoYear -= 1;
+                     }
+                     const threeMonthsAgoValue = threeMonthsAgoYear * 100 + threeMonthsAgoMonth;
+                     
+                     // Include expenses from 3 months ago up to (but not including) selected month
+                     return expValue >= threeMonthsAgoValue && expValue < selectedValue;
+                 });
+             } else {
+                 // Use last 3 months from now
+                 const now = new Date();
+                 const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+                 expensesToAnalyze = allExpenses.filter(exp => {
+                     const expDate = new Date(exp.fields.Year, exp.fields.Month - 1, 1);
+                     return expDate >= threeMonthsAgo;
+                 });
+             }
+             
+             if (expensesToAnalyze.length === 0) {
+                 document.getElementById('predictedTotal').innerHTML = '$0';
+                 return;
+             }
+             
+             // Calculate simple average
+             const total = expensesToAnalyze.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             const monthsCount = Math.max(1, new Set(expensesToAnalyze.map(e => `${e.fields.Year}-${e.fields.Month}`)).size);
+             const avgMonthly = total / monthsCount;
+             
+             // Simple trend calculation
+             const monthlyTotals = {};
+             expensesToAnalyze.forEach(exp => {
+                 const key = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+                 monthlyTotals[key] = (monthlyTotals[key] || 0) + (exp.fields.Actual || 0);
+             });
+             
+             const months = Object.keys(monthlyTotals).sort();
+             const trend = months.length > 1 ? (monthlyTotals[months[months.length - 1]] - monthlyTotals[months[0]]) / months.length : 0;
+             
+             const predicted = Math.max(0, avgMonthly + trend);
+             
+             // Get comparison month (last month in analysis)
+             const lastMonthKey = months[months.length - 1];
+             const lastMonthTotal = monthlyTotals[lastMonthKey] || 0;
+             
+             // Calculate percentage change
+             const change = lastMonthTotal > 0 ? ((predicted - lastMonthTotal) / lastMonthTotal * 100) : 0;
+             const absChange = Math.abs(change);
+             
+             // Determine arrow and color based on change
+             let arrow = '';
+             let arrowColor = '';
+             
+             if (absChange < 5) {
+                 // Less than 5% change - neutral/stable
+                 arrow = '→';
+                 arrowColor = '#FFA500'; // Orange
+             } else if (change > 0) {
+                 // Increasing
+                 arrow = '↑';
+                 if (absChange < 10) {
+                     arrowColor = '#FF6B6B'; // Light red
+                 } else if (absChange < 20) {
+                     arrowColor = '#FF4444'; // Medium red
+                 } else {
+                     arrowColor = '#CC0000'; // Dark red
+                 }
+             } else {
+                 // Decreasing
+                 arrow = '↓';
+                 if (absChange < 10) {
+                     arrowColor = '#90EE90'; // Light green
+                 } else if (absChange < 20) {
+                     arrowColor = '#4CAF50'; // Medium green
+                 } else {
+                     arrowColor = '#2E7D32'; // Dark green
+                 }
+             }
+             
+             document.getElementById('predictedTotal').innerHTML = `
+                 <span style="color: ${arrowColor}; font-size: 0.8em; margin-right: 4px;">${arrow}</span>$${predicted.toFixed(0)}
+             `;
+         }
+         
+         function openPredictiveBudgeting() {
+             document.getElementById('predictiveBudgetingModal').classList.add('active');
+             generatePredictions();
+         }
+         
+         function closePredictiveBudgeting() {
+             document.getElementById('predictiveBudgetingModal').classList.remove('active');
+         }
+         
+         function generatePredictions() {
+             const container = document.getElementById('predictiveBudgetingContent');
+             
+             // Get selected filter or current date
+             const yearFilterEl = document.getElementById('yearSelector');
+             const monthFilterEl = document.getElementById('monthSelector');
+             const selectedYear = yearFilterEl ? yearFilterEl.value : 'all';
+             const selectedMonth = monthFilterEl ? monthFilterEl.value : 'all';
+             
+             let baseYear, baseMonth, predictYear, predictMonth;
+             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+             
+             // Determine what month we're predicting for
+             if (selectedYear !== 'all' && selectedMonth !== 'all') {
+                 // Predicting for the selected month
+                 baseYear = parseInt(selectedYear);
+                 baseMonth = parseInt(selectedMonth);
+                 predictYear = baseYear;
+                 predictMonth = baseMonth;
+             } else {
+                 // Predicting for next month from today
+                 const now = new Date();
+                 baseYear = now.getFullYear();
+                 baseMonth = now.getMonth() + 1;
+                 predictMonth = baseMonth + 1;
+                 predictYear = baseYear;
+                 if (predictMonth > 12) {
+                     predictMonth = 1;
+                     predictYear += 1;
+                 }
+             }
+             
+             // Get expenses from 3 months before the prediction target
+             let recentExpenses;
+             if (selectedYear !== 'all' && selectedMonth !== 'all') {
+                 // Use same logic as updatePredictedTotal
+                 const year = parseInt(selectedYear);
+                 const month = parseInt(selectedMonth);
+                 
+                 recentExpenses = allExpenses.filter(exp => {
+                     const expYear = exp.fields.Year;
+                     const expMonth = parseInt(exp.fields.Month);
+                     const expValue = expYear * 100 + expMonth;
+                     const selectedValue = year * 100 + month;
+                     
+                     let threeMonthsAgoYear = year;
+                     let threeMonthsAgoMonth = month - 3;
+                     if (threeMonthsAgoMonth <= 0) {
+                         threeMonthsAgoMonth += 12;
+                         threeMonthsAgoYear -= 1;
+                     }
+                     const threeMonthsAgoValue = threeMonthsAgoYear * 100 + threeMonthsAgoMonth;
+                     
+                     return expValue >= threeMonthsAgoValue && expValue < selectedValue;
+                 });
+             } else {
+                 const now = new Date();
+                 const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+                 recentExpenses = allExpenses.filter(exp => {
+                     const expDate = new Date(exp.fields.Year, exp.fields.Month - 1, 1);
+                     return expDate >= threeMonthsAgo;
+                 });
+             }
+             
+             if (recentExpenses.length === 0) {
+                 container.innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fas fa-inbox text-4xl mb-3"></i><p>Not enough data to generate predictions. Add more expenses first.</p></div>';
+                 return;
+             }
+             
+             // Calculate predictions by category
+             const categoryData = {};
+             recentExpenses.forEach(exp => {
+                 const cat = exp.fields.Category || 'Other';
+                 if (!categoryData[cat]) {
+                     categoryData[cat] = { total: 0, count: 0, amounts: [] };
+                 }
+                 categoryData[cat].total += exp.fields.Actual || 0;
+                 categoryData[cat].count++;
+                 categoryData[cat].amounts.push(exp.fields.Actual || 0);
+             });
+             
+             // Calculate overall prediction (same logic as dashboard)
+             const total = recentExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             const monthsCount = Math.max(1, new Set(recentExpenses.map(e => `${e.fields.Year}-${e.fields.Month}`)).size);
+             const avgMonthly = total / monthsCount;
+             
+             // Overall trend calculation
+             const monthlyTotals = {};
+             recentExpenses.forEach(exp => {
+                 const key = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+                 monthlyTotals[key] = (monthlyTotals[key] || 0) + (exp.fields.Actual || 0);
+             });
+             
+             const months = Object.keys(monthlyTotals).sort();
+             const overallTrend = months.length > 1 ? (monthlyTotals[months[months.length - 1]] - monthlyTotals[months[0]]) / months.length : 0;
+             const totalPredicted = Math.max(0, avgMonthly + overallTrend);
+             
+             // Calculate predictions per category (for breakdown display)
+             const predictions = [];
+             
+             Object.keys(categoryData).forEach(category => {
+                 const data = categoryData[category];
+                 const average = data.total / data.count;
+                 
+                 // Calculate trend (simple linear regression)
+                 const amounts = data.amounts;
+                 const trend = amounts.length > 1 ? (amounts[amounts.length - 1] - amounts[0]) / amounts.length : 0;
+                 
+                 // Predicted amount = average + trend
+                 const predicted = Math.max(0, average + trend);
+                 
+                 // Calculate confidence based on consistency
+                 const variance = amounts.reduce((sum, val) => sum + Math.pow(val - average, 2), 0) / amounts.length;
+                 const stdDev = Math.sqrt(variance);
+                 const confidence = Math.max(0, Math.min(100, 100 - (stdDev / average * 100)));
+                 
+                 predictions.push({
+                     category,
+                     predicted,
+                     average,
+                     trend: trend > 0 ? 'increasing' : trend < 0 ? 'decreasing' : 'stable',
+                     trendAmount: Math.abs(trend),
+                     confidence,
+                     count: data.count
+                 });
+             });
+             
+             // Sort by predicted amount
+             predictions.sort((a, b) => b.predicted - a.predicted);
+             
+             // Calculate overall metrics
+             const currentMonthTotal = allExpenses
+                 .filter(exp => exp.fields.Year === baseYear && exp.fields.Month === baseMonth)
+                 .reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             
+             // Calculate last month from base month
+             let lastMonth = baseMonth - 1;
+             let lastMonthYear = baseYear;
+             if (lastMonth === 0) {
+                 lastMonth = 12;
+                 lastMonthYear -= 1;
+             }
+             
+             const lastMonthTotal = allExpenses
+                 .filter(exp => exp.fields.Year === lastMonthYear && exp.fields.Month === lastMonth)
+                 .reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             
+             // Render predictions
+             container.innerHTML = `
+                 <div class="space-y-6">
+                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                         <div class="card p-6 text-center bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+                             <div class="text-sm opacity-90 mb-2">Predicted Total</div>
+                             <div class="text-3xl font-bold">$${totalPredicted.toFixed(2)}</div>
+                             <div class="text-xs opacity-75 mt-2">${monthNames[predictMonth - 1]} ${predictYear}</div>
+                         </div>
+                         <div class="card p-6 text-center">
+                             <div class="text-sm text-gray-600 mb-2">3-Month Average</div>
+                             <div class="text-2xl font-bold text-gray-800">$${avgMonthly.toFixed(2)}</div>
+                             <div class="text-xs text-gray-500 mt-2">Based on recent history</div>
+                         </div>
+                         <div class="card p-6 text-center">
+                             <div class="text-sm text-gray-600 mb-2">vs Last Month</div>
+                             <div class="text-2xl font-bold ${totalPredicted > lastMonthTotal ? 'text-red-600' : 'text-green-600'}">
+                                 ${totalPredicted > lastMonthTotal ? '+' : ''}$${(totalPredicted - lastMonthTotal).toFixed(2)}
+                             </div>
+                             <div class="text-xs text-gray-500 mt-2">${lastMonthTotal > 0 ? ((totalPredicted - lastMonthTotal) / lastMonthTotal * 100).toFixed(1) + '% change' : 'N/A (no previous data)'}</div>
+                         </div>
+                     </div>
+                     
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-chart-line text-purple-600"></i>
+                             Category Predictions
+                         </h3>
+                         <div class="space-y-4">
+                             ${predictions.map(pred => `
+                                 <div class="p-4 bg-gray-50 rounded-lg">
+                                     <div class="flex justify-between items-start mb-3">
+                                         <div class="flex-1">
+                                             <div class="font-semibold text-lg text-gray-800">${pred.category}</div>
+                                             <div class="text-sm text-gray-600">Based on ${pred.count} recent transactions</div>
+                                         </div>
+                                         <div class="text-right">
+                                             <div class="text-2xl font-bold text-purple-600">$${pred.predicted.toFixed(2)}</div>
+                                             <div class="text-xs text-gray-500">predicted</div>
+                                         </div>
+                                     </div>
+                                     <div class="grid grid-cols-3 gap-3 text-sm">
+                                         <div>
+                                             <span class="text-gray-600">Average:</span>
+                                             <span class="font-semibold ml-1">$${pred.average.toFixed(2)}</span>
+                                         </div>
+                                         <div>
+                                             <span class="text-gray-600">Trend:</span>
+                                             <span class="font-semibold ml-1 ${pred.trend === 'increasing' ? 'text-red-600' : pred.trend === 'decreasing' ? 'text-green-600' : 'text-gray-600'}">
+                                                 ${pred.trend === 'increasing' ? '↑' : pred.trend === 'decreasing' ? '↓' : '→'} ${pred.trend}
+                                             </span>
+                                         </div>
+                                         <div>
+                                             <span class="text-gray-600">Confidence:</span>
+                                             <span class="font-semibold ml-1">${pred.confidence.toFixed(0)}%</span>
+                                         </div>
+                                     </div>
+                                     <div class="mt-3">
+                                         <div class="w-full bg-gray-200 rounded-full h-2">
+                                             <div class="bg-purple-600 h-2 rounded-full" style="width: ${(pred.predicted / totalPredicted * 100).toFixed(1)}%"></div>
+                                         </div>
+                                         <div class="text-xs text-gray-500 mt-1">${(pred.predicted / totalPredicted * 100).toFixed(1)}% of total predicted spending</div>
+                                     </div>
+                                 </div>
+                             `).join('')}
+                         </div>
+                     </div>
+                     
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-chart-area text-purple-600"></i>
+                             Predicted vs Actual Trend
+                         </h3>
+                         <div class="chart-container" style="height: 300px;">
+                             <canvas id="predictionTrendChart"></canvas>
+                         </div>
+                     </div>
+                     
+                     <div class="card p-6 bg-yellow-50 border border-yellow-200">
+                         <h3 class="text-lg font-bold mb-3 text-yellow-800">
+                             <i class="fas fa-lightbulb mr-2"></i>Insights & Recommendations
+                         </h3>
+                         <ul class="space-y-2 text-sm text-yellow-800">
+                             ${totalPredicted > avgMonthly * 1.1 ? '<li><i class="fas fa-exclamation-triangle mr-2"></i>Predicted spending is 10%+ higher than your 3-month average. Consider reviewing your budget.</li>' : ''}
+                             ${predictions.filter(p => p.trend === 'increasing').length > 0 ? `<li><i class="fas fa-arrow-trend-up mr-2"></i>Increasing trends detected in: ${predictions.filter(p => p.trend === 'increasing').map(p => p.category).join(', ')}</li>` : ''}
+                             ${predictions.filter(p => p.confidence < 50).length > 0 ? `<li><i class="fas fa-question-circle mr-2"></i>Low confidence predictions for: ${predictions.filter(p => p.confidence < 50).map(p => p.category).join(', ')}. More data needed.</li>` : ''}
+                             <li><i class="fas fa-check-circle mr-2"></i>Predictions improve with more data. Keep tracking your expenses!</li>
+                         </ul>
+                     </div>
+                 </div>
+             `;
+             
+             // Create prediction trend chart
+             createPredictionTrendChart(totalPredicted, avgMonthly, lastMonthTotal, currentMonthTotal);
+         }
+         
+         function createPredictionTrendChart(predicted, avgMonthly, lastMonth, currentMonth) {
+             const ctx = document.getElementById('predictionTrendChart');
+             if (!ctx) return;
+             
+             // Destroy existing chart if it exists
+             if (window.predictionChart) {
+                 window.predictionChart.destroy();
+             }
+             
+             // Get last 6 months of actual data
+             const now = new Date();
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             const labels = [];
+             const actualData = [];
+             const predictedData = [];
+             
+             // Get last 6 months
+             for (let i = 5; i >= 0; i--) {
+                 const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                 const month = date.getMonth() + 1;
+                 const year = date.getFullYear();
+                 labels.push(`${monthNames[date.getMonth()]} ${year}`);
+                 
+                 const monthTotal = allExpenses
+                     .filter(exp => exp.fields.Year === year && exp.fields.Month === month)
+                     .reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+                 
+                 actualData.push(monthTotal);
+                 
+                 // Add last actual value to predicted line to connect it
+                 if (i === 0) {
+                     predictedData.push(monthTotal); // Connect from last actual month
+                 } else {
+                     predictedData.push(null);
+                 }
+             }
+             
+             // Add next month prediction
+             const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+             labels.push(`${monthNames[nextDate.getMonth()]} ${nextDate.getFullYear()}`);
+             actualData.push(null); // No actual data yet
+             predictedData.push(predicted);
+             
+             window.predictionChart = new Chart(ctx, {
+                 type: 'line',
+                 data: {
+                     labels: labels,
+                     datasets: [
+                         {
+                             label: 'Actual Spending',
+                             data: actualData,
+                             borderColor: '#667eea',
+                             backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                             borderWidth: 3,
+                             fill: true,
+                             tension: 0.4,
+                             pointRadius: 6,
+                             pointHoverRadius: 8,
+                             pointBackgroundColor: '#667eea',
+                             pointBorderColor: '#fff',
+                             pointBorderWidth: 2
+                         },
+                         {
+                             label: 'Predicted Spending',
+                             data: predictedData,
+                             borderColor: '#FA8BFF',
+                             backgroundColor: 'rgba(250, 139, 255, 0.1)',
+                             borderWidth: 3,
+                             borderDash: [10, 5],
+                             fill: true,
+                             tension: 0.4,
+                             pointRadius: 8,
+                             pointHoverRadius: 10,
+                             pointBackgroundColor: '#FA8BFF',
+                             pointBorderColor: '#fff',
+                             pointBorderWidth: 2,
+                             pointStyle: 'star'
+                         }
+                     ]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: {
+                             display: true,
+                             position: 'top',
+                             labels: {
+                                 usePointStyle: true,
+                                 padding: 15,
+                                 font: { size: 12, weight: 'bold' }
+                             }
+                         },
+                         tooltip: {
+                             mode: 'index',
+                             intersect: false,
+                             backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                             padding: 12,
+                             titleFont: { size: 14, weight: 'bold' },
+                             bodyFont: { size: 13 },
+                             callbacks: {
+                                 label: function(context) {
+                                     let label = context.dataset.label || '';
+                                     if (label) {
+                                         label += ': ';
+                                     }
+                                     if (context.parsed.y !== null) {
+                                         label += '$' + context.parsed.y.toFixed(2);
+                                     }
+                                     return label;
+                                 }
+                             }
+                         }
+                     },
+                     scales: {
+                         y: {
+                             beginAtZero: true,
+                             ticks: {
+                                 callback: function(value) {
+                                     return '$' + value.toFixed(0);
+                                 }
+                             },
+                             grid: {
+                                 color: 'rgba(0, 0, 0, 0.05)'
+                             }
+                         },
+                         x: {
+                             grid: {
+                                 display: false
+                             }
+                         }
+                     },
+                     interaction: {
+                         mode: 'nearest',
+                         axis: 'x',
+                         intersect: false
+                     }
+                 }
+             });
+         }
+         
+         function openAIInsights() {
+             document.getElementById('aiInsightsModal').classList.add('active');
+             generateAIInsights();
+         }
+         
+         function closeAIInsights() {
+             document.getElementById('aiInsightsModal').classList.remove('active');
+         }
+         
+         function generateAIInsights() {
+             const container = document.getElementById('aiInsightsContent');
+             
+             if (allExpenses.length === 0) {
+                 container.innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fas fa-inbox text-4xl mb-3"></i><p>No expenses to analyze. Add some expenses first!</p></div>';
+                 return;
+             }
+             
+             const insights = [];
+             
+             // 1. Weekend vs Weekday Spending Pattern
+             const weekendInsight = analyzeWeekendSpending();
+             if (weekendInsight) insights.push(weekendInsight);
+             
+             // 2. Category Overspending Detection
+             const overspendingInsights = detectOverspending();
+             insights.push(...overspendingInsights);
+             
+             // 3. Spending Trends
+             const trendInsights = analyzeSpendingTrends();
+             insights.push(...trendInsights);
+             
+             // 4. Anomaly Detection
+             const anomalies = detectAnomalies();
+             insights.push(...anomalies);
+             
+             // 5. Money Saving Opportunities
+             const savingTips = generateSavingTips();
+             insights.push(...savingTips);
+             
+             // 6. Budget Efficiency Score
+             const efficiencyScore = calculateBudgetEfficiency();
+             
+             // Render insights
+             container.innerHTML = `
+                 <div class="space-y-6">
+                     <!-- Efficiency Score Card -->
+                     <div class="card p-6 bg-gradient-to-br from-purple-500 to-pink-500 text-white">
+                         <div class="flex items-center justify-between">
+                             <div>
+                                 <h3 class="text-xl font-bold mb-2">Budget Efficiency Score</h3>
+                                 <p class="text-sm opacity-90">How well you're managing your budget</p>
+                             </div>
+                             <div class="text-center">
+                                 <div class="text-5xl font-bold">${efficiencyScore.score}</div>
+                                 <div class="text-sm opacity-75">/100</div>
+                             </div>
+                         </div>
+                         <div class="mt-4 bg-white bg-opacity-20 rounded-full h-3">
+                             <div class="bg-white rounded-full h-3 transition-all" style="width: ${efficiencyScore.score}%"></div>
+                         </div>
+                         <p class="mt-3 text-sm">${efficiencyScore.message}</p>
+                     </div>
+                     
+                     <!-- Insights Grid -->
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                         ${insights.map(insight => `
+                             <div class="card p-5 border-l-4 ${insight.type === 'warning' ? 'border-red-500 bg-red-50' : insight.type === 'success' ? 'border-green-500 bg-green-50' : insight.type === 'info' ? 'border-blue-500 bg-blue-50' : 'border-yellow-500 bg-yellow-50'}">
+                                 <div class="flex items-start gap-3">
+                                     <i class="fas ${insight.icon} text-2xl ${insight.type === 'warning' ? 'text-red-600' : insight.type === 'success' ? 'text-green-600' : insight.type === 'info' ? 'text-blue-600' : 'text-yellow-600'}"></i>
+                                     <div class="flex-1">
+                                         <h4 class="font-bold text-gray-800 mb-2">${insight.title}</h4>
+                                         <p class="text-sm text-gray-700 mb-3">${insight.message}</p>
+                                         ${insight.action ? `<div class="text-xs font-semibold ${insight.type === 'warning' ? 'text-red-700' : insight.type === 'success' ? 'text-green-700' : insight.type === 'info' ? 'text-blue-700' : 'text-yellow-700'}"><i class="fas fa-lightbulb mr-1"></i>${insight.action}</div>` : ''}
+                                     </div>
+                                 </div>
+                             </div>
+                         `).join('')}
+                     </div>
+                 </div>
+             `;
+         }
+         
+         function analyzeWeekendSpending() {
+             const weekendSpending = [];
+             const weekdaySpending = [];
+             
+             allExpenses.forEach(exp => {
+                 const date = new Date(exp.fields.Year, exp.fields.Month - 1, exp.fields.Day || 1);
+                 const dayOfWeek = date.getDay();
+                 const amount = exp.fields.Actual || 0;
+                 
+                 if (dayOfWeek === 0 || dayOfWeek === 6) {
+                     weekendSpending.push(amount);
+                 } else {
+                     weekdaySpending.push(amount);
+                 }
+             });
+             
+             if (weekendSpending.length === 0 || weekdaySpending.length === 0) return null;
+             
+             const weekendAvg = weekendSpending.reduce((a, b) => a + b, 0) / weekendSpending.length;
+             const weekdayAvg = weekdaySpending.reduce((a, b) => a + b, 0) / weekdaySpending.length;
+             
+             const diff = ((weekendAvg - weekdayAvg) / weekdayAvg * 100);
+             
+             if (Math.abs(diff) < 10) return null;
+             
+             if (diff > 0) {
+                 return {
+                     type: 'tip',
+                     icon: 'fa-calendar-week',
+                     title: 'Weekend Spending Pattern',
+                     message: `You spend ${diff.toFixed(0)}% more on weekends ($${weekendAvg.toFixed(2)} vs $${weekdayAvg.toFixed(2)} on weekdays).`,
+                     action: 'Plan weekend activities in advance to reduce impulse spending.'
+                 };
+             } else {
+                 return {
+                     type: 'success',
+                     icon: 'fa-calendar-check',
+                     title: 'Great Weekend Control',
+                     message: `You spend ${Math.abs(diff).toFixed(0)}% less on weekends. Keep it up!`,
+                     action: null
+                 };
+             }
+         }
+         
+         function detectOverspending() {
+             const insights = [];
+             const categoryTotals = {};
+             const categoryBudgets = {};
+             
+             allExpenses.forEach(exp => {
+                 const cat = exp.fields.Category || 'Other';
+                 categoryTotals[cat] = (categoryTotals[cat] || 0) + (exp.fields.Actual || 0);
+                 categoryBudgets[cat] = (categoryBudgets[cat] || 0) + (exp.fields.Budget || 0);
+             });
+             
+             Object.keys(categoryTotals).forEach(cat => {
+                 const actual = categoryTotals[cat];
+                 const budget = categoryBudgets[cat];
+                 
+                 if (budget > 0) {
+                     const overspend = ((actual - budget) / budget * 100);
+                     
+                     if (overspend > 20) {
+                         insights.push({
+                             type: 'warning',
+                             icon: 'fa-exclamation-triangle',
+                             title: `${cat} Overspending`,
+                             message: `You've exceeded your ${cat} budget by ${overspend.toFixed(0)}% ($${(actual - budget).toFixed(2)} over).`,
+                             action: `Review ${cat} expenses and set a stricter budget next month.`
+                         });
+                     } else if (overspend < -20) {
+                         insights.push({
+                             type: 'success',
+                             icon: 'fa-check-circle',
+                             title: `${cat} Under Budget`,
+                             message: `Great job! You're ${Math.abs(overspend).toFixed(0)}% under budget in ${cat}.`,
+                             action: null
+                         });
+                     }
+                 }
+             });
+             
+             return insights.slice(0, 3); // Top 3
+         }
+         
+         function analyzeSpendingTrends() {
+             const insights = [];
+             const now = new Date();
+             
+             // Get last 3 months
+             const monthlyTotals = {};
+             for (let i = 2; i >= 0; i--) {
+                 const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                 const key = `${date.getFullYear()}-${date.getMonth() + 1}`;
+                 monthlyTotals[key] = 0;
+             }
+             
+             allExpenses.forEach(exp => {
+                 const key = `${exp.fields.Year}-${exp.fields.Month}`;
+                 if (monthlyTotals.hasOwnProperty(key)) {
+                     monthlyTotals[key] += exp.fields.Actual || 0;
+                 }
+             });
+             
+             const months = Object.keys(monthlyTotals).sort();
+             if (months.length >= 2) {
+                 const trend = monthlyTotals[months[months.length - 1]] - monthlyTotals[months[0]];
+                 const trendPercent = (trend / monthlyTotals[months[0]] * 100);
+                 
+                 if (trendPercent > 15) {
+                     insights.push({
+                         type: 'warning',
+                         icon: 'fa-arrow-trend-up',
+                         title: 'Spending Increasing',
+                         message: `Your spending has increased by ${trendPercent.toFixed(0)}% over the last 3 months.`,
+                         action: 'Review your expenses and identify areas to cut back.'
+                     });
+                 } else if (trendPercent < -15) {
+                     insights.push({
+                         type: 'success',
+                         icon: 'fa-arrow-trend-down',
+                         title: 'Spending Decreasing',
+                         message: `Excellent! Your spending has decreased by ${Math.abs(trendPercent).toFixed(0)}% over the last 3 months.`,
+                         action: null
+                     });
+                 }
+             }
+             
+             return insights;
+         }
+         
+         function detectAnomalies() {
+             const insights = [];
+             const categoryExpenses = {};
+             
+             // Group by category
+             allExpenses.forEach(exp => {
+                 const cat = exp.fields.Category || 'Other';
+                 if (!categoryExpenses[cat]) categoryExpenses[cat] = [];
+                 categoryExpenses[cat].push(exp.fields.Actual || 0);
+             });
+             
+             // Detect anomalies (expenses > 2 standard deviations from mean)
+             Object.keys(categoryExpenses).forEach(cat => {
+                 const amounts = categoryExpenses[cat];
+                 if (amounts.length < 3) return;
+                 
+                 const mean = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+                 const variance = amounts.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / amounts.length;
+                 const stdDev = Math.sqrt(variance);
+                 
+                 const anomalies = amounts.filter(amt => Math.abs(amt - mean) > 2 * stdDev);
+                 
+                 if (anomalies.length > 0) {
+                     insights.push({
+                         type: 'info',
+                         icon: 'fa-chart-line',
+                         title: `Unusual ${cat} Expense`,
+                         message: `Detected ${anomalies.length} unusually high expense(s) in ${cat}. Average: $${mean.toFixed(2)}, Unusual: $${Math.max(...anomalies).toFixed(2)}.`,
+                         action: 'Review these expenses to ensure they were necessary.'
+                     });
+                 }
+             });
+             
+             return insights.slice(0, 2);
+         }
+         
+         function generateSavingTips() {
+             const insights = [];
+             const categoryTotals = {};
+             
+             allExpenses.forEach(exp => {
+                 const cat = exp.fields.Category || 'Other';
+                 categoryTotals[cat] = (categoryTotals[cat] || 0) + (exp.fields.Actual || 0);
+             });
+             
+             // Find top spending categories
+             const sorted = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+             
+             if (sorted.length > 0) {
+                 const topCategory = sorted[0];
+                 const savingAmount = topCategory[1] * 0.2; // 20% reduction
+                 
+                 insights.push({
+                     type: 'tip',
+                     icon: 'fa-piggy-bank',
+                     title: 'Savings Opportunity',
+                     message: `${topCategory[0]} is your highest expense ($${topCategory[1].toFixed(2)}). Reducing it by 20% could save you $${savingAmount.toFixed(2)}/month.`,
+                     action: `Look for alternatives or negotiate better rates for ${topCategory[0]}.`
+                 });
+             }
+             
+             return insights;
+         }
+         
+         function calculateBudgetEfficiency() {
+             let score = 100;
+             let message = '';
+             
+             const totalBudget = allExpenses.reduce((sum, exp) => sum + (exp.fields.Budget || 0), 0);
+             const totalActual = allExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             
+             if (totalBudget === 0) {
+                 return { score: 50, message: 'Set budgets for your expenses to improve your score!' };
+             }
+             
+             const variance = ((totalActual - totalBudget) / totalBudget * 100);
+             
+             // Deduct points for overspending
+             if (variance > 0) {
+                 score -= Math.min(variance, 50);
+                 message = 'You\'re overspending. Try to stick to your budget!';
+             } else if (variance < -30) {
+                 score -= 20;
+                 message = 'You\'re way under budget. Consider adjusting your budget or saving more!';
+             } else {
+                 message = 'Great job staying within budget!';
+             }
+             
+             return { score: Math.max(0, Math.round(score)), message };
+         }
+         
+         function openAdvancedAnalytics() {
+             document.getElementById('advancedAnalyticsModal').classList.add('active');
+             generateAdvancedAnalytics();
+         }
+         
+         function closeAdvancedAnalytics() {
+             document.getElementById('advancedAnalyticsModal').classList.remove('active');
+         }
+         
+         function generateAdvancedAnalytics() {
+             const container = document.getElementById('advancedAnalyticsContent');
+             
+             if (allExpenses.length === 0) {
+                 container.innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fas fa-inbox text-4xl mb-3"></i><p>No expenses to analyze. Add some expenses first!</p></div>';
+                 return;
+             }
+             
+             // Render analytics dashboard
+             container.innerHTML = `
+                 <div class="space-y-6">
+                     <!-- Top Spending Days -->
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-fire text-red-600"></i>
+                             Top 10 Spending Days
+                         </h3>
+                         <div id="topSpendingDays"></div>
+                     </div>
+                     
+                     <!-- Monthly Spending Trend -->
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-chart-line text-purple-600"></i>
+                             Monthly Spending Trend (Last 6 Months)
+                         </h3>
+                         <div class="chart-container" style="height: 300px;">
+                             <canvas id="monthlyTrendChart"></canvas>
+                         </div>
+                     </div>
+                     
+                     <!-- Category Distribution -->
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                         <div class="card p-6">
+                             <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                 <i class="fas fa-chart-pie text-purple-600"></i>
+                                 Spending by Category
+                             </h3>
+                             <div class="chart-container" style="height: 300px;">
+                                 <canvas id="categoryPieChart"></canvas>
+                             </div>
+                         </div>
+                         
+                         <!-- Budget vs Actual -->
+                         <div class="card p-6">
+                             <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                                 <i class="fas fa-balance-scale text-purple-600"></i>
+                                 Budget vs Actual
+                             </h3>
+                             <div class="chart-container" style="height: 300px;">
+                                 <canvas id="budgetVsActualChart"></canvas>
+                             </div>
+                         </div>
+                     </div>
+                     
+                     <!-- Category Comparison Chart -->
+                     <div class="card p-6">
+                         <h3 class="text-xl font-bold mb-4 flex items-center gap-2">
+                             <i class="fas fa-chart-bar text-purple-600"></i>
+                             Category Comparison - Last 3 Months
+                         </h3>
+                         <div class="chart-container" style="height: 400px;">
+                             <canvas id="categoryComparisonChart"></canvas>
+                         </div>
+                     </div>
+                 </div>
+             `;
+             
+             // Generate each visualization
+             createTopSpendingDays();
+             createMonthlyTrendChart();
+             createCategoryPieChart();
+             createBudgetVsActualChart();
+             createCategoryComparisonChart();
+         }
+         
+         function createTopSpendingDays() {
+             const container = document.getElementById('topSpendingDays');
+             
+             // Group expenses by date and sum
+             const dailySpending = {};
+             allExpenses.forEach(exp => {
+                 const dateKey = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}-${String(exp.fields.Day || 1).padStart(2, '0')}`;
+                 const displayDate = `${exp.fields.Month}/${exp.fields.Day || 1}/${exp.fields.Year}`;
+                 
+                 if (!dailySpending[dateKey]) {
+                     dailySpending[dateKey] = {
+                         date: displayDate,
+                         total: 0,
+                         expenses: []
+                     };
+                 }
+                 
+                 dailySpending[dateKey].total += exp.fields.Actual || 0;
+                 dailySpending[dateKey].expenses.push({
+                     item: exp.fields.Item,
+                     amount: exp.fields.Actual || 0,
+                     category: exp.fields.Category || 'Other'
+                 });
+             });
+             
+             // Sort by total and get top 10
+             const topDays = Object.values(dailySpending)
+                 .sort((a, b) => b.total - a.total)
+                 .slice(0, 10);
+             
+             if (topDays.length === 0) {
+                 container.innerHTML = '<p class="text-gray-500 text-center py-4">No spending data available</p>';
+                 return;
+             }
+             
+             // Render top days
+             let html = '<div class="space-y-3">';
+             topDays.forEach((day, index) => {
+                 const maxAmount = topDays[0].total;
+                 const percentage = (day.total / maxAmount * 100);
+                 
+                 html += `
+                     <div class="relative">
+                         <div class="flex items-center justify-between mb-2">
+                             <div class="flex items-center gap-3">
+                                 <span class="text-2xl font-bold text-gray-400">#${index + 1}</span>
+                                 <div>
+                                     <div class="font-semibold text-gray-800">${day.date}</div>
+                                     <div class="text-xs text-gray-500">${day.expenses.length} expense${day.expenses.length > 1 ? 's' : ''}</div>
+                                 </div>
+                             </div>
+                             <div class="text-right">
+                                 <div class="text-xl font-bold text-purple-600">$${day.total.toFixed(2)}</div>
+                             </div>
+                         </div>
+                         <div class="w-full bg-gray-200 rounded-full h-2">
+                             <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all" style="width: ${percentage}%"></div>
+                         </div>
+                         <div class="mt-2 text-xs text-gray-600">
+                             ${day.expenses.slice(0, 3).map(e => `${e.item} ($${e.amount.toFixed(2)})`).join(', ')}
+                             ${day.expenses.length > 3 ? ` +${day.expenses.length - 3} more` : ''}
+                         </div>
+                     </div>
+                 `;
+             });
+             html += '</div>';
+             
+             container.innerHTML = html;
+         }
+         
+         function createMonthlyTrendChart() {
+             const ctx = document.getElementById('monthlyTrendChart');
+             if (!ctx) return;
+             
+             const now = new Date();
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             
+             // Get last 6 months
+             const labels = [];
+             const spendingData = [];
+             const budgetData = [];
+             
+             for (let i = 5; i >= 0; i--) {
+                 const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                 const year = date.getFullYear();
+                 const month = date.getMonth() + 1;
+                 
+                 labels.push(`${monthNames[date.getMonth()]} ${year}`);
+                 
+                 const monthExpenses = allExpenses.filter(exp => 
+                     exp.fields.Year === year && exp.fields.Month === month
+                 );
+                 
+                 const spending = monthExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+                 const budget = monthExpenses.reduce((sum, exp) => sum + (exp.fields.Budget || 0), 0);
+                 
+                 spendingData.push(spending);
+                 budgetData.push(budget);
+             }
+             
+             // Destroy existing chart
+             if (window.monthlyTrendChart && typeof window.monthlyTrendChart.destroy === 'function') {
+                 window.monthlyTrendChart.destroy();
+             }
+             
+             window.monthlyTrendChart = new Chart(ctx, {
+                 type: 'line',
+                 data: {
+                     labels: labels,
+                     datasets: [
+                         {
+                             label: 'Actual Spending',
+                             data: spendingData,
+                             borderColor: '#f093fb',
+                             backgroundColor: 'rgba(240, 147, 251, 0.1)',
+                             borderWidth: 3,
+                             fill: true,
+                             tension: 0.4,
+                             pointRadius: 6,
+                             pointHoverRadius: 8,
+                             pointBackgroundColor: '#f093fb',
+                             pointBorderColor: '#fff',
+                             pointBorderWidth: 2
+                         },
+                         {
+                             label: 'Budget',
+                             data: budgetData,
+                             borderColor: '#667eea',
+                             backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                             borderWidth: 3,
+                             borderDash: [5, 5],
+                             fill: false,
+                             tension: 0.4,
+                             pointRadius: 6,
+                             pointHoverRadius: 8,
+                             pointBackgroundColor: '#667eea',
+                             pointBorderColor: '#fff',
+                             pointBorderWidth: 2
+                         }
+                     ]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: {
+                             position: 'top',
+                             labels: {
+                                 usePointStyle: true,
+                                 padding: 15
+                             }
+                         },
+                         tooltip: {
+                             mode: 'index',
+                             intersect: false,
+                             callbacks: {
+                                 label: function(context) {
+                                     return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                                 }
+                             }
+                         }
+                     },
+                     scales: {
+                         y: {
+                             beginAtZero: true,
+                             ticks: {
+                                 callback: function(value) {
+                                     return '$' + value.toFixed(0);
+                                 }
+                             },
+                             grid: {
+                                 color: 'rgba(0, 0, 0, 0.05)'
+                             }
+                         },
+                         x: {
+                             grid: { display: false }
+                         }
+                     }
+                 }
+             });
+         }
+         
+         function createCategoryPieChart() {
+             const ctx = document.getElementById('categoryPieChart');
+             if (!ctx) return;
+             
+             // Aggregate by category
+             const categoryTotals = {};
+             allExpenses.forEach(exp => {
+                 const cat = exp.fields.Category || 'Other';
+                 categoryTotals[cat] = (categoryTotals[cat] || 0) + (exp.fields.Actual || 0);
+             });
+             
+             const labels = Object.keys(categoryTotals);
+             const data = Object.values(categoryTotals);
+             const colors = [
+                 '#667eea', '#f093fb', '#4facfe', '#43e97b', '#fa709a', 
+                 '#fee140', '#30cfd0', '#a8edea', '#fed6e3', '#c471ed'
+             ];
+             
+             // Destroy existing chart
+             if (window.categoryPieChart && typeof window.categoryPieChart.destroy === 'function') {
+                 window.categoryPieChart.destroy();
+             }
+             
+             window.categoryPieChart = new Chart(ctx, {
+                 type: 'doughnut',
+                 data: {
+                     labels: labels,
+                     datasets: [{
+                         data: data,
+                         backgroundColor: colors.slice(0, labels.length),
+                         borderWidth: 2,
+                         borderColor: '#fff'
+                     }]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: {
+                             position: 'right',
+                             labels: {
+                                 padding: 15,
+                                 usePointStyle: true
+                             }
+                         },
+                         tooltip: {
+                             callbacks: {
+                                 label: function(context) {
+                                     const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                     const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                     return context.label + ': $' + context.parsed.toFixed(2) + ' (' + percentage + '%)';
+                                 }
+                             }
+                         }
+                     }
+                 }
+             });
+         }
+         
+         function createBudgetVsActualChart() {
+             const ctx = document.getElementById('budgetVsActualChart');
+             if (!ctx) return;
+             
+             // Aggregate by category
+             const categoryData = {};
+             allExpenses.forEach(exp => {
+                 const cat = exp.fields.Category || 'Other';
+                 if (!categoryData[cat]) {
+                     categoryData[cat] = { budget: 0, actual: 0 };
+                 }
+                 categoryData[cat].budget += exp.fields.Budget || 0;
+                 categoryData[cat].actual += exp.fields.Actual || 0;
+             });
+             
+             const labels = Object.keys(categoryData);
+             const budgetData = labels.map(cat => categoryData[cat].budget);
+             const actualData = labels.map(cat => categoryData[cat].actual);
+             
+             // Destroy existing chart
+             if (window.budgetVsActualChart && typeof window.budgetVsActualChart.destroy === 'function') {
+                 window.budgetVsActualChart.destroy();
+             }
+             
+             window.budgetVsActualChart = new Chart(ctx, {
+                 type: 'bar',
+                 data: {
+                     labels: labels,
+                     datasets: [
+                         {
+                             label: 'Budget',
+                             data: budgetData,
+                             backgroundColor: '#667eea',
+                             borderRadius: 8
+                         },
+                         {
+                             label: 'Actual',
+                             data: actualData,
+                             backgroundColor: '#f093fb',
+                             borderRadius: 8
+                         }
+                     ]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: {
+                             position: 'top',
+                             labels: {
+                                 usePointStyle: true,
+                                 padding: 15
+                             }
+                         },
+                         tooltip: {
+                             callbacks: {
+                                 label: function(context) {
+                                     return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                                 }
+                             }
+                         }
+                     },
+                     scales: {
+                         x: {
+                             grid: { display: false }
+                         },
+                         y: {
+                             beginAtZero: true,
+                             ticks: {
+                                 callback: function(value) {
+                                     return '$' + value.toFixed(0);
+                                 }
+                             }
+                         }
+                     }
+                 }
+             });
+         }
+         
+         function createSpendingHeatmap() {
+             const container = document.getElementById('spendingHeatmap');
+             const now = new Date();
+             const year = now.getFullYear();
+             const month = now.getMonth();
+             
+             // Get days in current month
+             const daysInMonth = new Date(year, month + 1, 0).getDate();
+             const firstDay = new Date(year, month, 1).getDay();
+             
+             // Calculate daily spending
+             const dailySpending = {};
+             allExpenses.forEach(exp => {
+                 if (exp.fields.Year === year && exp.fields.Month === month + 1) {
+                     const day = exp.fields.Day || 1;
+                     dailySpending[day] = (dailySpending[day] || 0) + (exp.fields.Actual || 0);
+                 }
+             });
+             
+             // Find max spending for color scale
+             const maxSpending = Math.max(...Object.values(dailySpending), 1);
+             
+             // Generate calendar HTML
+             let html = '<div class="grid grid-cols-7 gap-2">';
+             
+             // Day headers
+             const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+             days.forEach(day => {
+                 html += `<div class="text-center text-xs font-semibold text-gray-600 py-2">${day}</div>`;
+             });
+             
+             // Empty cells for days before month starts
+             for (let i = 0; i < firstDay; i++) {
+                 html += '<div></div>';
+             }
+             
+             // Calendar days
+             for (let day = 1; day <= daysInMonth; day++) {
+                 const spending = dailySpending[day] || 0;
+                 const intensity = spending / maxSpending;
+                 
+                 // Color scale: white -> light purple -> dark purple
+                 let bgColor;
+                 if (spending === 0) {
+                     bgColor = '#f3f4f6'; // gray-100
+                 } else if (intensity < 0.25) {
+                     bgColor = '#e9d5ff'; // purple-200
+                 } else if (intensity < 0.5) {
+                     bgColor = '#d8b4fe'; // purple-300
+                 } else if (intensity < 0.75) {
+                     bgColor = '#c084fc'; // purple-400
+                 } else {
+                     bgColor = '#a855f7'; // purple-500
+                 }
+                 
+                 const textColor = intensity > 0.5 ? '#ffffff' : '#1f2937';
+                 const isToday = day === now.getDate();
+                 
+                 html += `
+                     <div class="aspect-square rounded-lg flex flex-col items-center justify-center text-xs font-semibold ${isToday ? 'ring-2 ring-purple-600' : ''}" 
+                          style="background-color: ${bgColor}; color: ${textColor};"
+                          title="Day ${day}: $${spending.toFixed(2)}">
+                         <div>${day}</div>
+                         ${spending > 0 ? `<div class="text-[10px] mt-1">$${spending.toFixed(0)}</div>` : ''}
+                     </div>
+                 `;
+             }
+             
+             html += '</div>';
+             html += '<div class="mt-4 flex items-center justify-center gap-4 text-xs text-gray-600">';
+             html += '<span>Less</span>';
+             html += '<div class="flex gap-1">';
+             html += '<div class="w-4 h-4 rounded" style="background-color: #f3f4f6"></div>';
+             html += '<div class="w-4 h-4 rounded" style="background-color: #e9d5ff"></div>';
+             html += '<div class="w-4 h-4 rounded" style="background-color: #d8b4fe"></div>';
+             html += '<div class="w-4 h-4 rounded" style="background-color: #c084fc"></div>';
+             html += '<div class="w-4 h-4 rounded" style="background-color: #a855f7"></div>';
+             html += '</div>';
+             html += '<span>More</span>';
+             html += '</div>';
+             
+             container.innerHTML = html;
+         }
+         
+         function createSpendingVelocityGauge() {
+             const ctx = document.getElementById('velocityChart');
+             if (!ctx) return;
+             
+             const now = new Date();
+             const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+             const daysPassed = now.getDate();
+             const daysRemaining = daysInMonth - daysPassed;
+             
+             // Calculate current month spending
+             const currentMonthSpending = allExpenses
+                 .filter(exp => exp.fields.Year === now.getFullYear() && exp.fields.Month === now.getMonth() + 1)
+                 .reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             
+             const currentMonthBudget = allExpenses
+                 .filter(exp => exp.fields.Year === now.getFullYear() && exp.fields.Month === now.getMonth() + 1)
+                 .reduce((sum, exp) => sum + (exp.fields.Budget || 0), 0);
+             
+             // Calculate velocity
+             const actualPace = (currentMonthSpending / daysPassed) * daysInMonth;
+             const budgetPace = currentMonthBudget;
+             const velocity = budgetPace > 0 ? (actualPace / budgetPace * 100) : 0;
+             
+             // Destroy existing chart
+             if (window.velocityChart && typeof window.velocityChart.destroy === 'function') {
+                 window.velocityChart.destroy();
+             }
+             
+             window.velocityChart = new Chart(ctx, {
+                 type: 'doughnut',
+                 data: {
+                     labels: ['Current Pace', 'Remaining Budget'],
+                     datasets: [{
+                         data: [Math.min(velocity, 100), Math.max(100 - velocity, 0)],
+                         backgroundColor: [
+                             velocity > 100 ? '#ef4444' : velocity > 80 ? '#f59e0b' : '#10b981',
+                             '#e5e7eb'
+                         ],
+                         borderWidth: 0
+                     }]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     cutout: '75%',
+                     plugins: {
+                         legend: { display: false },
+                         tooltip: {
+                             callbacks: {
+                                 label: function(context) {
+                                     return context.label + ': ' + context.parsed.toFixed(0) + '%';
+                                 }
+                             }
+                         }
+                     }
+                 },
+                 plugins: [{
+                     id: 'centerText',
+                     afterDraw: (chart) => {
+                         const ctx = chart.ctx;
+                         const centerX = (chart.chartArea.left + chart.chartArea.right) / 2;
+                         const centerY = (chart.chartArea.top + chart.chartArea.bottom) / 2;
+                         
+                         ctx.save();
+                         ctx.font = 'bold 32px Inter';
+                         ctx.fillStyle = velocity > 100 ? '#ef4444' : velocity > 80 ? '#f59e0b' : '#10b981';
+                         ctx.textAlign = 'center';
+                         ctx.textBaseline = 'middle';
+                         ctx.fillText(velocity.toFixed(0) + '%', centerX, centerY - 10);
+                         
+                         ctx.font = '14px Inter';
+                         ctx.fillStyle = '#6b7280';
+                         ctx.fillText('Spending Pace', centerX, centerY + 20);
+                         ctx.restore();
+                     }
+                 }]
+             });
+         }
+         
+         function createCategoryComparisonChart() {
+             const ctx = document.getElementById('categoryComparisonChart');
+             if (!ctx) return;
+             
+             const now = new Date();
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             
+             // Get last 3 months
+             const months = [];
+             const monthData = {};
+             
+             for (let i = 2; i >= 0; i--) {
+                 const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                 const monthKey = `${date.getFullYear()}-${date.getMonth() + 1}`;
+                 const monthLabel = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+                 months.push(monthLabel);
+                 monthData[monthKey] = {};
+             }
+             
+             // Aggregate by category and month
+             allExpenses.forEach(exp => {
+                 const monthKey = `${exp.fields.Year}-${exp.fields.Month}`;
+                 if (monthData[monthKey]) {
+                     const cat = exp.fields.Category || 'Other';
+                     monthData[monthKey][cat] = (monthData[monthKey][cat] || 0) + (exp.fields.Actual || 0);
+                 }
+             });
+             
+             // Get all categories
+             const categories = new Set();
+             Object.values(monthData).forEach(month => {
+                 Object.keys(month).forEach(cat => categories.add(cat));
+             });
+             
+             // Create datasets
+             const colors = ['#667eea', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140', '#30cfd0'];
+             const datasets = Array.from(categories).map((cat, index) => ({
+                 label: cat,
+                 data: Object.keys(monthData).map(monthKey => monthData[monthKey][cat] || 0),
+                 backgroundColor: colors[index % colors.length],
+                 borderRadius: 8
+             }));
+             
+             // Destroy existing chart
+             if (window.categoryComparisonChart && typeof window.categoryComparisonChart.destroy === 'function') {
+                 window.categoryComparisonChart.destroy();
+             }
+             
+             window.categoryComparisonChart = new Chart(ctx, {
+                 type: 'bar',
+                 data: {
+                     labels: months,
+                     datasets: datasets
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: {
+                             position: 'top',
+                             labels: {
+                                 usePointStyle: true,
+                                 padding: 15
+                             }
+                         },
+                         tooltip: {
+                             mode: 'index',
+                             intersect: false,
+                             callbacks: {
+                                 label: function(context) {
+                                     return context.dataset.label + ': $' + context.parsed.y.toFixed(2);
+                                 }
+                             }
+                         }
+                     },
+                     scales: {
+                         x: {
+                             stacked: false,
+                             grid: { display: false }
+                         },
+                         y: {
+                             stacked: false,
+                             beginAtZero: true,
+                             ticks: {
+                                 callback: function(value) {
+                                     return '$' + value.toFixed(0);
+                                 }
+                             }
+                         }
+                     }
+                 }
+             });
+         }
+         
+         function createSavingsRateChart() {
+             const ctx = document.getElementById('savingsChart');
+             if (!ctx) return;
+             
+             const now = new Date();
+             const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             
+             // Get last 6 months
+             const labels = [];
+             const savingsData = [];
+             
+             for (let i = 5; i >= 0; i--) {
+                 const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                 const year = date.getFullYear();
+                 const month = date.getMonth() + 1;
+                 
+                 labels.push(`${monthNames[date.getMonth()]} ${year}`);
+                 
+                 const monthExpenses = allExpenses.filter(exp => 
+                     exp.fields.Year === year && exp.fields.Month === month
+                 );
+                 
+                 const budget = monthExpenses.reduce((sum, exp) => sum + (exp.fields.Budget || 0), 0);
+                 const actual = monthExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+                 const savings = budget - actual;
+                 
+                 savingsData.push(savings);
+             }
+             
+             // Destroy existing chart
+             if (window.savingsChart && typeof window.savingsChart.destroy === 'function') {
+                 window.savingsChart.destroy();
+             }
+             
+             window.savingsChart = new Chart(ctx, {
+                 type: 'line',
+                 data: {
+                     labels: labels,
+                     datasets: [{
+                         label: 'Monthly Savings',
+                         data: savingsData,
+                         borderColor: '#10b981',
+                         backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                         borderWidth: 3,
+                         fill: true,
+                         tension: 0.4,
+                         pointRadius: 6,
+                         pointHoverRadius: 8,
+                         pointBackgroundColor: '#10b981',
+                         pointBorderColor: '#fff',
+                         pointBorderWidth: 2
+                     }]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: { display: false },
+                         tooltip: {
+                             callbacks: {
+                                 label: function(context) {
+                                     const value = context.parsed.y;
+                                     return value >= 0 
+                                         ? 'Saved: $' + value.toFixed(2)
+                                         : 'Overspent: $' + Math.abs(value).toFixed(2);
+                                 }
+                             }
+                         }
+                     },
+                     scales: {
+                         y: {
+                             beginAtZero: true,
+                             ticks: {
+                                 callback: function(value) {
+                                     return '$' + value.toFixed(0);
+                                 }
+                             },
+                             grid: {
+                                 color: 'rgba(0, 0, 0, 0.05)'
+                             }
+                         },
+                         x: {
+                             grid: { display: false }
+                         }
+                     }
+                 }
+             });
+         }
+         
+         function openSmartSearch() {
+             document.getElementById('smartSearchModal').classList.add('active');
+             
+             // Populate category dropdown
+             const categories = [...new Set(allExpenses.map(e => e.fields.Category).filter(c => c))];
+             const categorySelect = document.getElementById('searchCategory');
+             categorySelect.innerHTML = '<option value="">All Categories</option>' + 
+                 categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+         }
+         
+         function closeSmartSearch() {
+             document.getElementById('smartSearchModal').classList.remove('active');
+         }
+         
+         function performNaturalSearch() {
+             const query = document.getElementById('naturalSearchInput').value.toLowerCase();
+             
+             if (!query.trim()) {
+                 showNotification('Please enter a search query', 'error');
+                 return;
+             }
+             
+             let results = [...allExpenses];
+             
+             // Parse natural language query
+             const filters = parseNaturalLanguage(query);
+             
+             // Apply filters
+             if (filters.category) {
+                 results = results.filter(exp => 
+                     exp.fields.Category && exp.fields.Category.toLowerCase().includes(filters.category)
+                 );
+             }
+             
+             if (filters.item) {
+                 results = results.filter(exp => 
+                     exp.fields.Item && exp.fields.Item.toLowerCase().includes(filters.item)
+                 );
+             }
+             
+             if (filters.minAmount !== null) {
+                 results = results.filter(exp => (exp.fields.Actual || 0) >= filters.minAmount);
+             }
+             
+             if (filters.maxAmount !== null) {
+                 results = results.filter(exp => (exp.fields.Actual || 0) <= filters.maxAmount);
+             }
+             
+             if (filters.year) {
+                 results = results.filter(exp => exp.fields.Year === filters.year);
+             }
+             
+             if (filters.month) {
+                 results = results.filter(exp => exp.fields.Month === filters.month);
+             }
+             
+             if (filters.dateRange) {
+                 results = results.filter(exp => {
+                     const expDate = new Date(exp.fields.Year, exp.fields.Month - 1, exp.fields.Day || 1);
+                     return expDate >= filters.dateRange.start && expDate <= filters.dateRange.end;
+                 });
+             }
+             
+             displaySearchResults(results, `Natural search: "${query}"`);
+         }
+         
+         function parseNaturalLanguage(query) {
+             const filters = {
+                 category: null,
+                 item: null,
+                 minAmount: null,
+                 maxAmount: null,
+                 year: null,
+                 month: null,
+                 dateRange: null
+             };
+             
+             // Extract category (check all categories in your data)
+             const allCategories = [...new Set(allExpenses.map(e => e.fields.Category).filter(c => c))];
+             allCategories.forEach(cat => {
+                 if (query.includes(cat.toLowerCase())) {
+                     filters.category = cat.toLowerCase();
+                 }
+             });
+             
+             // Also check common category keywords
+             const categoryKeywords = {
+                 'grocery': 'grocery',
+                 'groceries': 'grocery',
+                 'gas': 'gas',
+                 'fuel': 'gas',
+                 'dining': 'dining',
+                 'restaurant': 'dining',
+                 'food': 'dining',
+                 'mortgage': 'mortgage',
+                 'rent': 'mortgage',
+                 'utilities': 'utilities',
+                 'utility': 'utilities',
+                 'healthcare': 'healthcare',
+                 'medical': 'healthcare',
+                 'shopping': 'shopping',
+                 'entertainment': 'entertainment'
+             };
+             
+             Object.keys(categoryKeywords).forEach(keyword => {
+                 if (query.includes(keyword)) {
+                     filters.category = categoryKeywords[keyword];
+                 }
+             });
+             
+             // Extract amount patterns - improved
+             // "over $100" or "more than 100" or "greater than 100"
+             const overMatch = query.match(/(?:over|more than|greater than|above)\s+\$?(\d+(?:\.\d{2})?)/i);
+             if (overMatch) {
+                 filters.minAmount = parseFloat(overMatch[1]);
+             }
+             
+             // "under $100" or "less than 100" or "below 100"
+             const underMatch = query.match(/(?:under|less than|below)\s+\$?(\d+(?:\.\d{2})?)/i);
+             if (underMatch) {
+                 filters.maxAmount = parseFloat(underMatch[1]);
+             }
+             
+             // "between $50 and $100"
+             const betweenMatch = query.match(/between\s+\$?(\d+(?:\.\d{2})?)\s+and\s+\$?(\d+(?:\.\d{2})?)/i);
+             if (betweenMatch) {
+                 filters.minAmount = parseFloat(betweenMatch[1]);
+                 filters.maxAmount = parseFloat(betweenMatch[2]);
+             }
+             
+             // Exact amount "$100" or "100 dollars"
+             const exactMatch = query.match(/\$(\d+(?:\.\d{2})?)/);
+             if (exactMatch && !overMatch && !underMatch && !betweenMatch) {
+                 const amount = parseFloat(exactMatch[1]);
+                 filters.minAmount = amount - 0.01;
+                 filters.maxAmount = amount + 0.01;
+             }
+             
+             // Extract year
+             const yearMatch = query.match(/\b(20\d{2})\b/);
+             if (yearMatch) {
+                 filters.year = parseInt(yearMatch[1]);
+             }
+             
+             // Extract month
+             const monthNames = ['january', 'february', 'march', 'april', 'may', 'june', 
+                                'july', 'august', 'september', 'october', 'november', 'december'];
+             monthNames.forEach((month, index) => {
+                 if (query.includes(month)) {
+                     filters.month = index + 1;
+                 }
+             });
+             
+             // Extract time ranges
+             const now = new Date();
+             if (query.includes('last month')) {
+                 const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                 const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+                 filters.dateRange = { start: lastMonth, end: lastMonthEnd };
+             } else if (query.includes('this month')) {
+                 const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                 filters.dateRange = { start: thisMonth, end: now };
+             } else if (query.includes('last 3 months')) {
+                 const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+                 filters.dateRange = { start: threeMonthsAgo, end: now };
+             }
+             
+             // Extract item keywords (anything not matched above)
+             // Skip if query starts with "all" (like "all utility" means category, not item)
+             if (!query.startsWith('all ')) {
+                 const categoryKeywordsList = Object.keys(categoryKeywords);
+                 const stopWords = ['over', 'under', 'in', 'last', 'this', 'month', 'months', 'the', 'a', 'an', 
+                                   'less', 'than', 'more', 'between', 'and', 'below', 'above', 'greater', 'all', 
+                                   'expenses', 'expense', 'my', 'find', 'show', 'get'];
+                 
+                 const words = query.split(' ').filter(w => 
+                     !stopWords.includes(w) &&
+                     !w.startsWith('$') &&
+                     !categoryKeywordsList.includes(w) &&
+                     !monthNames.includes(w) &&
+                     !/^\d+$/.test(w)
+                 );
+                 
+                 if (words.length > 0) {
+                     filters.item = words[0];
+                 }
+             }
+             
+             return filters;
+         }
+         
+         function applyQuickFilter(filterType) {
+             let results = [...allExpenses];
+             let description = '';
+             
+             switch(filterType) {
+                 case 'dining':
+                     results = results.filter(exp => 
+                         exp.fields.Category && exp.fields.Category.toLowerCase().includes('dining')
+                     );
+                     description = 'Dining';
+                     break;
+                     
+                 case 'shopping':
+                     results = results.filter(exp => 
+                         exp.fields.Category && exp.fields.Category.toLowerCase().includes('shopping')
+                     );
+                     description = 'Shopping';
+                     break;
+                     
+                 case 'misc':
+                     results = results.filter(exp => 
+                         exp.fields.Category && exp.fields.Category.toLowerCase().includes('misc')
+                     );
+                     description = 'Misc';
+                     break;
+                     
+                 case 'over100':
+                     results = results.filter(exp => (exp.fields.Actual || 0) > 100);
+                     description = 'Over $100';
+                     break;
+                     
+                 case 'over500':
+                     results = results.filter(exp => (exp.fields.Actual || 0) > 500);
+                     description = 'Over $500';
+                     break;
+                     
+                 case 'llcOnly':
+                     results = results.filter(exp => exp.fields.LLC === 'Yes');
+                     description = 'LLC Expenses Only';
+                     break;
+             }
+             
+             displaySearchResults(results, description);
+         }
+         
+         function applyAdvancedFilters() {
+             const minAmount = parseFloat(document.getElementById('minAmount').value);
+             const maxAmount = parseFloat(document.getElementById('maxAmount').value);
+             const startDate = document.getElementById('startDate').value;
+             const endDate = document.getElementById('endDate').value;
+             const category = document.getElementById('searchCategory').value;
+             
+             let results = [...allExpenses];
+             let filterDesc = [];
+             
+             if (!isNaN(minAmount)) {
+                 results = results.filter(exp => (exp.fields.Actual || 0) >= minAmount);
+                 filterDesc.push(`Min: $${minAmount}`);
+             }
+             
+             if (!isNaN(maxAmount)) {
+                 results = results.filter(exp => (exp.fields.Actual || 0) <= maxAmount);
+                 filterDesc.push(`Max: $${maxAmount}`);
+             }
+             
+             if (startDate) {
+                 const start = new Date(startDate);
+                 results = results.filter(exp => {
+                     const expDate = new Date(exp.fields.Year, exp.fields.Month - 1, exp.fields.Day || 1);
+                     return expDate >= start;
+                 });
+                 filterDesc.push(`From: ${startDate}`);
+             }
+             
+             if (endDate) {
+                 const end = new Date(endDate);
+                 results = results.filter(exp => {
+                     const expDate = new Date(exp.fields.Year, exp.fields.Month - 1, exp.fields.Day || 1);
+                     return expDate <= end;
+                 });
+                 filterDesc.push(`To: ${endDate}`);
+             }
+             
+             if (category) {
+                 results = results.filter(exp => exp.fields.Category === category);
+                 filterDesc.push(`Category: ${category}`);
+             }
+             
+             displaySearchResults(results, filterDesc.join(', ') || 'Advanced Filters');
+         }
+         
+         function clearAllFilters() {
+             document.getElementById('naturalSearchInput').value = '';
+             document.getElementById('minAmount').value = '';
+             document.getElementById('maxAmount').value = '';
+             document.getElementById('startDate').value = '';
+             document.getElementById('endDate').value = '';
+             document.getElementById('searchCategory').value = '';
+             
+             document.getElementById('searchResults').innerHTML = `
+                 <div class="text-center py-8 text-gray-400">
+                     <i class="fas fa-search text-4xl mb-3"></i>
+                     <p>Enter search criteria above to find expenses</p>
+                 </div>
+             `;
+         }
+         
+         function displaySearchResults(results, description) {
+             const container = document.getElementById('searchResults');
+             
+             if (results.length === 0) {
+                 container.innerHTML = `
+                     <div class="text-center py-8 text-gray-400">
+                         <i class="fas fa-inbox text-4xl mb-3"></i>
+                         <p>No expenses found matching: ${description}</p>
+                     </div>
+                 `;
+                 return;
+             }
+             
+             // Calculate total
+             const total = results.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             
+             // Sort by date (newest first)
+             results.sort((a, b) => {
+                 const dateA = new Date(a.fields.Year, a.fields.Month - 1, a.fields.Day || 1);
+                 const dateB = new Date(b.fields.Year, b.fields.Month - 1, b.fields.Day || 1);
+                 return dateB - dateA;
+             });
+             
+             const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+             
+             container.innerHTML = `
+                 <div class="mb-4 p-4 bg-purple-50 rounded-lg">
+                     <div class="flex justify-between items-center">
+                         <div>
+                             <h3 class="font-bold text-gray-800">Search Results: ${description}</h3>
+                             <p class="text-sm text-gray-600">${results.length} expense${results.length !== 1 ? 's' : ''} found</p>
+                         </div>
+                         <div class="text-right">
+                             <div class="text-2xl font-bold text-purple-600">$${total.toFixed(2)}</div>
+                             <div class="text-xs text-gray-600">Total</div>
+                         </div>
+                     </div>
+                 </div>
+                 
+                 <div class="space-y-2 max-h-96 overflow-y-auto">
+                     ${results.map(exp => `
+                         <div class="card p-4 hover:shadow-lg transition-shadow cursor-pointer" onclick="editExpense('${exp.id}')">
+                             <div class="flex justify-between items-start">
+                                 <div class="flex-1">
+                                     <div class="font-semibold text-gray-800">${exp.fields.Item}</div>
+                                     <div class="text-sm text-gray-600 mt-1">
+                                         <span class="inline-flex items-center gap-1">
+                                             <i class="fas fa-calendar text-gray-400"></i>
+                                             ${monthNames[exp.fields.Month]} ${exp.fields.Day || 1}, ${exp.fields.Year}
+                                         </span>
+                                         ${exp.fields.Category ? `
+                                             <span class="ml-3 inline-flex items-center gap-1">
+                                                 <i class="fas fa-tag text-gray-400"></i>
+                                                 ${exp.fields.Category}
+                                             </span>
+                                         ` : ''}
+                                         ${exp.fields.LLC === 'Yes' ? `
+                                             <span class="ml-3 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">LLC</span>
+                                         ` : ''}
+                                     </div>
+                                 </div>
+                                 <div class="text-right">
+                                     <div class="text-lg font-bold text-purple-600">$${(exp.fields.Actual || 0).toFixed(2)}</div>
+                                     ${exp.fields.Budget ? `<div class="text-xs text-gray-500">Budget: $${exp.fields.Budget.toFixed(2)}</div>` : ''}
+                                 </div>
+                             </div>
+                         </div>
+                     `).join('')}
                  </div>
              `;
          }
