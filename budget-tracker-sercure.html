@@ -528,7 +528,7 @@
             <form id="expenseForm" onsubmit="saveExpense(event)">
                <input type="hidden" id="recordId">
                <div class="mb-4">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Item Name</label><input type="text" id="itemName" class="input-field" list="itemList" autocomplete="off" required placeholder="e.g., Walmart, Costco">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Item Name</label><input type="text" id="itemName" class="input-field" list="itemList" autocomplete="off" required placeholder="e.g., Walmart, Costco" oninput="suggestCategoryFromItem()">
                   <datalist id="itemList"></datalist>
                </div>
                <div class="mb-4">
@@ -557,7 +557,7 @@
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Day</label><input type="number" id="day" class="input-field" min="1" max="31" required placeholder="1-31"></div>
                </div>
                <div class="grid grid-cols-2 gap-4 mb-4">
-                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Budget Amount</label><input type="number" id="budget" class="input-field" step="0.01" placeholder="0.00" value="0"></div>
+                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Budget Amount</label><input type="number" id="budget" class="input-field" step="0.01" placeholder="0.00" onfocus="if(this.value=='0')this.value=''" onblur="if(this.value=='')this.value='0'" value="0"></div>
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Actual Amount <span class="text-red-500">*</span></label><input type="number" id="actual" class="input-field" step="0.01" placeholder="0.00" required></div>
                </div>
                <div class="mb-4">
@@ -2190,12 +2190,189 @@
              });
          }
          
+         function suggestCategoryFromItem() {
+             const itemInput = document.getElementById('itemName');
+             const categoryInput = document.getElementById('category');
+             const itemName = itemInput.value.trim().toLowerCase();
+             
+             // Clear auto-filled category and hint if item name is cleared or too short
+             if (itemName.length < 3) {
+                 if (categoryInput.dataset.autoFilled === 'true') {
+                     categoryInput.value = '';
+                     categoryInput.dataset.autoFilled = 'false';
+                     categoryInput.style.backgroundColor = '';
+                     categoryInput.style.borderColor = '';
+                     
+                     const existingHint = document.getElementById('categoryHint');
+                     if (existingHint) existingHint.remove();
+                 }
+                 return;
+             }
+             
+             // If category was auto-filled but item changed, clear it first
+             if (categoryInput.dataset.autoFilled === 'true' && categoryInput.dataset.lastItem !== itemName) {
+                 categoryInput.value = '';
+                 categoryInput.dataset.autoFilled = 'false';
+                 categoryInput.style.backgroundColor = '';
+                 categoryInput.style.borderColor = '';
+                 
+                 const existingHint = document.getElementById('categoryHint');
+                 if (existingHint) existingHint.remove();
+             }
+             
+             // Build item-category frequency map from historical data
+             const itemCategoryMap = {};
+             
+             allExpenses.forEach(exp => {
+                 if (exp.fields.Item && exp.fields.Category) {
+                     const item = exp.fields.Item.trim().toLowerCase();
+                     const category = exp.fields.Category.trim();
+                     
+                     if (!itemCategoryMap[item]) {
+                         itemCategoryMap[item] = {};
+                     }
+                     
+                     if (!itemCategoryMap[item][category]) {
+                         itemCategoryMap[item][category] = 0;
+                     }
+                     
+                     itemCategoryMap[item][category]++;
+                 }
+             });
+             
+             // Check for exact match first
+             if (itemCategoryMap[itemName]) {
+                 const categories = itemCategoryMap[itemName];
+                 const totalCount = Object.values(categories).reduce((sum, count) => sum + count, 0);
+                 
+                 // Find the most common category
+                 let maxCount = 0;
+                 let suggestedCategory = null;
+                 
+                 for (const [category, count] of Object.entries(categories)) {
+                     if (count > maxCount) {
+                         maxCount = count;
+                         suggestedCategory = category;
+                     }
+                 }
+                 
+                 // Calculate confidence percentage
+                 const confidence = (maxCount / totalCount) * 100;
+                 
+                 // Only suggest if confidence >= 90%
+                 if (confidence >= 90 && suggestedCategory) {
+                     // Check if category field is empty or user hasn't manually changed it
+                     const currentCategory = categoryInput.value.trim();
+                     if (!currentCategory || categoryInput.dataset.autoFilled === 'true') {
+                         categoryInput.value = suggestedCategory;
+                         categoryInput.dataset.autoFilled = 'true';
+                         categoryInput.dataset.lastItem = itemName; // Store the item that triggered this
+                         
+                         // Show visual feedback
+                         categoryInput.style.backgroundColor = '#f0fdf4'; // Light green
+                         categoryInput.style.borderColor = '#86efac'; // Green border
+                         
+                         // Add tooltip/hint
+                         const existingHint = document.getElementById('categoryHint');
+                         if (existingHint) existingHint.remove();
+                         
+                         const hint = document.createElement('div');
+                         hint.id = 'categoryHint';
+                         hint.className = 'text-xs text-green-600 mt-1 flex items-center gap-1';
+                         hint.innerHTML = `<i class="fas fa-magic"></i> Auto-suggested based on ${maxCount} previous entries (${Math.round(confidence)}% confidence)`;
+                         categoryInput.parentElement.appendChild(hint);
+                         
+                         // Remove visual feedback after 3 seconds
+                         setTimeout(() => {
+                             categoryInput.style.backgroundColor = '';
+                             categoryInput.style.borderColor = '';
+                         }, 3000);
+                     }
+                 }
+             } else {
+                 // Try partial match (for similar items)
+                 for (const [historicalItem, categories] of Object.entries(itemCategoryMap)) {
+                     if (historicalItem.includes(itemName) || itemName.includes(historicalItem)) {
+                         const totalCount = Object.values(categories).reduce((sum, count) => sum + count, 0);
+                         
+                         let maxCount = 0;
+                         let suggestedCategory = null;
+                         
+                         for (const [category, count] of Object.entries(categories)) {
+                             if (count > maxCount) {
+                                 maxCount = count;
+                                 suggestedCategory = category;
+                             }
+                         }
+                         
+                         const confidence = (maxCount / totalCount) * 100;
+                         
+                         if (confidence >= 90 && suggestedCategory) {
+                             const currentCategory = categoryInput.value.trim();
+                             if (!currentCategory || categoryInput.dataset.autoFilled === 'true') {
+                                 categoryInput.value = suggestedCategory;
+                                 categoryInput.dataset.autoFilled = 'true';
+                                 categoryInput.dataset.lastItem = itemName; // Store the item that triggered this
+                                 
+                                 categoryInput.style.backgroundColor = '#fef3c7'; // Light yellow (less confident)
+                                 categoryInput.style.borderColor = '#fbbf24'; // Yellow border
+                                 
+                                 const existingHint = document.getElementById('categoryHint');
+                                 if (existingHint) existingHint.remove();
+                                 
+                                 const hint = document.createElement('div');
+                                 hint.id = 'categoryHint';
+                                 hint.className = 'text-xs text-yellow-700 mt-1 flex items-center gap-1';
+                                 hint.innerHTML = `<i class="fas fa-lightbulb"></i> Suggested based on similar item "${historicalItem}" (${Math.round(confidence)}% confidence)`;
+                                 categoryInput.parentElement.appendChild(hint);
+                                 
+                                 setTimeout(() => {
+                                     categoryInput.style.backgroundColor = '';
+                                     categoryInput.style.borderColor = '';
+                                 }, 3000);
+                                 
+                                 break; // Only suggest once
+                             }
+                         }
+                     }
+                 }
+             }
+         }
+         
+         // Clear auto-fill flag when user manually edits category
+         document.addEventListener('DOMContentLoaded', function() {
+             const categoryInput = document.getElementById('category');
+             if (categoryInput) {
+                 categoryInput.addEventListener('input', function() {
+                     if (this.dataset.autoFilled === 'true') {
+                         this.dataset.autoFilled = 'false';
+                     }
+                 });
+             }
+         });
+         
          function populateCategoryDatalist() {
              const datalist = document.getElementById('categoryList');
              if (!datalist) return;
-             datalist.innerHTML = '';
-             const categories = [...new Set(allExpenses.map(exp => exp.fields.Category).filter(Boolean))].sort();
-             categories.forEach(category => {
+             
+             // Clear existing options completely
+             while (datalist.firstChild) {
+                 datalist.removeChild(datalist.firstChild);
+             }
+             
+             // Get unique categories (case-sensitive)
+             const categoryMap = new Map();
+             allExpenses.forEach(exp => {
+                 if (exp.fields.Category) {
+                     const cat = exp.fields.Category.trim();
+                     if (cat && !categoryMap.has(cat)) {
+                         categoryMap.set(cat, true);
+                     }
+                 }
+             });
+             
+             // Sort and add to datalist
+             [...categoryMap.keys()].sort().forEach(category => {
                  const option = document.createElement('option');
                  option.value = category;
                  datalist.appendChild(option);
@@ -2205,9 +2382,25 @@
          function populateItemDatalist() {
              const datalist = document.getElementById('itemList');
              if (!datalist) return;
-             datalist.innerHTML = '';
-             const items = [...new Set(allExpenses.map(exp => exp.fields.Item).filter(Boolean))].sort();
-             items.forEach(item => {
+             
+             // Clear existing options completely
+             while (datalist.firstChild) {
+                 datalist.removeChild(datalist.firstChild);
+             }
+             
+             // Get unique items (case-sensitive)
+             const itemMap = new Map();
+             allExpenses.forEach(exp => {
+                 if (exp.fields.Item) {
+                     const item = exp.fields.Item.trim();
+                     if (item && !itemMap.has(item)) {
+                         itemMap.set(item, true);
+                     }
+                 }
+             });
+             
+             // Sort and add to datalist
+             [...itemMap.keys()].sort().forEach(item => {
                  const option = document.createElement('option');
                  option.value = item;
                  datalist.appendChild(option);
@@ -2217,21 +2410,27 @@
          function populateTagsDatalist() {
              const datalist = document.getElementById('tagsList');
              if (!datalist) return;
-             datalist.innerHTML = '';
+             
+             // Clear existing options completely
+             while (datalist.firstChild) {
+                 datalist.removeChild(datalist.firstChild);
+             }
              
              // Collect all unique tags from all expenses
-             const allTags = new Set();
+             const tagMap = new Map();
              allExpenses.forEach(exp => {
                  if (exp.fields.Tags) {
                      exp.fields.Tags.split(',').forEach(tag => {
                          const trimmed = tag.trim();
-                         if (trimmed) allTags.add(trimmed);
+                         if (trimmed && !tagMap.has(trimmed)) {
+                             tagMap.set(trimmed, true);
+                         }
                      });
                  }
              });
              
-             // Add each tag as an option
-             [...allTags].sort().forEach(tag => {
+             // Sort and add to datalist
+             [...tagMap.keys()].sort().forEach(tag => {
                  const option = document.createElement('option');
                  option.value = tag;
                  datalist.appendChild(option);
@@ -2652,26 +2851,92 @@
                  return;
              }
              
+             // Get contribution amounts
+             let amarContribution = parseFloat(document.getElementById('amarContributionInput').value) || 0;
+             let priyaContribution = parseFloat(document.getElementById('priyaContributionInput').value) || 0;
+             
+             // Check if contributions are missing or don't match actual amount
+             const totalContribution = amarContribution + priyaContribution;
+             const contributionMismatch = Math.abs(totalContribution - actualAmount) > 0.01;
+             
+             // If no contributions or mismatch, show smart popup
+             if ((amarContribution <= 0 && priyaContribution <= 0) || contributionMismatch) {
+                 const contributionChoice = await showContributionHelper(actualAmount, amarContribution, priyaContribution);
+                 
+                 if (contributionChoice === 'cancel') {
+                     return; // User cancelled
+                 } else if (contributionChoice === 'amar') {
+                     // Amar pays full amount
+                     document.getElementById('amarContributionInput').value = actualAmount;
+                     document.getElementById('priyaContributionInput').value = 0;
+                     amarContribution = actualAmount;
+                     priyaContribution = 0;
+                 } else if (contributionChoice === 'priya') {
+                     // Priya pays full amount
+                     document.getElementById('amarContributionInput').value = 0;
+                     document.getElementById('priyaContributionInput').value = actualAmount;
+                     amarContribution = 0;
+                     priyaContribution = actualAmount;
+                 } else if (contributionChoice === 'split') {
+                     // Split 50/50
+                     const half = actualAmount / 2;
+                     document.getElementById('amarContributionInput').value = half;
+                     document.getElementById('priyaContributionInput').value = half;
+                     amarContribution = half;
+                     priyaContribution = half;
+                 }
+                 // If 'edit', user goes back to form
+             }
+             
+             // Check budget amount
+             const budgetAmount = parseFloat(document.getElementById('budget').value) || 0;
+             
+             // If budget is 0 or missing, show confirmation popup
+             if (budgetAmount <= 0) {
+                 const budgetChoice = await showBudgetConfirmation(actualAmount);
+                 if (budgetChoice === 'cancel') {
+                     return; // User cancelled
+                 } else if (budgetChoice === 'useSame') {
+                     // Set budget to actual amount
+                     document.getElementById('budget').value = actualAmount;
+                 }
+                 // If 'continue', proceed with budget = 0
+             }
+             
              // Get submit button and show loading
              const submitBtn = event.submitter || event.target.querySelector('button[type="submit"]');
              if (submitBtn) setButtonLoading(submitBtn, true);
              
              try {
                  const recordId = document.getElementById('recordId').value;
+                 const finalBudget = parseFloat(document.getElementById('budget').value) || 0;
+                 
                  const fields = {
                     Item: document.getElementById('itemName').value,
                     Category: document.getElementById('category').value,
                     Year: parseInt(document.getElementById('year').value),
                     Month: document.getElementById('month').value,
                     Day: parseInt(document.getElementById('day').value),
-                    Budget: parseFloat(document.getElementById('budget').value) || 0,
+                    Budget: finalBudget,
                     Actual: actualAmount,
                     LLC: document.getElementById('llc').value,
-                    AmarContribution: parseFloat(document.getElementById('amarContributionInput').value) || 0,
-                    PriyaContribution: parseFloat(document.getElementById('priyaContributionInput').value) || 0,
+                    AmarContribution: amarContribution,
+                    PriyaContribution: priyaContribution,
                     Tags: document.getElementById('tags').value || '',
                     Notes: document.getElementById('notes').value || ''
                 };
+                 
+                 // Check for similar item names (only for new expenses, not edits)
+                 if (!recordId && fields.Item) {
+                     const similarItems = findSimilarItems(fields.Item);
+                     if (similarItems.length > 0) {
+                         const confirmed = await showSimilarItemWarning(fields.Item, similarItems);
+                         if (!confirmed) {
+                             if (submitBtn) setButtonLoading(submitBtn, false);
+                             return; // User cancelled
+                         }
+                     }
+                 }
                  
                  // Check for duplicates (only for new expenses, not edits)
                  if (!recordId) {
@@ -2702,6 +2967,331 @@
              } finally {
                  if (submitBtn) setButtonLoading(submitBtn, false);
              }
+         }
+         
+         function showContributionHelper(actualAmount, currentAmar, currentPriya) {
+             return new Promise((resolve) => {
+                 const modal = document.createElement('div');
+                 modal.className = 'modal active';
+                 modal.style.zIndex = '10003'; // Above other modals
+                 
+                 const totalContribution = currentAmar + currentPriya;
+                 const isMissing = currentAmar <= 0 && currentPriya <= 0;
+                 const isMismatch = Math.abs(totalContribution - actualAmount) > 0.01;
+                 const isOver = totalContribution > actualAmount;
+                 const isUnder = totalContribution < actualAmount && totalContribution > 0;
+                 
+                 let title = 'Contributions Missing';
+                 let message = 'Who paid for this expense?';
+                 let alertClass = 'blue';
+                 
+                 if (isMismatch && !isMissing) {
+                     title = 'Contribution Mismatch';
+                     if (isOver) {
+                         message = `Contributions ($${totalContribution.toFixed(2)}) exceed actual amount ($${actualAmount.toFixed(2)})`;
+                         alertClass = 'red';
+                     } else {
+                         message = `Contributions ($${totalContribution.toFixed(2)}) don't cover full amount ($${actualAmount.toFixed(2)})`;
+                         alertClass = 'orange';
+                     }
+                 }
+                 
+                 modal.innerHTML = `
+                     <div class="modal-content" style="max-width: 550px;">
+                         <div class="flex justify-between items-center mb-6">
+                             <h2 class="text-2xl font-bold text-${alertClass}-600 flex items-center gap-2">
+                                 <i class="fas fa-${isMismatch ? 'exclamation-triangle' : 'question-circle'}"></i>
+                                 ${title}
+                             </h2>
+                         </div>
+                         
+                         <div class="bg-${alertClass}-50 border-l-4 border-${alertClass}-500 p-4 mb-6">
+                             <p class="text-sm text-${alertClass}-800">
+                                 <i class="fas fa-info-circle mr-2"></i>
+                                 ${message}
+                             </p>
+                         </div>
+                         
+                         <div class="mb-6">
+                             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                 <div class="grid grid-cols-2 gap-4 mb-3">
+                                     <div>
+                                         <div class="text-xs text-gray-600 mb-1">Actual Amount</div>
+                                         <div class="text-2xl font-bold text-purple-600">$${actualAmount.toFixed(2)}</div>
+                                     </div>
+                                     <div>
+                                         <div class="text-xs text-gray-600 mb-1">Total Contributions</div>
+                                         <div class="text-2xl font-bold ${totalContribution === actualAmount ? 'text-green-600' : 'text-red-600'}">
+                                             $${totalContribution.toFixed(2)}
+                                         </div>
+                                     </div>
+                                 </div>
+                                 ${!isMissing ? `
+                                     <div class="pt-3 border-t border-gray-300">
+                                         <div class="flex justify-between text-sm mb-1">
+                                             <span class="text-gray-600">Amar:</span>
+                                             <span class="font-semibold">$${currentAmar.toFixed(2)}</span>
+                                         </div>
+                                         <div class="flex justify-between text-sm">
+                                             <span class="text-gray-600">Priya:</span>
+                                             <span class="font-semibold">$${currentPriya.toFixed(2)}</span>
+                                         </div>
+                                     </div>
+                                 ` : ''}
+                             </div>
+                         </div>
+                         
+                         <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                             <p class="text-sm text-blue-800 font-semibold mb-2">
+                                 <i class="fas fa-magic mr-2"></i>Quick Options:
+                             </p>
+                             <p class="text-xs text-blue-700">
+                                 Choose who paid, or split 50/50. We'll set the contributions automatically!
+                             </p>
+                         </div>
+                         
+                         <div class="space-y-3">
+                             <button id="amarPaidBtn" class="w-full btn-primary flex items-center justify-center gap-2">
+                                 <i class="fas fa-user"></i>
+                                 Amar Paid Full Amount ($${actualAmount.toFixed(2)})
+                             </button>
+                             <button id="priyaPaidBtn" class="w-full btn-primary flex items-center justify-center gap-2">
+                                 <i class="fas fa-user"></i>
+                                 Priya Paid Full Amount ($${actualAmount.toFixed(2)})
+                             </button>
+                             <button id="splitBtn" class="w-full btn-secondary flex items-center justify-center gap-2">
+                                 <i class="fas fa-balance-scale"></i>
+                                 Split 50/50 ($${(actualAmount / 2).toFixed(2)} each)
+                             </button>
+                             <button id="editBtn" class="w-full px-4 py-2 text-gray-600 hover:text-gray-800 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
+                                 <i class="fas fa-edit mr-2"></i>
+                                 Go Back & Edit Manually
+                             </button>
+                         </div>
+                     </div>
+                 `;
+                 
+                 document.body.appendChild(modal);
+                 
+                 document.getElementById('amarPaidBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve('amar');
+                 };
+                 
+                 document.getElementById('priyaPaidBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve('priya');
+                 };
+                 
+                 document.getElementById('splitBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve('split');
+                 };
+                 
+                 document.getElementById('editBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve('cancel');
+                 };
+             });
+         }
+         
+         function showBudgetConfirmation(actualAmount) {
+             return new Promise((resolve) => {
+                 const modal = document.createElement('div');
+                 modal.className = 'modal active';
+                 modal.style.zIndex = '10002'; // Above other modals
+                 
+                 modal.innerHTML = `
+                     <div class="modal-content" style="max-width: 500px;">
+                         <div class="flex justify-between items-center mb-6">
+                             <h2 class="text-2xl font-bold text-blue-600 flex items-center gap-2">
+                                 <i class="fas fa-question-circle"></i>
+                                 Budget Amount Missing
+                             </h2>
+                         </div>
+                         
+                         <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                             <p class="text-sm text-blue-800">
+                                 <i class="fas fa-info-circle mr-2"></i>
+                                 You haven't entered a budget amount for this expense.
+                             </p>
+                         </div>
+                         
+                         <div class="mb-6">
+                             <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                                 <div class="text-sm text-gray-600 mb-2">Actual Amount:</div>
+                                 <div class="text-3xl font-bold text-purple-600">$${actualAmount.toFixed(2)}</div>
+                             </div>
+                         </div>
+                         
+                         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                             <p class="text-sm text-yellow-800">
+                                 <i class="fas fa-lightbulb mr-2"></i>
+                                 <strong>Tip:</strong> Setting a budget helps you track spending vs. planned amounts.
+                             </p>
+                         </div>
+                         
+                         <div class="space-y-3">
+                             <button id="useSameBtn" class="w-full btn-primary flex items-center justify-center gap-2">
+                                 <i class="fas fa-copy"></i>
+                                 Use $${actualAmount.toFixed(2)} as Budget
+                                 <span class="text-xs opacity-75">(Recommended)</span>
+                             </button>
+                             <button id="continueWithoutBtn" class="w-full btn-secondary flex items-center justify-center gap-2">
+                                 <i class="fas fa-forward"></i>
+                                 Continue with $0 Budget
+                             </button>
+                             <button id="cancelBtn" class="w-full px-4 py-2 text-gray-600 hover:text-gray-800 font-semibold rounded-lg hover:bg-gray-100 transition-colors">
+                                 <i class="fas fa-arrow-left mr-2"></i>
+                                 Go Back & Edit
+                             </button>
+                         </div>
+                     </div>
+                 `;
+                 
+                 document.body.appendChild(modal);
+                 
+                 document.getElementById('useSameBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve('useSame');
+                 };
+                 
+                 document.getElementById('continueWithoutBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve('continue');
+                 };
+                 
+                 document.getElementById('cancelBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve('cancel');
+                 };
+             });
+         }
+         
+         function findSimilarItems(newItem) {
+             const similarItems = [];
+             const newItemLower = newItem.toLowerCase().trim();
+             
+             // Get all unique existing items
+             const existingItems = [...new Set(allExpenses.map(exp => exp.fields.Item).filter(Boolean))];
+             
+             existingItems.forEach(existingItem => {
+                 const existingLower = existingItem.toLowerCase().trim();
+                 
+                 // Skip if exact match (case-insensitive)
+                 if (newItemLower === existingLower) return;
+                 
+                 let isSimilar = false;
+                 let reason = '';
+                 
+                 // Check if one contains the other
+                 if (newItemLower.includes(existingLower)) {
+                     isSimilar = true;
+                     reason = `"${newItem}" contains "${existingItem}"`;
+                 } else if (existingLower.includes(newItemLower)) {
+                     isSimilar = true;
+                     reason = `"${existingItem}" contains "${newItem}"`;
+                 }
+                 
+                 // Check for word overlap (e.g., "car gas" vs "gas")
+                 const newWords = newItemLower.split(/\s+/);
+                 const existingWords = existingLower.split(/\s+/);
+                 const commonWords = newWords.filter(word => 
+                     word.length > 2 && existingWords.includes(word)
+                 );
+                 
+                 if (commonWords.length > 0 && !isSimilar) {
+                     isSimilar = true;
+                     reason = `Both contain: "${commonWords.join(', ')}"`;
+                 }
+                 
+                 if (isSimilar) {
+                     similarItems.push({
+                         item: existingItem,
+                         reason: reason
+                     });
+                 }
+             });
+             
+             return similarItems;
+         }
+         
+         function showSimilarItemWarning(newItem, similarItems) {
+             return new Promise((resolve) => {
+                 const modal = document.createElement('div');
+                 modal.className = 'modal active';
+                 modal.style.zIndex = '10002'; // Above other modals
+                 
+                 modal.innerHTML = `
+                     <div class="modal-content" style="max-width: 500px;">
+                         <div class="flex justify-between items-center mb-6">
+                             <h2 class="text-2xl font-bold text-orange-600 flex items-center gap-2">
+                                 <i class="fas fa-exclamation-circle"></i>
+                                 Similar Item Found
+                             </h2>
+                         </div>
+                         
+                         <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6">
+                             <p class="text-sm text-yellow-800">
+                                 <i class="fas fa-info-circle mr-2"></i>
+                                 We found similar item${similarItems.length > 1 ? 's' : ''} that already exist. 
+                                 Consider using the existing item${similarItems.length > 1 ? 's' : ''} to keep your data consistent.
+                             </p>
+                         </div>
+                         
+                         <div class="mb-6">
+                             <h3 class="font-bold text-gray-800 mb-3">You're adding:</h3>
+                             <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                                 <div class="font-semibold text-gray-800">"${newItem}"</div>
+                             </div>
+                         </div>
+                         
+                         <div class="mb-6">
+                             <h3 class="font-bold text-gray-800 mb-3">Similar existing item${similarItems.length > 1 ? 's' : ''}:</h3>
+                             <div class="space-y-2">
+                                 ${similarItems.map(similar => `
+                                     <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                         <div class="font-semibold text-gray-800 mb-1">"${similar.item}"</div>
+                                         <div class="text-xs text-blue-700">
+                                             <i class="fas fa-link mr-1"></i>${similar.reason}
+                                         </div>
+                                     </div>
+                                 `).join('')}
+                             </div>
+                         </div>
+                         
+                         <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                             <p class="text-sm text-gray-700">
+                                 <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>
+                                 <strong>Tip:</strong> Using consistent item names helps with better analytics and suggestions.
+                             </p>
+                         </div>
+                         
+                         <div class="flex gap-3">
+                             <button id="goBackBtn" class="btn-secondary flex-1">
+                                 <i class="fas fa-arrow-left mr-2"></i>
+                                 Go Back & Edit
+                             </button>
+                             <button id="continueAnywayBtn" class="btn-primary flex-1">
+                                 <i class="fas fa-check mr-2"></i>
+                                 Add Anyway
+                             </button>
+                         </div>
+                     </div>
+                 `;
+                 
+                 document.body.appendChild(modal);
+                 
+                 document.getElementById('continueAnywayBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve(true);
+                 };
+                 
+                 document.getElementById('goBackBtn').onclick = () => {
+                     document.body.removeChild(modal);
+                     resolve(false);
+                 };
+             });
          }
          
          function findDuplicateExpenses(newExpense) {
