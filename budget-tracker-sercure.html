@@ -33,6 +33,10 @@
          .expense-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
          .expense-row:hover { background: #f9fafb; }
          .expense-header { display: none; }
+         .spinner { border: 3px solid #f3f4f6; border-top: 3px solid #667eea; border-radius: 50%; width: 20px; height: 20px; animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; }
+         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+         .btn-loading { position: relative; color: transparent !important; pointer-events: none; }
+         .btn-loading::after { content: ''; position: absolute; width: 20px; height: 20px; top: 50%; left: 50%; margin-left: -10px; margin-top: -10px; border: 3px solid #ffffff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
          .expense-item { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
          .expense-label { font-size: 12px; color: #6b7280; font-weight: 600; }
          .payment-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
@@ -554,7 +558,7 @@
                </div>
                <div class="grid grid-cols-2 gap-4 mb-4">
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Budget Amount</label><input type="number" id="budget" class="input-field" step="0.01" placeholder="0.00" value="0"></div>
-                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Actual Amount</label><input type="number" id="actual" class="input-field" step="0.01" placeholder="0.00"></div>
+                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Actual Amount <span class="text-red-500">*</span></label><input type="number" id="actual" class="input-field" step="0.01" placeholder="0.00" required></div>
                </div>
                <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">LLC Account</label>
@@ -1053,6 +1057,39 @@
          let currentReceiptData = null; // Store current receipt for editing
          let charts = { pie: null, llc: null, line: null, categoryMonthly: null, contributionsMonthly: null, contributionCoverage: null, yearComparison: null, categoryTrend: null, contributionTrend: null };
          
+         // Utility function for fetch with timeout and retry
+         async function fetchWithRetry(url, options = {}, retries = 3, timeout = 10000) {
+             for (let i = 0; i < retries; i++) {
+                 try {
+                     const controller = new AbortController();
+                     const timeoutId = setTimeout(() => controller.abort(), timeout);
+                     
+                     const response = await fetch(url, {
+                         ...options,
+                         signal: controller.signal
+                     });
+                     
+                     clearTimeout(timeoutId);
+                     return response;
+                 } catch (error) {
+                     if (i === retries - 1) throw error;
+                     console.log(`Retry ${i + 1}/${retries} for ${url}`);
+                     await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+                 }
+             }
+         }
+         
+         // Show loading spinner on button
+         function setButtonLoading(button, loading) {
+             if (loading) {
+                 button.classList.add('btn-loading');
+                 button.disabled = true;
+             } else {
+                 button.classList.remove('btn-loading');
+                 button.disabled = false;
+             }
+         }
+         
          document.addEventListener('DOMContentLoaded', function() {
              populateYearDropdown();
              loadData();
@@ -1200,17 +1237,23 @@
          
          async function loadData() {
              try {
-                 // Load expenses
-                 const expensesResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`, {
+                 // Show loading in expenses list
+                 const expensesList = document.getElementById('expensesList');
+                 if (expensesList) {
+                     expensesList.innerHTML = '<div class="text-center py-12 text-gray-400"><div class="spinner mx-auto mb-4"></div><p>Loading expenses...</p></div>';
+                 }
+                 
+                 // Load expenses with retry
+                 const expensesResponse = await fetchWithRetry(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`, {
                      headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
                  });
                  if (!expensesResponse.ok) throw new Error('Failed to fetch expenses');
                  const expensesData = await expensesResponse.json();
                  allExpenses = expensesData.records;
                  
-                 // Load payments
+                 // Load payments with retry
                  try {
-                     const paymentsResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
+                     const paymentsResponse = await fetchWithRetry(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
                          headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
                      });
                      if (paymentsResponse.ok) {
@@ -1236,6 +1279,10 @@
                  showNotification('Data loaded successfully!', 'success');
              } catch (error) {
                  console.error('Error:', error);
+                 const expensesList = document.getElementById('expensesList');
+                 if (expensesList) {
+                     expensesList.innerHTML = '<div class="text-center py-12 text-red-400"><i class="fas fa-exclamation-triangle text-4xl mb-3"></i><p>Failed to load data. Please refresh.</p></div>';
+                 }
                  showNotification('Error: ' + error.message, 'error');
              }
          }
@@ -2596,44 +2643,64 @@
          
          async function saveExpense(event) {
              event.preventDefault();
-             const recordId = document.getElementById('recordId').value;
-             const fields = {
-                Item: document.getElementById('itemName').value,
-                Category: document.getElementById('category').value,
-                Year: parseInt(document.getElementById('year').value),
-                Month: document.getElementById('month').value,
-                Day: parseInt(document.getElementById('day').value),
-                Budget: parseFloat(document.getElementById('budget').value) || 0,
-                Actual: parseFloat(document.getElementById('actual').value) || 0,
-                LLC: document.getElementById('llc').value,
-                AmarContribution: parseFloat(document.getElementById('amarContributionInput').value) || 0,
-                PriyaContribution: parseFloat(document.getElementById('priyaContributionInput').value) || 0,
-                Tags: document.getElementById('tags').value || '',
-                Notes: document.getElementById('notes').value || ''
-            };
              
-             // Check for duplicates (only for new expenses, not edits)
-             if (!recordId) {
-                 const duplicates = findDuplicateExpenses(fields);
-                 if (duplicates.length > 0) {
-                     const confirmed = await showDuplicateConfirmation(duplicates, fields);
-                     if (!confirmed) {
-                         return; // User cancelled
-                     }
-                 }
+             // Validate actual amount
+             const actualAmount = parseFloat(document.getElementById('actual').value);
+             if (!actualAmount || actualAmount <= 0) {
+                 showNotification('Please enter a valid actual amount', 'error');
+                 document.getElementById('actual').focus();
+                 return;
              }
              
-             // Handle receipt file upload
-             const receiptFile = document.getElementById('receiptFile').files[0];
-             if (receiptFile) {
-                 await uploadReceiptAndSave(recordId, fields, receiptFile);
-             } else if (currentReceiptData) {
-                 // Keep existing receipt
-                 fields.Receipt = [currentReceiptData];
-                 await saveExpenseToAirtable(recordId, fields);
-             } else {
-                 // No receipt
-                 await saveExpenseToAirtable(recordId, fields);
+             // Get submit button and show loading
+             const submitBtn = event.submitter || event.target.querySelector('button[type="submit"]');
+             if (submitBtn) setButtonLoading(submitBtn, true);
+             
+             try {
+                 const recordId = document.getElementById('recordId').value;
+                 const fields = {
+                    Item: document.getElementById('itemName').value,
+                    Category: document.getElementById('category').value,
+                    Year: parseInt(document.getElementById('year').value),
+                    Month: document.getElementById('month').value,
+                    Day: parseInt(document.getElementById('day').value),
+                    Budget: parseFloat(document.getElementById('budget').value) || 0,
+                    Actual: actualAmount,
+                    LLC: document.getElementById('llc').value,
+                    AmarContribution: parseFloat(document.getElementById('amarContributionInput').value) || 0,
+                    PriyaContribution: parseFloat(document.getElementById('priyaContributionInput').value) || 0,
+                    Tags: document.getElementById('tags').value || '',
+                    Notes: document.getElementById('notes').value || ''
+                };
+                 
+                 // Check for duplicates (only for new expenses, not edits)
+                 if (!recordId) {
+                     const duplicates = findDuplicateExpenses(fields);
+                     if (duplicates.length > 0) {
+                         const confirmed = await showDuplicateConfirmation(duplicates, fields);
+                         if (!confirmed) {
+                             if (submitBtn) setButtonLoading(submitBtn, false);
+                             return; // User cancelled
+                         }
+                     }
+                 }
+                 
+                 // Handle receipt file upload
+                 const receiptFile = document.getElementById('receiptFile').files[0];
+                 if (receiptFile) {
+                     await uploadReceiptAndSave(recordId, fields, receiptFile);
+                 } else if (currentReceiptData) {
+                     // Keep existing receipt
+                     fields.Receipt = [currentReceiptData];
+                     await saveExpenseToAirtable(recordId, fields);
+                 } else {
+                     // No receipt
+                     await saveExpenseToAirtable(recordId, fields);
+                 }
+             } catch (error) {
+                 showNotification('Error saving expense: ' + error.message, 'error');
+             } finally {
+                 if (submitBtn) setButtonLoading(submitBtn, false);
              }
          }
          
