@@ -4172,6 +4172,121 @@
              document.getElementById('monthlySummaryModal').classList.remove('active');
          }
          
+         function showCategoryExpenses(category, year, month) {
+             // Filter expenses for this category and month
+             const categoryExpenses = allExpenses.filter(exp => {
+                 const expYear = parseInt(exp.fields.Year);
+                 const expMonth = parseInt(exp.fields.Month);
+                 const expCategory = exp.fields.Category || 'Other';
+                 return expYear === year && expMonth === month && expCategory === category;
+             });
+             
+             // Sort by date (most recent first)
+             categoryExpenses.sort((a, b) => {
+                 const dateA = new Date(a.fields.Year, a.fields.Month - 1, a.fields.Day || 1);
+                 const dateB = new Date(b.fields.Year, b.fields.Month - 1, b.fields.Day || 1);
+                 return dateB - dateA;
+             });
+             
+             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+             const totalAmount = categoryExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             
+             // Create modal
+             const modal = document.createElement('div');
+             modal.className = 'modal active';
+             modal.style.zIndex = '10001'; // Above monthly summary modal
+             
+             modal.innerHTML = `
+                 <div class="modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+                     <div class="flex justify-between items-center mb-6">
+                         <div>
+                             <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                 <i class="fas fa-list text-purple-600"></i>
+                                 ${category}
+                             </h2>
+                             <p class="text-sm text-gray-600 mt-1">${monthNames[month - 1]} ${year} • ${categoryExpenses.length} ${categoryExpenses.length === 1 ? 'expense' : 'expenses'}</p>
+                         </div>
+                         <button onclick="this.closest('.modal').remove()" class="text-gray-400 hover:text-gray-600">
+                             <i class="fas fa-times text-2xl"></i>
+                         </button>
+                     </div>
+                     
+                     <div class="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-lg mb-6">
+                         <div class="text-sm opacity-90">Total Spending</div>
+                         <div class="text-3xl font-bold">$${totalAmount.toFixed(2)}</div>
+                         <div class="text-sm opacity-90 mt-1">Average: $${(totalAmount / categoryExpenses.length).toFixed(2)} per expense</div>
+                     </div>
+                     
+                     <div class="space-y-3">
+                         ${categoryExpenses.map(exp => {
+                             const item = exp.fields.Item || 'Unnamed';
+                             const actual = exp.fields.Actual || 0;
+                             const day = exp.fields.Day;
+                             const llc = exp.fields.LLC === 'Yes';
+                             const amarContrib = exp.fields.AmarContribution || 0;
+                             const priyaContrib = exp.fields.PriyaContribution || 0;
+                             const notes = exp.fields.Notes || '';
+                             
+                             // Format date properly
+                             let dateDisplay = '';
+                             if (day !== undefined && day !== null && day !== '') {
+                                 dateDisplay = `${monthNames[month - 1]} ${day}, ${year}`;
+                             } else {
+                                 dateDisplay = `${monthNames[month - 1]} ${year}`;
+                             }
+                             
+                             // Debug log
+                             console.log('Expense:', item, 'Day field:', day, 'Type:', typeof day, 'Display:', dateDisplay);
+                             
+                             return `
+                                 <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                                     <div class="flex justify-between items-start mb-2">
+                                         <div class="flex-1">
+                                             <div class="font-semibold text-gray-800 flex items-center gap-2">
+                                                 ${item}
+                                                 ${llc ? '<span class="badge badge-llc text-xs">LLC</span>' : ''}
+                                             </div>
+                                             <div class="text-sm text-gray-600 mt-1">
+                                                 <i class="fas fa-calendar mr-1"></i>${dateDisplay}
+                                             </div>
+                                         </div>
+                                         <div class="text-right">
+                                             <div class="text-xl font-bold text-purple-600">$${actual.toFixed(2)}</div>
+                                         </div>
+                                     </div>
+                                     
+                                     <div class="flex gap-4 text-xs text-gray-600 mt-3 pt-3 border-t border-gray-100">
+                                         <div class="flex items-center gap-1">
+                                             <i class="fas fa-user text-blue-500"></i>
+                                             <span>Amar: $${amarContrib.toFixed(2)}</span>
+                                         </div>
+                                         <div class="flex items-center gap-1">
+                                             <i class="fas fa-user text-pink-500"></i>
+                                             <span>Priya: $${priyaContrib.toFixed(2)}</span>
+                                         </div>
+                                     </div>
+                                     
+                                     ${notes ? `
+                                         <div class="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                                             <i class="fas fa-sticky-note mr-1"></i>${notes}
+                                         </div>
+                                     ` : ''}
+                                 </div>
+                             `;
+                         }).join('')}
+                     </div>
+                     
+                     <div class="mt-6 pt-4 border-t border-gray-200">
+                         <button onclick="this.closest('.modal').remove()" class="w-full btn-secondary">
+                             <i class="fas fa-arrow-left mr-2"></i>Back to Summary
+                         </button>
+                     </div>
+                 </div>
+             `;
+             
+             document.body.appendChild(modal);
+         }
+         
          async function loadMonthlySummary() {
              const year = parseInt(document.getElementById('summaryYear').value);
              const month = parseInt(document.getElementById('summaryMonth').value);
@@ -4278,21 +4393,31 @@
                              Spending by Category
                          </h3>
                          <div class="space-y-3">
-                             ${Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]).map(([cat, amount]) => {
-                                 const percentage = (amount / totalSpending * 100).toFixed(1);
-                                 return `
-                                     <div>
-                                         <div class="flex justify-between mb-1">
-                                             <span class="font-semibold">${cat}</span>
-                                             <span class="text-gray-600">$${amount.toFixed(2)} (${percentage}%)</span>
-                                         </div>
-                                         <div class="w-full bg-gray-200 rounded-full h-2">
-                                             <div class="bg-purple-600 h-2 rounded-full" style="width: ${percentage}%"></div>
-                                         </div>
-                                     </div>
-                                 `;
-                             }).join('')}
-                         </div>
+                            ${Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]).map(([cat, amount]) => {
+                                const percentage = (amount / totalSpending * 100).toFixed(1);
+                                const categoryExpenses = monthExpenses.filter(exp => (exp.fields.Category || 'Other') === cat);
+                                const expenseCount = categoryExpenses.length;
+                                return `
+                                    <div class="cursor-pointer hover:bg-purple-50 p-3 rounded-lg transition-colors" 
+                                         onclick="showCategoryExpenses('${cat.replace(/'/g, "\\'")}', ${year}, ${month})"
+                                         style="cursor: pointer;">
+                                        <div class="flex justify-between items-start mb-1">
+                                            <div class="flex-1">
+                                                <span class="font-semibold">${cat}</span>
+                                                <span class="text-xs text-gray-500 ml-2">(${expenseCount} ${expenseCount === 1 ? 'item' : 'items'})</span>
+                                            </div>
+                                            <span class="text-gray-600 whitespace-nowrap ml-2">$${amount.toFixed(2)} (${percentage}%)</span>
+                                        </div>
+                                        <div class="w-full bg-gray-200 rounded-full h-2">
+                                            <div class="bg-purple-600 h-2 rounded-full" style="width: ${percentage}%"></div>
+                                        </div>
+                                        <div class="text-xs text-purple-600 mt-1 opacity-0 hover:opacity-100 transition-opacity">
+                                            <i class="fas fa-arrow-right mr-1"></i>Click to view expenses
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
                      </div>
                      
                      <div class="card p-6">
