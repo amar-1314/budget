@@ -33,7 +33,7 @@
          .expense-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
          .expense-row:hover { background: #f9fafb; }
          .expense-header { display: none; }
-         .spinner { border: 3px solid #f3f4f6; border-top: 3px solid #667eea; border-radius: 50%; width: 20px; height: 20px; animation: spin 0.8s linear infinite; display: inline-block; vertical-align: middle; }
+         .spinner { border: 4px solid #e5e7eb; border-top: 4px solid #667eea; border-radius: 50%; width: 48px; height: 48px; animation: spin 0.8s linear infinite; display: block; margin: 0 auto; }
          @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
          .btn-loading { position: relative; color: transparent !important; pointer-events: none; }
          .btn-loading::after { content: ''; position: absolute; width: 20px; height: 20px; top: 50%; left: 50%; margin-left: -10px; margin-top: -10px; border: 3px solid #ffffff; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -51,8 +51,66 @@
          .badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; }
          .badge-llc { background: #dcfce7; color: #166534; }
          .badge-personal { background: #fef3c7; color: #92400e; }
-         .loading { display: inline-block; width: 20px; height: 20px; border: 3px solid #f3f4f6; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; }
+         .loading { display: block; width: 48px; height: 48px; border: 4px solid #e5e7eb; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto; }
          @keyframes spin { to { transform: rotate(360deg); } }
+         
+         .fancy-spinner {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+         }
+         
+         .fancy-spinner-inner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%;
+            height: 70%;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-bottom-color: white;
+            border-radius: 50%;
+            animation: spin-reverse 2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+         }
+         
+         .fancy-spinner-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+            animation: pulse-dot 1.5s ease-in-out infinite;
+         }
+         
+         .loading-dot {
+            width: 12px;
+            height: 12px;
+            background: white;
+            border-radius: 50%;
+            animation: bounce-dot 1.4s ease-in-out infinite;
+         }
+         
+         @keyframes spin-reverse {
+            to { transform: translate(-50%, -50%) rotate(-360deg); }
+         }
+         
+         @keyframes pulse-dot {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            50% { transform: translate(-50%, -50%) scale(1.5); opacity: 0.6; }
+         }
+         
+         @keyframes bounce-dot {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+         }
          .chart-container { position: relative; height: 300px; margin-top: 20px; }
          .progress-bar { height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin-top: 8px; }
          .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s ease; }
@@ -87,6 +145,20 @@
       </style>
    </head>
    <body class="bg-gray-50">
+      <div id="globalLoadingOverlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+         <div style="position: relative; width: 120px; height: 120px;">
+            <div class="fancy-spinner"></div>
+            <div class="fancy-spinner-inner"></div>
+            <div class="fancy-spinner-dot"></div>
+         </div>
+         <p style="font-size: 24px; font-weight: 700; color: white; margin-top: 32px; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">Budget Tracker</p>
+         <p style="font-size: 16px; color: rgba(255,255,255,0.9); margin-top: 8px; font-weight: 500;">Loading your data...</p>
+         <div style="margin-top: 24px; display: flex; gap: 8px;">
+            <div class="loading-dot" style="animation-delay: 0s;"></div>
+            <div class="loading-dot" style="animation-delay: 0.2s;"></div>
+            <div class="loading-dot" style="animation-delay: 0.4s;"></div>
+         </div>
+      </div>
       <div id="notification" class="notification">
          <div class="flex items-center gap-3"><i class="fas fa-check-circle text-green-500"></i><span id="notificationText"></span></div>
       </div>
@@ -367,10 +439,10 @@
                   <div>Receipt</div>
                   <div>Actions</div>
                </div>
-               <div id="expensesList">
-                  <div class="text-center py-12 text-gray-400">
-                     <div class="loading mx-auto mb-4"></div>
-                     <p>Loading expenses...</p>
+               <div id="expensesList" style="min-height: 300px;">
+                  <div class="text-center py-12 text-gray-400" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px;">
+                     <div class="loading mb-4"></div>
+                     <p style="font-size: 16px; font-weight: 500;">Loading expenses...</p>
                   </div>
                </div>
             </div>
@@ -1276,9 +1348,23 @@
                  updateStats();
                  updateCharts();
                  updateMismatchNotification();
+                 
+                 // Hide global loading overlay
+                 const overlay = document.getElementById('globalLoadingOverlay');
+                 if (overlay) {
+                     overlay.style.display = 'none';
+                 }
+                 
                  showNotification('Data loaded successfully!', 'success');
              } catch (error) {
                  console.error('Error:', error);
+                 
+                 // Hide global loading overlay even on error
+                 const overlay = document.getElementById('globalLoadingOverlay');
+                 if (overlay) {
+                     overlay.style.display = 'none';
+                 }
+                 
                  const expensesList = document.getElementById('expensesList');
                  if (expensesList) {
                      expensesList.innerHTML = '<div class="text-center py-12 text-red-400"><i class="fas fa-exclamation-triangle text-4xl mb-3"></i><p>Failed to load data. Please refresh.</p></div>';
