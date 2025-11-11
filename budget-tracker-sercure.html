@@ -1168,6 +1168,93 @@
              loadProfilePictures();
              loadFixedExpenses();
              loadLLCExpenses();
+             
+             // Pull-to-refresh functionality
+             let touchStartY = 0;
+             let touchEndY = 0;
+             let isPulling = false;
+             let pullDistance = 0;
+             
+             const pullToRefreshIndicator = document.createElement('div');
+             pullToRefreshIndicator.id = 'pullToRefreshIndicator';
+             pullToRefreshIndicator.style.cssText = `
+                 position: fixed;
+                 top: -80px;
+                 left: 0;
+                 right: 0;
+                 height: 80px;
+                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                 display: flex;
+                 align-items: center;
+                 justify-content: center;
+                 z-index: 9998;
+                 transition: transform 0.3s ease;
+                 color: white;
+                 font-weight: 600;
+                 font-size: 14px;
+             `;
+             pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Pull to refresh</div></div>';
+             document.body.appendChild(pullToRefreshIndicator);
+             
+             document.addEventListener('touchstart', function(e) {
+                 if (window.scrollY === 0) {
+                     touchStartY = e.touches[0].clientY;
+                     isPulling = true;
+                 }
+             }, { passive: true });
+             
+             document.addEventListener('touchmove', function(e) {
+                 if (!isPulling) return;
+                 
+                 touchEndY = e.touches[0].clientY;
+                 pullDistance = touchEndY - touchStartY;
+                 
+                 if (pullDistance > 0 && window.scrollY === 0) {
+                     // Show indicator
+                     const translateY = Math.min(pullDistance * 0.5, 80);
+                     pullToRefreshIndicator.style.transform = `translateY(${translateY}px)`;
+                     
+                     if (pullDistance > 100) {
+                         pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><i class="fas fa-arrow-down" style="font-size: 24px; margin-bottom: 8px;"></i><div>Release to refresh</div></div>';
+                     } else {
+                         pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Pull to refresh</div></div>';
+                     }
+                 }
+             }, { passive: true });
+             
+             document.addEventListener('touchend', async function(e) {
+                 if (!isPulling) return;
+                 
+                 if (pullDistance > 100 && window.scrollY === 0) {
+                     // Trigger refresh
+                     pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Refreshing...</div></div>';
+                     pullToRefreshIndicator.style.transform = 'translateY(80px)';
+                     
+                     try {
+                         await loadData();
+                         await loadProfilePictures();
+                         await loadFixedExpenses();
+                         await loadLLCExpenses();
+                         showNotification('Data refreshed successfully!', 'success');
+                     } catch (error) {
+                         showNotification('Failed to refresh data', 'error');
+                     }
+                     
+                     // Hide indicator
+                     setTimeout(() => {
+                         pullToRefreshIndicator.style.transform = 'translateY(0)';
+                         pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Pull to refresh</div></div>';
+                     }, 500);
+                 } else {
+                     // Reset
+                     pullToRefreshIndicator.style.transform = 'translateY(0)';
+                 }
+                 
+                 isPulling = false;
+                 touchStartY = 0;
+                 touchEndY = 0;
+                 pullDistance = 0;
+             }, { passive: true });
          });
          
          async function loadProfilePictures() {
