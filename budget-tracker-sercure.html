@@ -445,6 +445,20 @@
                      <p style="font-size: 16px; font-weight: 500;">Loading expenses...</p>
                   </div>
                </div>
+               <!-- Pagination Controls -->
+               <div id="paginationControls" class="mt-6 flex items-center justify-between" style="display: none;">
+                  <div class="text-sm text-gray-600">
+                     Showing <span id="paginationInfo"></span>
+                  </div>
+                  <div class="flex gap-2">
+                     <button onclick="changePage('prev')" id="prevPageBtn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-chevron-left mr-1"></i>Previous
+                     </button>
+                     <button onclick="changePage('next')" id="nextPageBtn" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Next<i class="fas fa-chevron-right ml-1"></i>
+                     </button>
+                  </div>
+               </div>
             </div>
             <div id="paymentsTab" class="p-3 md:p-6" style="display: none;">
                <div class="flex justify-between items-center mb-6">
@@ -629,8 +643,14 @@
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Day</label><input type="number" id="day" class="input-field" min="1" max="31" required placeholder="1-31"></div>
                </div>
                <div class="grid grid-cols-2 gap-4 mb-4">
-                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Budget Amount</label><input type="number" id="budget" class="input-field" step="0.01" placeholder="0.00" onfocus="if(this.value=='0')this.value=''" onblur="if(this.value=='')this.value='0'" value="0"></div>
-                  <div><label class="block text-sm font-semibold text-gray-700 mb-2">Actual Amount <span class="text-red-500">*</span></label><input type="number" id="actual" class="input-field" step="0.01" placeholder="0.00" required></div>
+                  <div>
+                     <label class="block text-sm font-semibold text-gray-700 mb-2">Budget Amount</label>
+                     <input type="tel" id="budget" class="input-field" placeholder="0.00" value="0">
+                  </div>
+                  <div>
+                     <label class="block text-sm font-semibold text-gray-700 mb-2">Actual Amount <span class="text-red-500">*</span></label>
+                     <input type="tel" id="actual" class="input-field" placeholder="0.00" required>
+                  </div>
                </div>
                <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">LLC Account</label>
@@ -675,11 +695,11 @@
                   <div class="grid grid-cols-2 gap-4">
                      <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Amar's Contribution</label>
-                        <input type="number" id="amarContributionInput" class="input-field" step="0.01" placeholder="0.00">
+                        <input type="tel" id="amarContributionInput" class="input-field" placeholder="0.00">
                      </div>
                      <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Priya's Contribution</label>
-                        <input type="number" id="priyaContributionInput" class="input-field" step="0.01" placeholder="0.00">
+                        <input type="tel" id="priyaContributionInput" class="input-field" placeholder="0.00">
                      </div>
                   </div>
                   <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Enter the amount each person has contributed towards their share</p>
@@ -888,6 +908,25 @@
                   <button type="button" onclick="closeAddLLCExpenseForm()" class="btn-secondary">Cancel</button>
                </div>
             </form>
+         </div>
+      </div>
+      <div id="expenseDetailModal" class="modal">
+         <div class="modal-content" style="max-width: 600px;">
+            <div class="flex justify-between items-center mb-6">
+               <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-receipt mr-2 text-purple-600"></i>Expense Details</h2>
+               <button onclick="closeExpenseDetailModal()" class="text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-times text-2xl"></i>
+               </button>
+            </div>
+            <div id="expenseDetailContent" class="space-y-4">
+               <!-- Content will be populated dynamically -->
+            </div>
+            <div class="mt-6 flex gap-3">
+               <button onclick="editExpenseFromDetail()" class="btn-primary flex-1">
+                  <i class="fas fa-edit mr-2"></i>Edit Expense
+               </button>
+               <button onclick="closeExpenseDetailModal()" class="btn-secondary">Close</button>
+            </div>
          </div>
       </div>
       <div id="monthlySummaryModal" class="modal">
@@ -1129,6 +1168,11 @@
          let currentReceiptData = null; // Store current receipt for editing
          let charts = { pie: null, llc: null, line: null, categoryMonthly: null, contributionsMonthly: null, contributionCoverage: null, yearComparison: null, categoryTrend: null, contributionTrend: null };
          
+         // Pagination variables
+         let currentPage = 1;
+         const itemsPerPage = 10;
+         let currentExpenseIdForDetail = null;
+         
          // Utility function for fetch with timeout and retry
          async function fetchWithRetry(url, options = {}, retries = 3, timeout = 10000) {
              for (let i = 0; i < retries; i++) {
@@ -1162,12 +1206,77 @@
              }
          }
          
+         // Auto-format currency input (1014 → 10.14 or 10.14 → 10.14)
+         function formatCurrencyInput(input) {
+             let value = input.value.trim();
+             
+             // Handle empty input - budget defaults to 0, others stay empty
+             if (value === '' || value === '0') {
+                 if (input.id === 'budget') {
+                     input.value = '0';
+                 } else {
+                     input.value = '';
+                 }
+                 return;
+             }
+             
+             // Check if user typed a decimal point (e.g., "10.14")
+             if (value.includes('.')) {
+                 // User entered decimal manually, just parse and format
+                 let numValue = parseFloat(value);
+                 if (!isNaN(numValue) && numValue > 0) {
+                     input.value = numValue.toFixed(2);
+                 } else if (input.id === 'budget') {
+                     input.value = '0';
+                 }
+                 return;
+             }
+             
+             // No decimal point, assume cents format (e.g., "1014" → "10.14")
+             let digitsOnly = value.replace(/[^\d]/g, '');
+             if (digitsOnly === '' || digitsOnly === '0') {
+                 if (input.id === 'budget') {
+                     input.value = '0';
+                 } else {
+                     input.value = '';
+                 }
+                 return;
+             }
+             
+             // Convert to number and divide by 100
+             let numValue = parseInt(digitsOnly, 10);
+             let formatted = (numValue / 100).toFixed(2);
+             
+             input.value = formatted;
+         }
+         
          document.addEventListener('DOMContentLoaded', function() {
              populateYearDropdown();
              loadData();
              loadProfilePictures();
              loadFixedExpenses();
              loadLLCExpenses();
+             
+             // Setup auto-formatting for currency inputs (on blur, not on every keystroke)
+             const currencyInputs = ['actual', 'budget', 'amarContributionInput', 'priyaContributionInput'];
+             currencyInputs.forEach(id => {
+                 const input = document.getElementById(id);
+                 if (input) {
+                     // Clear "0" from budget field on focus
+                     if (id === 'budget') {
+                         input.addEventListener('focus', function(e) {
+                             if (this.value === '0') {
+                                 this.value = '';
+                             }
+                         });
+                     }
+                     
+                     // Format when user finishes typing (leaves the field)
+                     input.addEventListener('blur', function(e) {
+                         formatCurrencyInput(this);
+                     });
+                 }
+             });
              
              // Pull-to-refresh functionality
              let touchStartY = 0;
@@ -1231,10 +1340,17 @@
                      pullToRefreshIndicator.style.transform = 'translateY(80px)';
                      
                      try {
+                         // Reload all data
                          await loadData();
                          await loadProfilePictures();
                          await loadFixedExpenses();
                          await loadLLCExpenses();
+                         
+                         // Force UI refresh
+                         renderExpenses();
+                         renderPayments();
+                         updateStats();
+                         
                          showNotification('Data refreshed successfully!', 'success');
                      } catch (error) {
                          showNotification('Failed to refresh data', 'error');
@@ -1488,6 +1604,7 @@
          }
          
          function filterByPeriod() {
+             currentPage = 1; // Reset to first page when filter changes
              renderExpenses();
              renderPayments();
              updateStats();
@@ -1549,6 +1666,7 @@
              document.getElementById('startDay').value = '';
              document.getElementById('endDay').value = '';
              document.getElementById('tagFilter').value = '';
+             currentPage = 1; // Reset to first page
              renderExpenses();
          }
          
@@ -1556,14 +1674,24 @@
              const container = document.getElementById('expensesList');
              if (expenses.length === 0) {
                  container.innerHTML = '<div class="text-center py-12 text-gray-400"><i class="fas fa-inbox text-4xl mb-3"></i><p>No expenses match your filters</p></div>';
+                 document.getElementById('paginationControls').style.display = 'none';
                  return;
              }
              
-             // Sort by date (newest first) - same as renderExpenses
+             // Sort by date (newest first), then by creation time (most recent first)
              const sortedExpenses = [...expenses].sort((a, b) => {
                  const dateA = `${a.fields.Year}-${String(a.fields.Month).padStart(2, '0')}-${String(a.fields.Day || 1).padStart(2, '0')}`;
                  const dateB = `${b.fields.Year}-${String(b.fields.Month).padStart(2, '0')}-${String(b.fields.Day || 1).padStart(2, '0')}`;
-                 return dateB.localeCompare(dateA);
+                 const dateCompare = dateB.localeCompare(dateA);
+                 
+                 // If dates are the same, sort by creation time (most recent first)
+                 if (dateCompare === 0) {
+                     const createdA = new Date(a.createdTime || 0);
+                     const createdB = new Date(b.createdTime || 0);
+                     return createdB - createdA;
+                 }
+                 
+                 return dateCompare;
              });
              
              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -1582,7 +1710,7 @@
                  const notesEscaped = hasNotes ? fields.Notes.replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
                  
                  return `
-                    <div class="expense-row">
+                    <div class="expense-row cursor-pointer hover:bg-gray-50" onclick="viewExpenseDetails('${expense.id}')" style="cursor: pointer;">
                         <div class="expense-item"><span class="expense-label">Item:</span><span class="font-semibold text-gray-800">${fields.Item || 'Unnamed'}${hasNotes ? ` <i class="fas fa-info-circle text-blue-500 cursor-pointer" title="${notesEscaped}"></i>` : ''}</span></div>
                         <div class="expense-item"><span class="expense-label">Category:</span><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">${fields.Category || 'N/A'}</span></div>
                         <div class="expense-item"><span class="expense-label">Date:</span><span class="text-gray-600">${dateDisplay}</span></div>
@@ -1592,8 +1720,8 @@
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
                         <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<a href="${fields.Receipt[0].url}" target="_blank" class="text-purple-600 hover:text-purple-800" title="View Receipt"><i class="fas fa-receipt text-xl"></i></a>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
-                            <button onclick="editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
-                            <button onclick="deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
+                            <button onclick="event.stopPropagation(); editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button onclick="event.stopPropagation(); deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
                         </div></div>
                     </div>
                  `;
@@ -1627,18 +1755,35 @@
              const filteredExpenses = getFilteredExpenses();
              if (filteredExpenses.length === 0) {
                  container.innerHTML = `<div class="text-center py-12 text-gray-400"><i class="fas fa-inbox text-6xl mb-4"></i><p class="text-lg">No expenses found</p><button onclick="openAddExpenseModal()" class="btn-primary mt-4"><i class="fas fa-plus mr-2"></i>Add Your First Expense</button></div>`;
+                 document.getElementById('paginationControls').style.display = 'none';
                  return;
              }
              
-             // Sort by date (newest first)
+             // Sort by date (newest first), then by creation time (most recent first)
              const sortedExpenses = [...filteredExpenses].sort((a, b) => {
                  const dateA = `${a.fields.Year}-${String(a.fields.Month).padStart(2, '0')}-${String(a.fields.Day || 1).padStart(2, '0')}`;
                  const dateB = `${b.fields.Year}-${String(b.fields.Month).padStart(2, '0')}-${String(b.fields.Day || 1).padStart(2, '0')}`;
-                 return dateB.localeCompare(dateA);
+                 const dateCompare = dateB.localeCompare(dateA);
+                 
+                 // If dates are the same, sort by creation time (most recent first)
+                 if (dateCompare === 0) {
+                     const createdA = new Date(a.createdTime || 0);
+                     const createdB = new Date(b.createdTime || 0);
+                     return createdB - createdA;
+                 }
+                 
+                 return dateCompare;
              });
              
+             // Pagination logic
+             const totalExpenses = sortedExpenses.length;
+             const totalPages = Math.ceil(totalExpenses / itemsPerPage);
+             const startIndex = (currentPage - 1) * itemsPerPage;
+             const endIndex = startIndex + itemsPerPage;
+             const paginatedExpenses = sortedExpenses.slice(startIndex, endIndex);
+             
              const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-             container.innerHTML = sortedExpenses.map(expense => {
+             container.innerHTML = paginatedExpenses.map(expense => {
                  const fields = expense.fields;
                  const budget = fields.Budget || 0;
                  const actual = fields.Actual || 0;
@@ -1652,7 +1797,7 @@
                  const notesEscaped = hasNotes ? fields.Notes.replace(/"/g, '&quot;').replace(/'/g, '&#39;') : '';
                 
                  return `
-                    <div class="expense-row">
+                    <div class="expense-row cursor-pointer hover:bg-gray-50" onclick="viewExpenseDetails('${expense.id}')" style="cursor: pointer;">
                         <div class="expense-item"><span class="expense-label">Item:</span><span class="font-semibold text-gray-800">${fields.Item || 'Unnamed'}${hasNotes ? ` <i class="fas fa-info-circle text-blue-500 cursor-pointer" title="${notesEscaped}"></i>` : ''}</span></div>
                         <div class="expense-item"><span class="expense-label">Category:</span><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">${fields.Category || 'N/A'}</span></div>
                         <div class="expense-item"><span class="expense-label">Date:</span><span class="text-gray-600">${dateDisplay}</span></div>
@@ -1662,12 +1807,173 @@
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
                         <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<a href="${fields.Receipt[0].url}" target="_blank" class="text-purple-600 hover:text-purple-800" title="View Receipt"><i class="fas fa-receipt text-xl"></i></a>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
-                            <button onclick="editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
-                            <button onclick="deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
+                            <button onclick="event.stopPropagation(); editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
+                            <button onclick="event.stopPropagation(); deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
                         </div></div>
                     </div>
-                `;
+                 `;
              }).join('');
+             
+             // Update pagination controls
+             updatePaginationControls(totalExpenses, totalPages);
+         }
+         
+         function updatePaginationControls(totalExpenses, totalPages) {
+             const paginationControls = document.getElementById('paginationControls');
+             const paginationInfo = document.getElementById('paginationInfo');
+             const prevBtn = document.getElementById('prevPageBtn');
+             const nextBtn = document.getElementById('nextPageBtn');
+             
+             if (totalExpenses <= itemsPerPage) {
+                 paginationControls.style.display = 'none';
+                 return;
+             }
+             
+             paginationControls.style.display = 'flex';
+             
+             const startItem = (currentPage - 1) * itemsPerPage + 1;
+             const endItem = Math.min(currentPage * itemsPerPage, totalExpenses);
+             paginationInfo.textContent = `${startItem}-${endItem} of ${totalExpenses} expenses`;
+             
+             // Update button states
+             prevBtn.disabled = currentPage === 1;
+             nextBtn.disabled = currentPage === totalPages;
+         }
+         
+         function changePage(direction) {
+             const filteredExpenses = getFilteredExpenses();
+             const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
+             
+             if (direction === 'prev' && currentPage > 1) {
+                 currentPage--;
+             } else if (direction === 'next' && currentPage < totalPages) {
+                 currentPage++;
+             }
+             
+             renderExpenses();
+             // Scroll to top of expenses list
+             document.getElementById('expensesList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+         }
+         
+         function viewExpenseDetails(expenseId) {
+             const expense = allExpenses.find(exp => exp.id === expenseId);
+             if (!expense) return;
+             
+             currentExpenseIdForDetail = expenseId;
+             const fields = expense.fields;
+             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+             
+             const budget = fields.Budget || 0;
+             const actual = fields.Actual || 0;
+             const variance = budget - actual;
+             const varianceClass = variance >= 0 ? 'text-green-600' : 'text-red-600';
+             const varianceIcon = variance >= 0 ? 'fa-arrow-down' : 'fa-arrow-up';
+             const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
+             const day = fields.Day || 1;
+             const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
+             
+             let detailHTML = `
+                 <div class="bg-purple-50 border-l-4 border-purple-500 p-4 mb-4">
+                     <h3 class="text-xl font-bold text-gray-800 mb-2">${fields.Item || 'Unnamed'}</h3>
+                     <p class="text-sm text-gray-600"><i class="fas fa-calendar mr-2"></i>${dateDisplay}</p>
+                 </div>
+                 
+                 <div class="grid grid-cols-2 gap-4 mb-4">
+                     <div class="bg-gray-50 p-4 rounded">
+                         <p class="text-xs text-gray-500 mb-1">Category</p>
+                         <p class="font-semibold text-gray-800"><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">${fields.Category || 'N/A'}</span></p>
+                     </div>
+                     <div class="bg-gray-50 p-4 rounded">
+                         <p class="text-xs text-gray-500 mb-1">LLC Account</p>
+                         <p class="font-semibold"><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></p>
+                     </div>
+                 </div>
+                 
+                 <div class="grid grid-cols-2 gap-4 mb-4">
+                     <div class="bg-blue-50 p-4 rounded">
+                         <p class="text-xs text-gray-500 mb-1">Budget Amount</p>
+                         <p class="text-2xl font-bold text-blue-600">$${budget.toFixed(2)}</p>
+                     </div>
+                     <div class="bg-purple-50 p-4 rounded">
+                         <p class="text-xs text-gray-500 mb-1">Actual Amount</p>
+                         <p class="text-2xl font-bold ${actual > budget ? 'text-red-600' : 'text-purple-600'}">$${actual.toFixed(2)}</p>
+                     </div>
+                 </div>
+                 
+                 <div class="bg-gray-50 p-4 rounded mb-4">
+                     <p class="text-xs text-gray-500 mb-1">Variance</p>
+                     <p class="text-xl font-bold ${varianceClass}">
+                         <i class="fas ${varianceIcon} mr-1"></i>$${Math.abs(variance).toFixed(2)}
+                         ${variance >= 0 ? ' (Under Budget)' : ' (Over Budget)'}
+                     </p>
+                 </div>
+             `;
+             
+             if (fields.Notes && fields.Notes.trim()) {
+                 detailHTML += `
+                     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                         <p class="text-xs text-gray-500 mb-1"><i class="fas fa-sticky-note mr-1"></i>Notes</p>
+                         <p class="text-gray-700">${fields.Notes}</p>
+                     </div>
+                 `;
+             }
+             
+             if (fields.Receipt && fields.Receipt.length > 0) {
+                 detailHTML += `
+                     <div class="bg-gray-50 p-4 rounded mb-4">
+                         <p class="text-xs text-gray-500 mb-2"><i class="fas fa-receipt mr-1"></i>Receipt</p>
+                         <a href="${fields.Receipt[0].url}" target="_blank" class="btn-primary inline-block">
+                             <i class="fas fa-external-link-alt mr-2"></i>View Receipt
+                         </a>
+                     </div>
+                 `;
+             }
+             
+             document.getElementById('expenseDetailContent').innerHTML = detailHTML;
+             document.getElementById('expenseDetailModal').classList.add('active');
+         }
+         
+         function closeExpenseDetailModal() {
+             document.getElementById('expenseDetailModal').classList.remove('active');
+             currentExpenseIdForDetail = null;
+         }
+         
+         function editExpenseFromDetail() {
+             try {
+                 console.log('editExpenseFromDetail called, ID:', currentExpenseIdForDetail);
+                 
+                 if (!currentExpenseIdForDetail) {
+                     console.error('No expense ID set!');
+                     alert('Error: No expense selected');
+                     return;
+                 }
+                 
+                 // IMPORTANT: Save the ID to a local variable BEFORE closing the modal
+                 // because closeExpenseDetailModal() sets currentExpenseIdForDetail to null
+                 const expenseId = currentExpenseIdForDetail;
+                 console.log('Saved expense ID:', expenseId);
+                 
+                 closeExpenseDetailModal();
+                 
+                 // Close monthly summary modal if open
+                 const summaryModal = document.getElementById('monthlySummaryModal');
+                 if (summaryModal) {
+                     summaryModal.classList.remove('active');
+                 }
+                 
+                 // Close any category expense modals that might be open (dynamically created)
+                 document.querySelectorAll('.modal.active').forEach(modal => {
+                     if (modal.style.zIndex === '10001') {
+                         modal.remove();
+                     }
+                 });
+                 
+                 console.log('About to call editExpense with ID:', expenseId);
+                 editExpense(expenseId);
+             } catch (error) {
+                 console.error('Error in editExpenseFromDetail:', error);
+                 alert('Error opening edit form: ' + error.message);
+             }
          }
          
          function renderPayments() {
@@ -1692,7 +1998,16 @@
              const sortedPayments = [...filteredPayments].sort((a, b) => {
                  const dateA = `${a.fields.Year}-${a.fields.Month}`;
                  const dateB = `${b.fields.Year}-${b.fields.Month}`;
-                 return dateB.localeCompare(dateA);
+                 const dateCompare = dateB.localeCompare(dateA);
+                 
+                 // If dates are the same, sort by creation time (most recent first)
+                 if (dateCompare === 0) {
+                     const createdA = new Date(a.createdTime || 0);
+                     const createdB = new Date(b.createdTime || 0);
+                     return createdB - createdA;
+                 }
+                 
+                 return dateCompare;
              });
              
              container.innerHTML = sortedPayments.map(payment => {
@@ -2691,6 +3006,7 @@
                      <table class="w-full">
                          <thead class="bg-gray-100">
                              <tr>
+                                 <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Item</th>
                                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Year</th>
                                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Month</th>
                                  <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Budget</th>
@@ -2701,21 +3017,25 @@
                          </thead>
                          <tbody>
                              ${sortedExpenses.map(exp => {
-                                 const budget = exp.fields.Budget || 0;
-                                 const actual = exp.fields.Actual || 0;
-                                 const variance = budget - actual;
-                                 const monthDisplay = exp.fields.Month ? monthNames[parseInt(exp.fields.Month) - 1] : 'N/A';
-                                 return `
-                                     <tr class="border-b hover:bg-gray-50">
-                                         <td class="px-4 py-3 text-sm">${exp.fields.Year || 'N/A'}</td>
-                                         <td class="px-4 py-3 text-sm">${monthDisplay}</td>
-                                         <td class="px-4 py-3 text-sm font-semibold">$${budget.toFixed(2)}</td>
-                                         <td class="px-4 py-3 text-sm font-semibold ${actual > budget ? 'text-red-600' : 'text-gray-700'}">$${actual.toFixed(2)}</td>
-                                         <td class="px-4 py-3 text-sm font-semibold ${variance >= 0 ? 'text-green-600' : 'text-red-600'}">$${Math.abs(variance).toFixed(2)}</td>
-                                         <td class="px-4 py-3 text-sm"><span class="badge ${exp.fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${exp.fields.LLC || 'No'}</span></td>
-                                     </tr>
-                                 `;
-                             }).join('')}
+                                const budget = exp.fields.Budget || 0;
+                                const actual = exp.fields.Actual || 0;
+                                const variance = budget - actual;
+                                const monthDisplay = exp.fields.Month ? monthNames[parseInt(exp.fields.Month) - 1] : 'N/A';
+                                const itemName = exp.fields.Item || 'Unnamed';
+                                return `
+                                    <tr class="border-b hover:bg-purple-50 cursor-pointer" 
+                                        onclick="viewExpenseDetails('${exp.id}')" 
+                                        style="cursor: pointer;">
+                                        <td class="px-4 py-3 text-sm font-semibold text-gray-800">${itemName}</td>
+                                        <td class="px-4 py-3 text-sm">${exp.fields.Year || 'N/A'}</td>
+                                        <td class="px-4 py-3 text-sm">${monthDisplay}</td>
+                                        <td class="px-4 py-3 text-sm font-semibold">$${budget.toFixed(2)}</td>
+                                        <td class="px-4 py-3 text-sm font-semibold ${actual > budget ? 'text-red-600' : 'text-gray-700'}">$${actual.toFixed(2)}</td>
+                                        <td class="px-4 py-3 text-sm font-semibold ${variance >= 0 ? 'text-green-600' : 'text-red-600'}">$${Math.abs(variance).toFixed(2)}</td>
+                                        <td class="px-4 py-3 text-sm"><span class="badge ${exp.fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${exp.fields.LLC || 'No'}</span></td>
+                                    </tr>
+                                `;
+                            }).join('')}
                          </tbody>
                      </table>
                  </div>
@@ -2981,8 +3301,13 @@
          }
          
          async function editExpense(id) {
+             console.log('editExpense called with ID:', id);
              const expense = allExpenses.find(exp => exp.id === id);
-             if (!expense) return;
+             if (!expense) {
+                 console.error('Expense not found for ID:', id);
+                 return;
+             }
+             console.log('Found expense:', expense);
              document.getElementById('modalTitle').textContent = 'Edit Expense';
              document.getElementById('recordId').value = id;
              document.getElementById('itemName').value = expense.fields.Item || '';
@@ -3010,17 +3335,34 @@
                  document.getElementById('currentReceipt').style.display = 'none';
              }
              
-             document.getElementById('expenseModal').classList.add('active');
+             console.log('Opening expense modal...');
+             const modal = document.getElementById('expenseModal');
+             console.log('Modal element:', modal);
+             modal.classList.add('active');
+             console.log('Modal opened, classes:', modal.className);
          }
+         
+         // Flag to prevent duplicate submissions
+         let isSavingExpense = false;
          
          async function saveExpense(event) {
              event.preventDefault();
+             
+             // Prevent duplicate submissions
+             if (isSavingExpense) {
+                 console.log('Already saving expense, ignoring duplicate submission');
+                 return;
+             }
+             
+             // Set flag to prevent concurrent submissions
+             isSavingExpense = true;
              
              // Validate actual amount
              const actualAmount = parseFloat(document.getElementById('actual').value);
              if (!actualAmount || actualAmount <= 0) {
                  showNotification('Please enter a valid actual amount', 'error');
                  document.getElementById('actual').focus();
+                 isSavingExpense = false; // Reset flag
                  return;
              }
              
@@ -3037,6 +3379,7 @@
                  const contributionChoice = await showContributionHelper(actualAmount, amarContribution, priyaContribution);
                  
                  if (contributionChoice === 'cancel') {
+                     isSavingExpense = false; // Reset flag
                      return; // User cancelled
                  } else if (contributionChoice === 'amar') {
                      // Amar pays full amount
@@ -3068,6 +3411,7 @@
              if (budgetAmount <= 0) {
                  const budgetChoice = await showBudgetConfirmation(actualAmount);
                  if (budgetChoice === 'cancel') {
+                     isSavingExpense = false; // Reset flag
                      return; // User cancelled
                  } else if (budgetChoice === 'useSame') {
                      // Set budget to actual amount
@@ -3106,6 +3450,7 @@
                          const confirmed = await showSimilarItemWarning(fields.Item, similarItems);
                          if (!confirmed) {
                              if (submitBtn) setButtonLoading(submitBtn, false);
+                             isSavingExpense = false; // Reset flag
                              return; // User cancelled
                          }
                      }
@@ -3118,6 +3463,7 @@
                          const confirmed = await showDuplicateConfirmation(duplicates, fields);
                          if (!confirmed) {
                              if (submitBtn) setButtonLoading(submitBtn, false);
+                             isSavingExpense = false; // Reset flag
                              return; // User cancelled
                          }
                      }
@@ -3139,6 +3485,7 @@
                  showNotification('Error saving expense: ' + error.message, 'error');
              } finally {
                  if (submitBtn) setButtonLoading(submitBtn, false);
+                 isSavingExpense = false; // Always reset flag when done
              }
          }
          
@@ -4072,6 +4419,9 @@
                      </div>
                  `;
              }).join('');
+             
+             // Update pagination controls
+             updatePaginationControls(totalExpenses, totalPages);
          }
          
          async function saveLLCExpense(event) {
@@ -4181,11 +4531,20 @@
                  return expYear === year && expMonth === month && expCategory === category;
              });
              
-             // Sort by date (most recent first)
+             // Sort by date (most recent first), then by creation time (most recent first)
              categoryExpenses.sort((a, b) => {
                  const dateA = new Date(a.fields.Year, a.fields.Month - 1, a.fields.Day || 1);
                  const dateB = new Date(b.fields.Year, b.fields.Month - 1, b.fields.Day || 1);
-                 return dateB - dateA;
+                 const dateCompare = dateB - dateA;
+                 
+                 // If dates are the same, sort by creation time (most recent first)
+                 if (dateCompare === 0) {
+                     const createdA = new Date(a.createdTime || 0);
+                     const createdB = new Date(b.createdTime || 0);
+                     return createdB - createdA;
+                 }
+                 
+                 return dateCompare;
              });
              
              const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -4239,40 +4598,42 @@
                              console.log('Expense:', item, 'Day field:', day, 'Type:', typeof day, 'Display:', dateDisplay);
                              
                              return `
-                                 <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                                     <div class="flex justify-between items-start mb-2">
-                                         <div class="flex-1">
-                                             <div class="font-semibold text-gray-800 flex items-center gap-2">
-                                                 ${item}
-                                                 ${llc ? '<span class="badge badge-llc text-xs">LLC</span>' : ''}
-                                             </div>
-                                             <div class="text-sm text-gray-600 mt-1">
-                                                 <i class="fas fa-calendar mr-1"></i>${dateDisplay}
-                                             </div>
-                                         </div>
-                                         <div class="text-right">
-                                             <div class="text-xl font-bold text-purple-600">$${actual.toFixed(2)}</div>
-                                         </div>
-                                     </div>
-                                     
-                                     <div class="flex gap-4 text-xs text-gray-600 mt-3 pt-3 border-t border-gray-100">
-                                         <div class="flex items-center gap-1">
-                                             <i class="fas fa-user text-blue-500"></i>
-                                             <span>Amar: $${amarContrib.toFixed(2)}</span>
-                                         </div>
-                                         <div class="flex items-center gap-1">
-                                             <i class="fas fa-user text-pink-500"></i>
-                                             <span>Priya: $${priyaContrib.toFixed(2)}</span>
-                                         </div>
-                                     </div>
-                                     
-                                     ${notes && notes.trim() !== '' ? `
-                                         <div class="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                                             <i class="fas fa-sticky-note mr-1"></i>${notes}
-                                         </div>
-                                     ` : ''}
-                                 </div>
-                             `;
+                                <div class="border border-gray-200 rounded-lg p-4 hover:bg-purple-50 transition-colors cursor-pointer" 
+                                     onclick="viewExpenseDetails('${exp.id}')" 
+                                     style="cursor: pointer;">
+                                    <div class="flex justify-between items-start mb-2">
+                                        <div class="flex-1">
+                                            <div class="font-semibold text-gray-800 flex items-center gap-2">
+                                                ${item}
+                                                ${llc ? '<span class="badge badge-llc text-xs">LLC</span>' : ''}
+                                            </div>
+                                            <div class="text-sm text-gray-600 mt-1">
+                                                <i class="fas fa-calendar mr-1"></i>${dateDisplay}
+                                            </div>
+                                        </div>
+                                        <div class="text-right">
+                                            <div class="text-xl font-bold text-purple-600">$${actual.toFixed(2)}</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex gap-4 text-xs text-gray-600 mt-3 pt-3 border-t border-gray-100">
+                                        <div class="flex items-center gap-1">
+                                            <i class="fas fa-user text-blue-500"></i>
+                                            <span>Amar: $${amarContrib.toFixed(2)}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <i class="fas fa-user text-pink-500"></i>
+                                            <span>Priya: $${priyaContrib.toFixed(2)}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    ${notes && notes.trim() !== '' ? `
+                                        <div class="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                                            <i class="fas fa-sticky-note mr-1"></i>${notes}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `;
                          }).join('')}
                      </div>
                      
