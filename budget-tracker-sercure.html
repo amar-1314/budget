@@ -135,12 +135,238 @@
             .tab-button { padding: 12px 24px; font-size: 14px; }
          }
          @media (max-width: 767px) {
-            .modal-content { padding: 20px; }
+            .modal-content { padding: 20px; max-width: 100%; width: 95%; }
             .chart-container { height: 250px; }
             .stat-card { padding: 16px; }
             .tab-button { padding: 10px 12px; font-size: 13px; }
             .input-field { font-size: 16px; }
             body { padding-bottom: 80px; }
+            
+            /* Budget Manager Mobile Styles */
+            #budgetManagerModal .modal-content { max-width: 100%; width: 98%; margin: 10px; padding: 16px; max-height: 95vh; overflow-y: auto; }
+            #budgetManagerModal .overflow-x-auto { overflow-x: visible; max-height: 60vh; overflow-y: auto; }
+            #budgetManagerModal table { display: block; border: none; }
+            #budgetManagerModal thead { display: none; }
+            #budgetManagerModal tfoot { display: none; }
+            #budgetTableBody { display: block !important; width: 100%; padding: 0; margin: 0; }
+            #budgetTableBody tr { display: none !important; } /* Hide desktop table rows on mobile */
+            #budgetTableBody tr.no-categories-row { display: none !important; } /* Hide desktop no-categories message on mobile */
+            .budget-card { display: block !important; background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 4px solid #667eea; }
+            .budget-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb; }
+            .budget-card-category { font-size: 16px; font-weight: 700; color: #1f2937; }
+            .budget-card-recurring { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6b7280; }
+            .budget-card-body { display: grid; gap: 12px; }
+            .budget-card-row { display: flex; justify-content: space-between; align-items: center; }
+            .budget-card-label { font-size: 12px; font-weight: 600; color: #6b7280; text-transform: uppercase; }
+            .budget-card-value { font-size: 14px; font-weight: 600; color: #1f2937; }
+            .budget-card-input { width: 100%; max-width: 200px; }
+            .budget-card-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
+            .budget-card-delete { background: #fee; color: #dc2626; padding: 8px 16px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; flex: 1; }
+            .budget-rollover { font-size: 11px; color: #059669; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+            .budget-total-mobile { display: block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 12px; padding: 16px; margin: 16px 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            .budget-total-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+            .budget-total-row:last-child { margin-bottom: 0; }
+            .budget-total-label { font-size: 12px; font-weight: 600; opacity: 0.9; }
+            .budget-total-value { font-size: 18px; font-weight: 700; }
+            
+            /* Modal header adjustments */
+            #budgetManagerModal h2 { font-size: 18px; }
+            #budgetManagerModal .mb-6.flex.items-center.gap-4 { 
+                flex-direction: column; 
+                gap: 12px; 
+                align-items: stretch;
+            }
+            #budgetManagerModal .mb-6.flex.items-center.gap-4 > div {
+                width: 100%;
+            }
+            #budgetManagerModal select { 
+                font-size: 16px; 
+                padding: 12px; 
+                width: 100%;
+            }
+            
+            /* Tip box on mobile */
+            #budgetManagerModal .flex-1.p-3 {
+                font-size: 13px;
+                padding: 12px !important;
+            }
+            #budgetManagerModal .flex-1.p-3 .text-sm {
+                font-size: 13px;
+            }
+            
+            /* Bottom buttons on mobile */
+            #budgetManagerModal .mt-6.flex.gap-3 { 
+                flex-direction: column; 
+                gap: 12px; 
+                position: sticky;
+                bottom: 0;
+                background: white;
+                padding: 12px 0;
+                margin-top: 16px;
+            }
+            #budgetManagerModal .mt-6.flex.gap-3 button {
+                width: 100%;
+                padding: 14px;
+            }
+            
+            /* Hide desktop table footer on mobile */
+            #budgetManagerModal tfoot { display: none; }
+            
+            /* Filters Tab Mobile Styles */
+            #categoryTab .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3 {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+            #categoryTab .flex.gap-3 {
+                flex-direction: column;
+                gap: 12px;
+            }
+            #categoryTab .flex.gap-3 button {
+                width: 100%;
+                padding: 12px;
+            }
+            #categoryTab h3 {
+                font-size: 18px;
+            }
+            #categoryTab p {
+                font-size: 14px;
+            }
+            
+            /* Stat cards mobile optimization */
+            .stat-card { font-size: 14px; }
+            .stat-card h3 { font-size: 12px; }
+            .stat-card .text-4xl { font-size: 28px !important; }
+            .stat-card .text-2xl { font-size: 20px !important; }
+            
+            /* Grid adjustments */
+            .grid { gap: 12px; }
+            
+            /* Button adjustments */
+            .btn-primary, .btn-secondary { padding: 10px 16px; font-size: 14px; }
+            
+            /* Chart titles */
+            h3.text-lg { font-size: 16px !important; }
+            h2.text-2xl { font-size: 20px !important; }
+            
+            /* Contribution modal optimization */
+            #contributionModal .modal-content { width: 95%; padding: 16px; }
+            #contributionModal h2 { font-size: 18px; }
+            #contributionModal .text-4xl { font-size: 28px !important; }
+            
+            /* Fixed expenses modal */
+            #fixedExpensesModal .modal-content { width: 95%; padding: 16px; }
+            #fixedExpensesModal table { font-size: 13px; }
+            
+            /* Search and filter controls */
+            .input-field { font-size: 16px !important; padding: 10px 12px; }
+            select.input-field { font-size: 16px !important; }
+            
+            /* Notification adjustments */
+            .notification { left: 10px; right: 10px; font-size: 13px; padding: 12px; }
+            
+            /* Prevent zoom on input focus for iOS */
+            input[type="text"], input[type="number"], input[type="tel"], textarea, select {
+                font-size: 16px !important;
+            }
+         }
+         
+         /* Desktop Budget Manager Styles */
+         @media (min-width: 768px) {
+            .budget-card { display: none !important; }
+            .budget-total-mobile { display: none !important; }
+            #budgetManagerModal table { display: table; }
+            #budgetManagerModal thead { display: table-header-group; }
+            #budgetManagerModal tfoot { display: table-footer-group; }
+            #budgetTableBody { display: table-row-group; }
+            #budgetTableBody tr { display: table-row; }
+            #budgetTableBody tr.no-categories-row { display: table-row !important; }
+            #budgetTableBody > div.budget-card { display: none !important; } /* Hide mobile no-categories on desktop */
+         }
+         
+         /* Custom Multi-Select Dropdown with Checkboxes */
+         .custom-dropdown {
+            position: relative;
+            width: 100%;
+         }
+         .custom-dropdown-button {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+         }
+         .custom-dropdown-button:hover {
+            border-color: #667eea;
+         }
+         .custom-dropdown-button.active {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+         }
+         .custom-dropdown-content {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            margin-top: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+         }
+         .custom-dropdown-content.show {
+            display: block;
+            animation: dropdownFadeIn 0.2s ease;
+         }
+         @keyframes dropdownFadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+         }
+         .custom-dropdown-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: background 0.2s ease;
+         }
+         .custom-dropdown-item:hover {
+            background: #f3f4f6;
+         }
+         .custom-dropdown-item input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #667eea;
+         }
+         .custom-dropdown-item label {
+            cursor: pointer;
+            flex: 1;
+            user-select: none;
+         }
+         .custom-dropdown-selected {
+            color: #667eea;
+            font-weight: 500;
+         }
+         .custom-dropdown-placeholder {
+            color: #9ca3af;
+         }
+         .custom-dropdown-count {
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
          }
       </style>
    </head>
@@ -393,7 +619,7 @@
          </div>
          <div class="card mb-8">
             <div class="border-b border-gray-200 px-3 md:px-6 overflow-x-auto">
-               <div class="flex gap-2 min-w-max"><button class="tab-button active" onclick="switchTab('expenses')"><i class="fas fa-list mr-1 md:mr-2"></i><span class="hidden md:inline">Expenses</span><span class="md:hidden">List</span></button><button class="tab-button" onclick="switchTab('payments')"><i class="fas fa-hand-holding-usd mr-1 md:mr-2"></i><span class="hidden md:inline">Payments</span><span class="md:hidden">Pay</span></button><button class="tab-button" onclick="switchTab('category')"><i class="fas fa-filter mr-1 md:mr-2"></i><span class="hidden md:inline">Category</span><span class="md:hidden">Cat</span></button><button class="tab-button" onclick="switchTab('analytics')"><i class="fas fa-chart-pie mr-1 md:mr-2"></i><span class="hidden md:inline">Analytics</span><span class="md:hidden">Charts</span></button><button class="tab-button" onclick="switchTab('trends')"><i class="fas fa-chart-line mr-1 md:mr-2"></i>Trends</button><button class="tab-button" onclick="switchTab('insights')"><i class="fas fa-lightbulb mr-1 md:mr-2"></i>Insights</button></div>
+               <div class="flex gap-2 min-w-max"><button class="tab-button active" onclick="switchTab('expenses')"><i class="fas fa-list mr-1 md:mr-2"></i><span class="hidden md:inline">Expenses</span><span class="md:hidden">List</span></button><button class="tab-button" onclick="switchTab('payments')"><i class="fas fa-hand-holding-usd mr-1 md:mr-2"></i><span class="hidden md:inline">Payments</span><span class="md:hidden">Pay</span></button><button class="tab-button" onclick="switchTab('category')"><i class="fas fa-filter mr-1 md:mr-2"></i>Filters</button><button class="tab-button" onclick="switchTab('analytics')"><i class="fas fa-chart-pie mr-1 md:mr-2"></i><span class="hidden md:inline">Analytics</span><span class="md:hidden">Charts</span></button><button class="tab-button" onclick="switchTab('trends')"><i class="fas fa-chart-line mr-1 md:mr-2"></i>Trends</button><button class="tab-button" onclick="switchTab('insights')"><i class="fas fa-lightbulb mr-1 md:mr-2"></i>Insights</button></div>
             </div>
             <div id="expensesTab" class="p-3 md:p-6">
                <div class="mb-4 space-y-3">
@@ -487,33 +713,148 @@
             </div>
             <div id="categoryTab" class="p-6" style="display: none;">
                <div class="mb-6">
-                  <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-filter mr-2 text-purple-500"></i>Select Category to Analyze</h3>
-                  <select id="categorySelector" onchange="updateCategoryAnalysis()" class="input-field w-full max-w-md">
-                     <option value="">Choose an expense category...</option>
-                  </select>
+                  <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                     <i class="fas fa-filter text-purple-600"></i>
+                     Filter Expenses
+                  </h3>
+                  <p class="text-sm text-gray-600 mb-6">Select filters below to view specific expenses. Tags will update based on selected category.</p>
+                  
+                  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                     <!-- Year Filter -->
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                           <i class="fas fa-calendar text-green-600 mr-1"></i>Year
+                        </label>
+                        <select id="filterYear" onchange="updateFilteredView()" class="input-field w-full">
+                           <option value="">All Years</option>
+                        </select>
+                     </div>
+                     
+                     <!-- Month Filter - Custom Multi-Select -->
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                           <i class="fas fa-calendar-alt text-teal-600 mr-1"></i>Month
+                        </label>
+                        <div class="custom-dropdown" id="monthDropdown">
+                           <button type="button" class="custom-dropdown-button" onclick="toggleDropdown('monthDropdown')">
+                              <span id="monthDropdownText" class="custom-dropdown-placeholder">Select months...</span>
+                              <i class="fas fa-chevron-down"></i>
+                           </button>
+                           <div class="custom-dropdown-content" id="monthDropdownContent">
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_01" value="01" onchange="updateMonthSelection()">
+                                 <label for="month_01">January</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_02" value="02" onchange="updateMonthSelection()">
+                                 <label for="month_02">February</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_03" value="03" onchange="updateMonthSelection()">
+                                 <label for="month_03">March</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_04" value="04" onchange="updateMonthSelection()">
+                                 <label for="month_04">April</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_05" value="05" onchange="updateMonthSelection()">
+                                 <label for="month_05">May</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_06" value="06" onchange="updateMonthSelection()">
+                                 <label for="month_06">June</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_07" value="07" onchange="updateMonthSelection()">
+                                 <label for="month_07">July</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_08" value="08" onchange="updateMonthSelection()">
+                                 <label for="month_08">August</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_09" value="09" onchange="updateMonthSelection()">
+                                 <label for="month_09">September</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_10" value="10" onchange="updateMonthSelection()">
+                                 <label for="month_10">October</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_11" value="11" onchange="updateMonthSelection()">
+                                 <label for="month_11">November</label>
+                              </div>
+                              <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                 <input type="checkbox" id="month_12" value="12" onchange="updateMonthSelection()">
+                                 <label for="month_12">December</label>
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+                     
+                     <!-- Category Filter - Custom Multi-Select -->
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                           <i class="fas fa-tag text-purple-600 mr-1"></i>Category
+                        </label>
+                        <div class="custom-dropdown" id="categoryDropdown">
+                           <button type="button" class="custom-dropdown-button" onclick="toggleDropdown('categoryDropdown')">
+                              <span id="categoryDropdownText" class="custom-dropdown-placeholder">Select categories...</span>
+                              <i class="fas fa-chevron-down"></i>
+                           </button>
+                           <div class="custom-dropdown-content" id="categoryDropdownContent">
+                              <!-- Categories will be populated dynamically -->
+                           </div>
+                        </div>
+                     </div>
+                     
+                     <!-- Tag Filter - Custom Multi-Select -->
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                           <i class="fas fa-tags text-blue-600 mr-1"></i>Tag
+                        </label>
+                        <div class="custom-dropdown" id="tagDropdown">
+                           <button type="button" class="custom-dropdown-button" onclick="toggleDropdown('tagDropdown')">
+                              <span id="tagDropdownText" class="custom-dropdown-placeholder">Select tags...</span>
+                              <i class="fas fa-chevron-down"></i>
+                           </button>
+                           <div class="custom-dropdown-content" id="tagDropdownContent">
+                              <!-- Tags will be populated dynamically -->
+                           </div>
+                        </div>
+                     </div>
+                     
+                     <!-- Contributor Filter -->
+                     <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">
+                           <i class="fas fa-user text-pink-600 mr-1"></i>Contributor
+                        </label>
+                        <select id="filterContributor" onchange="updateFilteredView()" class="input-field w-full">
+                           <option value="">All Contributors</option>
+                           <option value="Amar">Amar</option>
+                           <option value="Priya">Priya</option>
+                           <option value="Both">Both (Split)</option>
+                        </select>
+                     </div>
+                  </div>
+                  
+                  <div class="flex gap-3 mb-6">
+                     <button onclick="clearAllFilters()" class="btn-secondary flex-1">
+                        <i class="fas fa-times mr-2"></i>Clear All Filters
+                     </button>
+                     <button onclick="applyFiltersToExpensesTab()" class="btn-primary flex-1">
+                        <i class="fas fa-list mr-2"></i>View in Expenses Tab
+                     </button>
+                  </div>
                </div>
-               <div id="categoryStats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6" style="display: none;">
-                  <div class="card p-6 text-center">
-                     <div class="text-gray-500 text-sm mb-2">Total Spent</div>
-                     <div class="text-3xl font-bold text-purple-600" id="categoryTotal">$0</div>
-                  </div>
-                  <div class="card p-6 text-center">
-                     <div class="text-gray-500 text-sm mb-2">Monthly Average</div>
-                     <div class="text-3xl font-bold text-blue-600" id="categoryAvg">$0</div>
-                  </div>
-                  <div class="card p-6 text-center">
-                     <div class="text-gray-500 text-sm mb-2">Number of Entries</div>
-                     <div class="text-3xl font-bold text-green-600" id="categoryCount">0</div>
-                  </div>
-               </div>
-               <div id="categoryChartContainer" style="display: none;">
-                  <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-chart-line mr-2 text-green-500"></i>Monthly Trend for Selected Category</h3>
-                  <div class="chart-container" style="height: 400px;">
-                     <canvas id="categoryTrendChart"></canvas>
-                  </div>
-                  <div class="mt-6">
-                     <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-table mr-2 text-blue-500"></i>Detailed Breakdown</h3>
-                     <div id="categoryDetails"></div>
+               
+               <!-- Filter Results -->
+               <div id="filterResults">
+                  <div class="text-center py-12 text-gray-400">
+                     <i class="fas fa-filter text-6xl mb-4"></i>
+                     <p class="text-lg font-semibold">Select filters above to view results</p>
+                     <p class="text-sm mt-2">Choose year, month, category, tag, or contributor to get started</p>
                   </div>
                </div>
             </div>
@@ -624,8 +965,9 @@
                   <datalist id="itemList"></datalist>
                </div>
                <div class="mb-4">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label><input type="text" id="category" class="input-field" list="categoryList" autocomplete="off" required placeholder="e.g., Grocery, Gas, Utilities">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label><input type="text" id="category" class="input-field" list="categoryList" autocomplete="off" required placeholder="e.g., Grocery, Gas, Utilities" onblur="this.value = formatCategory(this.value)">
                   <datalist id="categoryList"></datalist>
+                  <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Will be formatted as Title Case (e.g., "gas" → "Gas")</p>
                </div>
                <div class="grid grid-cols-3 gap-4 mb-4">
                   <div><label class="block text-sm font-semibold text-gray-700 mb-2">Year</label><select id="year" class="input-field" required></select></div>
@@ -662,9 +1004,9 @@
                </div>
                <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2"><i class="fas fa-tags mr-2 text-purple-500"></i>Tags</label>
-                  <input type="text" id="tags" class="input-field" list="tagsList" autocomplete="off" placeholder="e.g., vacation, emergency, gift (comma-separated)">
+                  <input type="text" id="tags" class="input-field" list="tagsList" autocomplete="off" placeholder="e.g., vacation, emergency, gift (comma-separated)" onblur="this.value = formatTags(this.value)">
                   <datalist id="tagsList"></datalist>
-                  <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Add tags to categorize expenses (separate with commas)</p>
+                  <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Will be formatted as lowercase-with-hyphens (e.g., "Dining Out" → "dining-out")</p>
                </div>
                <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2"><i class="fas fa-sticky-note mr-2 text-purple-500"></i>Notes</label>
@@ -1189,7 +1531,7 @@
                   <button onclick="applyAdvancedFilters()" class="btn-primary">
                      <i class="fas fa-filter mr-2"></i>Apply Filters
                   </button>
-                  <button onclick="clearAllFilters()" class="btn-secondary">
+                  <button onclick="clearSearchFilters()" class="btn-secondary">
                      <i class="fas fa-times mr-2"></i>Clear All
                   </button>
                </div>
@@ -1205,6 +1547,8 @@
          </div>
       </div>
       <script>
+         console.log('🎬 SCRIPT STARTING TO LOAD...');
+         
          // Airtable Configuration - Multiple storage methods for reliability
          const TABLE_NAME = 'Budget';
          const PAYMENTS_TABLE = 'Payments';
@@ -1340,6 +1684,34 @@
          }
          
          document.addEventListener('DOMContentLoaded', function() {
+             console.log('🚀 DOMContentLoaded - Page initialized');
+             console.log('🔍 Checking if clearAllFilters function exists:', typeof clearAllFilters);
+             console.log('🔍 clearAllFilters is:', clearAllFilters);
+             
+             // Test button click
+             const clearBtn = document.querySelector('button[onclick="clearAllFilters()"]');
+             console.log('🔍 Clear All Filters button found:', clearBtn ? 'YES' : 'NO');
+             if (clearBtn) {
+                 console.log('   Button text:', clearBtn.textContent.trim());
+                 console.log('   Button onclick:', clearBtn.getAttribute('onclick'));
+                 
+                 // Add backup event listener
+                 console.log('🔧 Adding backup click event listener...');
+                 clearBtn.addEventListener('click', function(e) {
+                     console.log('🖱️ BUTTON CLICKED via addEventListener!');
+                     e.preventDefault();
+                     e.stopPropagation();
+                     
+                     if (typeof clearAllFilters === 'function') {
+                         console.log('✅ Calling clearAllFilters() function...');
+                         clearAllFilters();
+                     } else {
+                         console.error('❌ clearAllFilters is not a function!', typeof clearAllFilters);
+                     }
+                 });
+                 console.log('✅ Backup event listener added');
+             }
+             
              populateYearDropdown();
              loadData();
              loadProfilePictures();
@@ -1636,6 +2008,7 @@
                  populateItemDatalist();
                  populateTagsDatalist();
                  updateTagFilterDropdown();
+                 populateFilterDropdowns(); // Populate new Filters tab dropdowns
                  renderExpenses();
                  renderPayments();
                  updateStats();
@@ -1979,11 +2352,7 @@
              const fields = expense.fields;
              const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
              
-             const budget = fields.Budget || 0;
              const actual = fields.Actual || 0;
-             const variance = budget - actual;
-             const varianceClass = variance >= 0 ? 'text-green-600' : 'text-red-600';
-             const varianceIcon = variance >= 0 ? 'fa-arrow-down' : 'fa-arrow-up';
              const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
              const day = fields.Day || 1;
              const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
@@ -2005,27 +2374,62 @@
                      </div>
                  </div>
                  
-                 <div class="grid grid-cols-2 gap-4 mb-4">
-                     <div class="bg-blue-50 p-4 rounded">
-                         <p class="text-xs text-gray-500 mb-1">Budget Amount</p>
-                         <p class="text-2xl font-bold text-blue-600">$${budget.toFixed(2)}</p>
-                     </div>
-                     <div class="bg-purple-50 p-4 rounded">
-                         <p class="text-xs text-gray-500 mb-1">Actual Amount</p>
-                         <p class="text-2xl font-bold ${actual > budget ? 'text-red-600' : 'text-purple-600'}">$${actual.toFixed(2)}</p>
-                     </div>
-                 </div>
-                 
-                 <div class="bg-gray-50 p-4 rounded mb-4">
-                     <p class="text-xs text-gray-500 mb-1">Variance</p>
-                     <p class="text-xl font-bold ${varianceClass}">
-                         <i class="fas ${varianceIcon} mr-1"></i>$${Math.abs(variance).toFixed(2)}
-                         ${variance >= 0 ? ' (Under Budget)' : ' (Over Budget)'}
-                     </p>
+                 <div class="bg-purple-50 p-4 rounded mb-4">
+                     <p class="text-xs text-gray-500 mb-1">Amount</p>
+                     <p class="text-3xl font-bold text-purple-600">$${actual.toFixed(2)}</p>
                  </div>
              `;
-             
-             if (fields.Notes && fields.Notes.trim()) {
+            
+            // Show contributor details - only show those who contributed
+            const amarContrib = fields.AmarContribution || 0;
+            const priyaContrib = fields.PriyaContribution || 0;
+            const hasAmarContrib = amarContrib > 0;
+            const hasPriyaContrib = priyaContrib > 0;
+            
+            if (hasAmarContrib || hasPriyaContrib) {
+                const gridCols = (hasAmarContrib && hasPriyaContrib) ? 'grid-cols-2' : 'grid-cols-1';
+                detailHTML += `<div class="grid ${gridCols} gap-4 mb-4">`;
+                
+                if (hasAmarContrib) {
+                    detailHTML += `
+                        <div class="bg-blue-50 p-4 rounded border-l-4 border-blue-500">
+                            <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Amar's Contribution</p>
+                            <p class="text-2xl font-bold text-blue-600">$${amarContrib.toFixed(2)}</p>
+                        </div>
+                    `;
+                }
+                
+                if (hasPriyaContrib) {
+                    detailHTML += `
+                        <div class="bg-pink-50 p-4 rounded border-l-4 border-pink-500">
+                            <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Priya's Contribution</p>
+                            <p class="text-2xl font-bold text-pink-600">$${priyaContrib.toFixed(2)}</p>
+                        </div>
+                    `;
+                }
+                
+                detailHTML += `</div>`;
+            }
+            
+            if (fields.Tags && fields.Tags.trim()) {
+                const tagsArray = fields.Tags.split(',').map(t => t.trim()).filter(t => t);
+                if (tagsArray.length > 0) {
+                    detailHTML += `
+                        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+                            <p class="text-xs text-gray-500 mb-2"><i class="fas fa-tags mr-1"></i>Tags</p>
+                            <div class="flex flex-wrap gap-2">
+                                ${tagsArray.map(tag => `
+                                    <span class="inline-block px-3 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full text-xs font-medium">
+                                        <i class="fas fa-tag mr-1"></i>${tag}
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            if (fields.Notes && fields.Notes.trim()) {
                  detailHTML += `
                      <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
                          <p class="text-xs text-gray-500 mb-1"><i class="fas fa-sticky-note mr-1"></i>Notes</p>
@@ -3326,13 +3730,810 @@
              `;
          }
          
-         function switchTab(tab) {
+         // ===== FILTERS TAB FUNCTIONS =====
+         
+         // Custom Dropdown Functions
+         function toggleDropdown(dropdownId) {
+             const dropdown = document.getElementById(dropdownId);
+             const content = dropdown.querySelector('.custom-dropdown-content');
+             const button = dropdown.querySelector('.custom-dropdown-button');
+             
+             // Close all other dropdowns
+             document.querySelectorAll('.custom-dropdown-content').forEach(d => {
+                 if (d !== content) {
+                     d.classList.remove('show');
+                     d.parentElement.querySelector('.custom-dropdown-button').classList.remove('active');
+                 }
+             });
+             
+             // Toggle current dropdown
+             content.classList.toggle('show');
+             button.classList.toggle('active');
+         }
+         
+         // Close dropdowns when clicking outside
+         document.addEventListener('click', function(event) {
+             if (!event.target.closest('.custom-dropdown')) {
+                 document.querySelectorAll('.custom-dropdown-content').forEach(content => {
+                     content.classList.remove('show');
+                     content.parentElement.querySelector('.custom-dropdown-button').classList.remove('active');
+                 });
+             }
+         });
+         
+         function updateMonthSelection() {
+             const checkboxes = document.querySelectorAll('#monthDropdownContent input[type="checkbox"]');
+             const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+             const textElement = document.getElementById('monthDropdownText');
+             
+             if (selected.length === 0) {
+                 textElement.innerHTML = '<span class="custom-dropdown-placeholder">Select months...</span>';
+             } else {
+                 const monthNames = {
+                     '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr',
+                     '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Aug',
+                     '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dec'
+                 };
+                 const displayText = selected.map(m => monthNames[m]).join(', ');
+                 textElement.innerHTML = `<span class="custom-dropdown-selected">${displayText}</span> <span class="custom-dropdown-count">${selected.length}</span>`;
+             }
+             
+             updateFilteredView();
+         }
+         
+         function updateCategorySelection() {
+             const checkboxes = document.querySelectorAll('#categoryDropdownContent input[type="checkbox"]');
+             const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+             const textElement = document.getElementById('categoryDropdownText');
+             
+             if (selected.length === 0) {
+                 textElement.innerHTML = '<span class="custom-dropdown-placeholder">Select categories...</span>';
+             } else if (selected.length <= 2) {
+                 textElement.innerHTML = `<span class="custom-dropdown-selected">${selected.join(', ')}</span> <span class="custom-dropdown-count">${selected.length}</span>`;
+             } else {
+                 textElement.innerHTML = `<span class="custom-dropdown-selected">${selected[0]}, ${selected[1]}</span> <span class="custom-dropdown-count">+${selected.length - 2}</span>`;
+             }
+             
+             // Update tags based on selected categories
+             updateTagsForSelectedCheckboxCategories(selected);
+             
+             updateFilteredView();
+         }
+         
+         function updateTagSelection() {
+             const checkboxes = document.querySelectorAll('#tagDropdownContent input[type="checkbox"]');
+             const selected = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+             const textElement = document.getElementById('tagDropdownText');
+             
+             if (selected.length === 0) {
+                 textElement.innerHTML = '<span class="custom-dropdown-placeholder">Select tags...</span>';
+             } else if (selected.length <= 2) {
+                 textElement.innerHTML = `<span class="custom-dropdown-selected">${selected.join(', ')}</span> <span class="custom-dropdown-count">${selected.length}</span>`;
+             } else {
+                 textElement.innerHTML = `<span class="custom-dropdown-selected">${selected[0]}, ${selected[1]}</span> <span class="custom-dropdown-count">+${selected.length - 2}</span>`;
+             }
+             
+             updateFilteredView();
+         }
+         
+         function getSelectedMonths() {
+             const checkboxes = document.querySelectorAll('#monthDropdownContent input[type="checkbox"]');
+             return Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+         }
+         
+         function getSelectedCategories() {
+             const checkboxes = document.querySelectorAll('#categoryDropdownContent input[type="checkbox"]');
+             return Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+         }
+         
+         function getSelectedTags() {
+             const checkboxes = document.querySelectorAll('#tagDropdownContent input[type="checkbox"]');
+             return Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+         }
+         
+         function populateFilterDropdowns() {
+             // Populate years
+             const yearSelect = document.getElementById('filterYear');
+             const allYears = [...new Set(allExpenses.map(exp => exp.fields.Year).filter(y => y))].sort().reverse();
+             
+             if (yearSelect) {
+                 yearSelect.innerHTML = '<option value="">All Years</option>';
+                 allYears.forEach(year => {
+                     const option = document.createElement('option');
+                     option.value = year;
+                     option.textContent = year;
+                     yearSelect.appendChild(option);
+                 });
+             }
+             
+             // Populate categories (custom checkbox dropdown)
+             const categoryContent = document.getElementById('categoryDropdownContent');
+             const allCategories = [...new Set(allExpenses.map(exp => exp.fields.Category).filter(c => c))].sort();
+             
+             if (categoryContent) {
+                 categoryContent.innerHTML = '';
+                 allCategories.forEach(cat => {
+                     const id = `category_${cat.replace(/\s+/g, '_')}`;
+                     const item = document.createElement('div');
+                     item.className = 'custom-dropdown-item';
+                     item.onclick = (e) => e.stopPropagation();
+                     item.innerHTML = `
+                         <input type="checkbox" id="${id}" value="${cat}" onchange="updateCategorySelection()">
+                         <label for="${id}">${cat}</label>
+                     `;
+                     categoryContent.appendChild(item);
+                 });
+                 console.log('Categories populated:', allCategories.length, 'categories');
+             }
+             
+             // Populate all tags initially
+             populateAllCheckboxTags();
+         }
+         
+         function populateAllTags() {
+             try {
+                 const tagSelect = document.getElementById('filterTag');
+                 if (!tagSelect) {
+                     console.error('filterTag element not found');
+                     return;
+                 }
+                 
+                 const allTagsSet = new Set();
+                 
+                 if (allExpenses && Array.isArray(allExpenses)) {
+                     allExpenses.forEach(exp => {
+                         if (exp.fields && exp.fields.Tags) {
+                             const tags = exp.fields.Tags.split(',').map(t => t.trim()).filter(t => t);
+                             tags.forEach(tag => allTagsSet.add(tag));
+                         }
+                     });
+                 }
+                 
+                 const allTags = [...allTagsSet].sort();
+                 tagSelect.innerHTML = ''; // No "All" option for multi-select
+                 allTags.forEach(tag => {
+                     const option = document.createElement('option');
+                     option.value = tag;
+                     option.textContent = tag;
+                     tagSelect.appendChild(option);
+                 });
+                 console.log('Tags populated:', allTags.length, 'tags');
+             } catch (error) {
+                 console.error('Error populating tags:', error);
+             }
+         }
+         
+         function updateTagsForCategory(category) {
+             const tagSelect = document.getElementById('filterTag');
+             const currentTag = tagSelect.value; // Preserve current selection if possible
+             
+             if (!category) {
+                 // No category selected, show all tags
+                 populateAllTags();
+                 if (currentTag) {
+                     tagSelect.value = currentTag;
+                 }
+                 return;
+             }
+             
+             // Get tags only for selected category
+             const categoryTagsSet = new Set();
+             allExpenses.forEach(exp => {
+                 if (exp.fields.Category === category && exp.fields.Tags) {
+                     const tags = exp.fields.Tags.split(',').map(t => t.trim()).filter(t => t);
+                     tags.forEach(tag => categoryTagsSet.add(tag));
+                 }
+             });
+             
+             const categoryTags = [...categoryTagsSet].sort();
+             tagSelect.innerHTML = '<option value="">All Tags</option>';
+             
+             if (categoryTags.length === 0) {
+                 const option = document.createElement('option');
+                 option.value = "";
+                 option.textContent = "No tags for this category";
+                 option.disabled = true;
+                 tagSelect.appendChild(option);
+             } else {
+                 categoryTags.forEach(tag => {
+                     const option = document.createElement('option');
+                     option.value = tag;
+                     option.textContent = tag;
+                     tagSelect.appendChild(option);
+                 });
+                 
+                 // Try to preserve selection if tag exists in filtered list
+                 if (currentTag && categoryTags.includes(currentTag)) {
+                     tagSelect.value = currentTag;
+                 }
+             }
+         }
+         
+         function populateAllCheckboxTags() {
+             try {
+                 const tagContent = document.getElementById('tagDropdownContent');
+                 if (!tagContent) {
+                     console.error('tagDropdownContent element not found');
+                     return;
+                 }
+                 
+                 const allTagsSet = new Set();
+                 
+                 if (allExpenses && Array.isArray(allExpenses)) {
+                     allExpenses.forEach(exp => {
+                         if (exp.fields && exp.fields.Tags) {
+                             const tags = exp.fields.Tags.split(',').map(t => t.trim()).filter(t => t);
+                             tags.forEach(tag => allTagsSet.add(tag));
+                         }
+                     });
+                 }
+                 
+                 const allTags = [...allTagsSet].sort();
+                 tagContent.innerHTML = '';
+                 allTags.forEach(tag => {
+                     const id = `tag_${tag.replace(/\s+/g, '_')}`;
+                     const item = document.createElement('div');
+                     item.className = 'custom-dropdown-item';
+                     item.onclick = (e) => e.stopPropagation();
+                     item.innerHTML = `
+                         <input type="checkbox" id="${id}" value="${tag}" onchange="updateTagSelection()">
+                         <label for="${id}">${tag}</label>
+                     `;
+                     tagContent.appendChild(item);
+                 });
+                 console.log('Tags populated:', allTags.length, 'tags');
+             } catch (error) {
+                 console.error('Error populating tags:', error);
+             }
+         }
+         
+         function updateTagsForSelectedCheckboxCategories(categories) {
+             const tagContent = document.getElementById('tagDropdownContent');
+             if (!tagContent) return;
+             
+             // Save currently selected tags
+             const currentSelections = getSelectedTags();
+             
+             if (!categories || categories.length === 0) {
+                 // No categories selected, show all tags
+                 populateAllCheckboxTags();
+                 // Restore selections
+                 setTimeout(() => {
+                     currentSelections.forEach(tag => {
+                         const checkbox = document.querySelector(`#tagDropdownContent input[value="${tag}"]`);
+                         if (checkbox) checkbox.checked = true;
+                     });
+                     updateTagSelection();
+                 }, 0);
+                 return;
+             }
+             
+             // Get tags for ALL selected categories
+             const categoryTagsSet = new Set();
+             allExpenses.forEach(exp => {
+                 if (categories.includes(exp.fields.Category) && exp.fields.Tags) {
+                     const tags = exp.fields.Tags.split(',').map(t => t.trim()).filter(t => t);
+                     tags.forEach(tag => categoryTagsSet.add(tag));
+                 }
+             });
+             
+             const categoryTags = [...categoryTagsSet].sort();
+             tagContent.innerHTML = '';
+             
+             if (categoryTags.length === 0) {
+                 const item = document.createElement('div');
+                 item.className = 'custom-dropdown-item';
+                 item.innerHTML = '<span class="text-gray-400 text-sm">No tags for selected categories</span>';
+                 tagContent.appendChild(item);
+             } else {
+                 categoryTags.forEach(tag => {
+                     const id = `tag_${tag.replace(/\s+/g, '_')}`;
+                     const item = document.createElement('div');
+                     item.className = 'custom-dropdown-item';
+                     item.onclick = (e) => e.stopPropagation();
+                     const isSelected = currentSelections.includes(tag);
+                     item.innerHTML = `
+                         <input type="checkbox" id="${id}" value="${tag}" ${isSelected ? 'checked' : ''} onchange="updateTagSelection()">
+                         <label for="${id}">${tag}</label>
+                     `;
+                     tagContent.appendChild(item);
+                 });
+                 updateTagSelection();
+             }
+             
+             console.log('🏷️ Tags updated for categories:', categories, '→', categoryTags.length, 'tags');
+         }
+         
+         function updateTagsForSelectedCategories(categories) {
+             const tagSelect = document.getElementById('filterTag');
+             if (!tagSelect) return;
+             
+             // Save currently selected tags
+             const currentSelections = Array.from(tagSelect.selectedOptions).map(o => o.value);
+             
+             if (!categories || categories.length === 0) {
+                 // No categories selected, show all tags
+                 populateAllTags();
+                 // Restore selections
+                 currentSelections.forEach(tag => {
+                     const option = Array.from(tagSelect.options).find(o => o.value === tag);
+                     if (option) option.selected = true;
+                 });
+                 return;
+             }
+             
+             // Get tags for ALL selected categories
+             const categoryTagsSet = new Set();
+             allExpenses.forEach(exp => {
+                 if (categories.includes(exp.fields.Category) && exp.fields.Tags) {
+                     const tags = exp.fields.Tags.split(',').map(t => t.trim()).filter(t => t);
+                     tags.forEach(tag => categoryTagsSet.add(tag));
+                 }
+             });
+             
+             const categoryTags = [...categoryTagsSet].sort();
+             tagSelect.innerHTML = ''; // No "All" option for multi-select
+             
+             if (categoryTags.length === 0) {
+                 const option = document.createElement('option');
+                 option.value = "";
+                 option.textContent = "No tags for selected categories";
+                 option.disabled = true;
+                 tagSelect.appendChild(option);
+             } else {
+                 categoryTags.forEach(tag => {
+                     const option = document.createElement('option');
+                     option.value = tag;
+                     option.textContent = tag;
+                     // Restore selection if tag was previously selected
+                     if (currentSelections.includes(tag)) {
+                         option.selected = true;
+                     }
+                     tagSelect.appendChild(option);
+                 });
+             }
+             
+             console.log('🏷️ Tags updated for categories:', categories, '→', categoryTags.length, 'tags');
+         }
+         
+         function updateFilteredView() {
+             const year = document.getElementById('filterYear')?.value || '';
+             const contributor = document.getElementById('filterContributor')?.value || '';
+             
+             // Get multi-select values from checkboxes
+             const selectedMonths = getSelectedMonths();
+             const selectedCategories = getSelectedCategories();
+             const selectedTags = getSelectedTags();
+             
+             console.log('🔍 Filter values:', {
+                 year,
+                 months: selectedMonths,
+                 categories: selectedCategories,
+                 tags: selectedTags,
+                 contributor
+             });
+             
+             // Filter expenses
+             let filtered = allExpenses.filter(exp => {
+                 // Year filter
+                 if (year && exp.fields.Year !== parseInt(year)) return false;
+                 
+                 // Month filter - match ANY selected month (OR logic)
+                 if (selectedMonths.length > 0) {
+                     if (!selectedMonths.includes(exp.fields.Month)) return false;
+                 }
+                 
+                 // Category filter - match ANY selected category (OR logic)
+                 if (selectedCategories.length > 0) {
+                     if (!selectedCategories.includes(exp.fields.Category)) return false;
+                 }
+                 
+                 // Tag filter - match ANY selected tag (OR logic)
+                 if (selectedTags.length > 0) {
+                     const expTags = exp.fields.Tags ? exp.fields.Tags.split(',').map(t => t.trim()) : [];
+                     const hasMatchingTag = selectedTags.some(tag => expTags.includes(tag));
+                     if (!hasMatchingTag) return false;
+                 }
+                 
+                 // Contributor filter
+                 if (contributor) {
+                     const amarContrib = exp.fields.AmarContribution || 0;
+                     const priyaContrib = exp.fields.PriyaContribution || 0;
+                     
+                     if (contributor === 'Amar' && amarContrib === 0) return false;
+                     if (contributor === 'Priya' && priyaContrib === 0) return false;
+                     if (contributor === 'Both' && (amarContrib === 0 || priyaContrib === 0)) return false;
+                 }
+                 
+                 return true;
+             });
+             
+             console.log('📊 Filtered results:', filtered.length, 'expenses');
+             
+             // Display results
+             displayFilteredResults(filtered, { 
+                 year, 
+                 months: selectedMonths,
+                 categories: selectedCategories, 
+                 tags: selectedTags, 
+                 contributor 
+             });
+         }
+         
+         function displayFilteredResults(expenses, filters) {
+             const container = document.getElementById('filterResults');
+             
+             if (expenses.length === 0) {
+                 container.innerHTML = `
+                     <div class="text-center py-12 text-gray-400">
+                         <i class="fas fa-inbox text-6xl mb-4"></i>
+                         <p class="text-lg font-semibold">No expenses found</p>
+                         <p class="text-sm mt-2">Try adjusting your filters</p>
+                     </div>
+                 `;
+                 return;
+             }
+             
+             // Sort by date (most recent first)
+             const sorted = expenses.sort((a, b) => {
+                 const dateA = new Date(a.fields.Year, a.fields.Month - 1, a.fields.Day || 1);
+                 const dateB = new Date(b.fields.Year, b.fields.Month - 1, b.fields.Day || 1);
+                 return dateB - dateA;
+             });
+             
+             const total = expenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+             const amarTotal = expenses.reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             const priyaTotal = expenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
+             
+             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+             
+             // Build filter summary
+             let filterSummary = [];
+             if (filters.year) filterSummary.push(`Year: ${filters.year}`);
+             if (filters.months && filters.months.length > 0) {
+                 const selectedMonthNames = filters.months.map(m => monthNames[parseInt(m) - 1]).join(', ');
+                 filterSummary.push(`Months: ${selectedMonthNames}`);
+             }
+             if (filters.categories && filters.categories.length > 0) {
+                 filterSummary.push(`Categories: ${filters.categories.join(', ')}`);
+             }
+             if (filters.tags && filters.tags.length > 0) {
+                 filterSummary.push(`Tags: ${filters.tags.join(', ')}`);
+             }
+             if (filters.contributor) filterSummary.push(`Contributor: ${filters.contributor}`);
+             
+             container.innerHTML = `
+                 <div class="mb-6">
+                     <div class="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-lg mb-4">
+                         <div class="flex justify-between items-center mb-2">
+                             <div>
+                                 <div class="text-sm opacity-90">Filtered Results</div>
+                                 <div class="text-3xl font-bold">${expenses.length} expense${expenses.length !== 1 ? 's' : ''}</div>
+                             </div>
+                             <div class="text-right">
+                                 <div class="text-sm opacity-90">Total</div>
+                                 <div class="text-3xl font-bold">$${total.toFixed(2)}</div>
+                             </div>
+                         </div>
+                         ${filterSummary.length > 0 ? `
+                             <div class="text-xs opacity-75 mt-2">
+                                 <i class="fas fa-filter mr-1"></i>${filterSummary.join(' • ')}
+                             </div>
+                         ` : ''}
+                     </div>
+                     
+                     <div class="grid grid-cols-2 gap-4 mb-4">
+                         <div class="bg-blue-50 p-3 rounded-lg">
+                             <div class="text-xs text-gray-600 mb-1">👤 Amar's Contribution</div>
+                             <div class="text-xl font-bold text-blue-600">$${amarTotal.toFixed(2)}</div>
+                         </div>
+                         <div class="bg-pink-50 p-3 rounded-lg">
+                             <div class="text-xs text-gray-600 mb-1">👤 Priya's Contribution</div>
+                             <div class="text-xl font-bold text-pink-600">$${priyaTotal.toFixed(2)}</div>
+                         </div>
+                     </div>
+                 </div>
+                 
+                 <div class="space-y-3">
+                     ${sorted.map(exp => {
+                         const item = exp.fields.Item || 'Unnamed';
+                         const actual = exp.fields.Actual || 0;
+                         const day = exp.fields.Day;
+                         const month = exp.fields.Month;
+                         const year = exp.fields.Year;
+                         const llc = exp.fields.LLC === 'Yes';
+                         const category = exp.fields.Category || 'Other';
+                         const amarContrib = exp.fields.AmarContribution || 0;
+                         const priyaContrib = exp.fields.PriyaContribution || 0;
+                         const notes = exp.fields.Notes || '';
+                         const tags = exp.fields.Tags || '';
+                         
+                         let dateDisplay = '';
+                         if (day !== undefined && day !== null && day !== '') {
+                             dateDisplay = `${monthNames[month - 1]} ${day}, ${year}`;
+                         } else {
+                             dateDisplay = `${monthNames[month - 1]} ${year}`;
+                         }
+                         
+                         // Tags display
+                         let tagsDisplay = '';
+                         if (tags.trim()) {
+                             const tagList = tags.split(',').map(tag => 
+                                 `<span class="inline-block px-2 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full text-xs font-medium mr-1 mb-1"><i class="fas fa-tag mr-1"></i>${tag.trim()}</span>`
+                             ).join('');
+                             tagsDisplay = `<div class="mt-2 flex flex-wrap">${tagList}</div>`;
+                         }
+                         
+                         return `
+                            <div class="border border-gray-200 rounded-lg p-4 hover:bg-purple-50 hover:shadow-md transition-all cursor-pointer" 
+                                 onclick="viewExpenseDetails('${exp.id}')" 
+                                 style="cursor: pointer;">
+                                <div class="flex justify-between items-start mb-2">
+                                    <div class="flex-1">
+                                        <div class="font-semibold text-gray-800 flex items-center gap-2 flex-wrap">
+                                            ${item}
+                                            ${llc ? '<span class="badge badge-llc text-xs">LLC</span>' : ''}
+                                            <span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">${category}</span>
+                                        </div>
+                                        <div class="text-sm text-gray-600 mt-1">
+                                            <i class="fas fa-calendar mr-1"></i>${dateDisplay}
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-2xl font-bold text-purple-600">$${actual.toFixed(2)}</div>
+                                    </div>
+                                </div>
+                                
+                                ${tagsDisplay}
+                                
+                                <div class="flex gap-4 text-xs text-gray-600 mt-3 pt-3 border-t border-gray-100">
+                                    <div class="flex items-center gap-1">
+                                        <i class="fas fa-user text-blue-500"></i>
+                                        <span>Amar: $${amarContrib.toFixed(2)}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <i class="fas fa-user text-pink-500"></i>
+                                        <span>Priya: $${priyaContrib.toFixed(2)}</span>
+                                    </div>
+                                </div>
+                                
+                                ${notes && notes.trim() !== '' ? `
+                                    <div class="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                                        <i class="fas fa-sticky-note mr-1"></i>${notes}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                     }).join('')}
+                 </div>
+             `;
+         }
+         
+         function clearAllFilters() {
+             console.log('');
+             console.log('═══════════════════════════════════════════════════════');
+             console.log('🔄 clearAllFilters() CALLED');
+             console.log('═══════════════════════════════════════════════════════');
+             console.log('');
+             
+             try {
+                 // Get all filter elements
+                 console.log('📍 Step 1: Getting filter elements...');
+                 const filterYear = document.getElementById('filterYear');
+                 const filterContributor = document.getElementById('filterContributor');
+                 const resultsDiv = document.getElementById('filterResults');
+                 
+                 console.log('  Element availability:', {
+                     filterYear: filterYear ? '✅ EXISTS' : '❌ NULL',
+                     filterContributor: filterContributor ? '✅ EXISTS' : '❌ NULL',
+                     resultsDiv: resultsDiv ? '✅ EXISTS' : '❌ NULL'
+                 });
+                 console.log('');
+                 
+                 // Log current values BEFORE clearing
+                 console.log('📍 Step 2: Current values BEFORE clear:');
+                 if (filterYear) console.log('  Year:', filterYear.value, '(options:', filterYear.options.length, ')');
+                 console.log('  Months:', getSelectedMonths());
+                 console.log('  Categories:', getSelectedCategories());
+                 console.log('  Tags:', getSelectedTags());
+                 if (filterContributor) console.log('  Contributor:', filterContributor.value, '(options:', filterContributor.options.length, ')');
+                 console.log('');
+                 
+                 // Clear Year
+                 console.log('📍 Step 3: Clearing filters...');
+                 if (filterYear) {
+                     console.log('  🔹 Clearing Year...');
+                     console.log('    Before: selectedIndex =', filterYear.selectedIndex, ', value =', filterYear.value);
+                     filterYear.selectedIndex = 0;
+                     console.log('    After:  selectedIndex =', filterYear.selectedIndex, ', value =', filterYear.value);
+                     console.log('    First option text:', filterYear.options[0]?.text);
+                 } else {
+                     console.warn('  ⚠️ filterYear element not found!');
+                 }
+                 
+                 // Clear Month checkboxes
+                 console.log('  🔹 Clearing Month checkboxes...');
+                 const monthCheckboxes = document.querySelectorAll('#monthDropdownContent input[type="checkbox"]');
+                 console.log('    Found', monthCheckboxes.length, 'month checkboxes');
+                 monthCheckboxes.forEach(cb => cb.checked = false);
+                 document.getElementById('monthDropdownText').innerHTML = '<span class="custom-dropdown-placeholder">Select months...</span>';
+                 console.log('    ✓ All month checkboxes cleared');
+                 
+                 // Clear Category checkboxes
+                 console.log('  🔹 Clearing Category checkboxes...');
+                 const categoryCheckboxes = document.querySelectorAll('#categoryDropdownContent input[type="checkbox"]');
+                 console.log('    Found', categoryCheckboxes.length, 'category checkboxes');
+                 categoryCheckboxes.forEach(cb => cb.checked = false);
+                 document.getElementById('categoryDropdownText').innerHTML = '<span class="custom-dropdown-placeholder">Select categories...</span>';
+                 console.log('    ✓ All category checkboxes cleared');
+                 
+                 // Clear Tag checkboxes and repopulate all tags
+                 console.log('  🔹 Clearing Tag checkboxes...');
+                 const tagCheckboxes = document.querySelectorAll('#tagDropdownContent input[type="checkbox"]');
+                 console.log('    Found', tagCheckboxes.length, 'tag checkboxes');
+                 tagCheckboxes.forEach(cb => cb.checked = false);
+                 document.getElementById('tagDropdownText').innerHTML = '<span class="custom-dropdown-placeholder">Select tags...</span>';
+                 console.log('    ✓ All tag checkboxes cleared');
+                 
+                 // Repopulate all tags (since categories are cleared)
+                 console.log('  🔹 Repopulating all tags...');
+                 populateAllCheckboxTags();
+                 const tagsAfterRepopulate = document.querySelectorAll('#tagDropdownContent input[type="checkbox"]');
+                 console.log('    ✓ Tags repopulated:', tagsAfterRepopulate.length, 'tags available');
+                 
+                 // Clear Contributor
+                 if (filterContributor) {
+                     console.log('  🔹 Clearing Contributor...');
+                     console.log('    Before: selectedIndex =', filterContributor.selectedIndex, ', value =', filterContributor.value);
+                     filterContributor.selectedIndex = 0;
+                     console.log('    After:  selectedIndex =', filterContributor.selectedIndex, ', value =', filterContributor.value);
+                     console.log('    First option text:', filterContributor.options[0]?.text);
+                 } else {
+                     console.warn('  ⚠️ filterContributor element not found!');
+                 }
+                 console.log('');
+                 
+                 // Repopulate tags dropdown with ALL tags (not category-specific)
+                 console.log('📍 Step 4: Repopulating tags dropdown with all tags...');
+                 if (filterTag) {
+                     const tagCountBefore = filterTag.options.length;
+                     console.log('  Tags count before repopulate:', tagCountBefore);
+                 }
+                 if (typeof populateAllTags === 'function') {
+                     populateAllTags();
+                     if (filterTag) {
+                         const tagCountAfter = filterTag.options.length;
+                         console.log('  Tags count after repopulate:', tagCountAfter);
+                         console.log('  ✓ Tags dropdown repopulated with all tags');
+                     }
+                 } else {
+                     console.warn('  ⚠️ populateAllTags function not found!');
+                 }
+                 console.log('');
+                 
+                 // Clear results display
+                 console.log('📍 Step 5: Clearing results display...');
+                 if (resultsDiv) {
+                     resultsDiv.innerHTML = `
+                         <div class="text-center py-12 text-gray-400">
+                             <i class="fas fa-filter text-6xl mb-4"></i>
+                             <p class="text-lg font-semibold">Select filters above to view results</p>
+                             <p class="text-sm mt-2">Choose year, month, category, tag, or contributor to get started</p>
+                         </div>
+                     `;
+                     console.log('  ✓ Results display cleared');
+                 } else {
+                     console.warn('  ⚠️ resultsDiv not found!');
+                 }
+                 console.log('');
+                 
+                 // Final verification
+                 console.log('📍 Step 6: Final values AFTER clear:');
+                 if (filterYear) console.log('  Year:', filterYear.value, '(should be empty)');
+                 console.log('  Months:', getSelectedMonths(), '(should be empty array)');
+                 console.log('  Categories:', getSelectedCategories(), '(should be empty array)');
+                 console.log('  Tags:', getSelectedTags(), '(should be empty array)');
+                 if (filterContributor) console.log('  Contributor:', filterContributor.value, '(should be empty)');
+                 console.log('');
+                 
+                 console.log('═══════════════════════════════════════════════════════');
+                 console.log('✅ FILTERS CLEARED SUCCESSFULLY');
+                 console.log('═══════════════════════════════════════════════════════');
+                 console.log('');
+                 
+                 showNotification('Filters cleared', 'success');
+                 
+             } catch (error) {
+                 console.log('');
+                 console.log('═══════════════════════════════════════════════════════');
+                 console.error('❌ ERROR in clearAllFilters():', error);
+                 console.error('Stack trace:', error.stack);
+                 console.log('═══════════════════════════════════════════════════════');
+                 console.log('');
+                 showNotification('Error: ' + error.message, 'error');
+             }
+         }
+         console.log('✅ clearAllFilters() function defined successfully');
+         
+         function applyFiltersToExpensesTab() {
+             try {
+                 const year = document.getElementById('filterYear')?.value || '';
+                 const contributor = document.getElementById('filterContributor')?.value || '';
+                 
+                 // Get multi-select values from checkboxes
+                 const selectedMonths = getSelectedMonths();
+                 const selectedCategories = getSelectedCategories();
+                 const selectedTags = getSelectedTags();
+                 
+                 if (!year && selectedMonths.length === 0 && selectedCategories.length === 0 && selectedTags.length === 0 && !contributor) {
+                     showNotification('Please select at least one filter', 'error');
+                     return;
+                 }
+                 
+                 // Switch to expenses tab
+                 switchTab('expenses');
+                 
+                 // Apply filters to expenses tab if corresponding elements exist
+                 if (year) {
+                     const yearFilter = document.getElementById('yearFilter');
+                     if (yearFilter) yearFilter.value = year;
+                 }
+                 
+                 // For month, apply only the first selected month
+                 if (selectedMonths.length > 0) {
+                     const monthFilter = document.getElementById('monthFilter');
+                     if (monthFilter) monthFilter.value = selectedMonths[0];
+                 }
+                 
+                 // For multi-select, apply only the first selected item to Expenses tab
+                 if (selectedCategories.length > 0) {
+                     const categoryFilter = document.getElementById('categoryFilter');
+                     if (categoryFilter) categoryFilter.value = selectedCategories[0];
+                 }
+                 
+                 if (selectedTags.length > 0) {
+                     const tagFilter = document.getElementById('tagFilter');
+                     if (tagFilter) tagFilter.value = selectedTags[0];
+                 }
+                 
+                 // Trigger filter
+                 if (typeof filterExpenses === 'function') {
+                     filterExpenses();
+                 }
+                 
+                 let message = 'Filters applied to Expenses tab';
+                 if (selectedMonths.length > 1 || selectedCategories.length > 1 || selectedTags.length > 1) {
+                     message += ' (only first month/category/tag applied)';
+                 }
+                 showNotification(message, 'success');
+             } catch (error) {
+                 console.error('Error applying filters:', error);
+                 showNotification('Error applying filters: ' + error.message, 'error');
+             }
+         }
+         
+         function switchTab(tab, event) {
              document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
              document.querySelectorAll('[id$="Tab"]').forEach(content => content.style.display = 'none');
-             event.target.closest('.tab-button').classList.add('active');
+             
+             // Find the button for this tab and activate it
+             const buttons = document.querySelectorAll('.tab-button');
+             buttons.forEach(btn => {
+                 const btnText = btn.textContent.toLowerCase();
+                 if ((tab === 'expenses' && btnText.includes('expenses')) ||
+                     (tab === 'payments' && btnText.includes('payments')) ||
+                     (tab === 'category' && btnText.includes('filters')) ||
+                     (tab === 'analytics' && btnText.includes('analytics')) ||
+                     (tab === 'trends' && btnText.includes('trends')) ||
+                     (tab === 'insights' && btnText.includes('insights'))) {
+                     btn.classList.add('active');
+                 }
+             });
+             
              document.getElementById(tab + 'Tab').style.display = 'block';
              if (tab === 'analytics' || tab === 'trends') updateCharts();
              if (tab === 'insights') updateInsights();
+             if (tab === 'category') populateFilterDropdowns(); // Populate Filters tab dropdowns
          }
          
          function openAddExpenseModal() {
@@ -3773,6 +4974,29 @@
          // Flag to prevent duplicate submissions
          let isSavingExpense = false;
          
+         // Helper function to format tags: lowercase and replace spaces with hyphens
+         function formatTags(tags) {
+             if (!tags) return '';
+             return tags.trim()
+                 .toLowerCase()
+                 .replace(/\s+/g, '-') // Replace spaces with hyphens
+                 .replace(/,\s*/g, ',') // Normalize commas
+                 .split(',')
+                 .map(tag => tag.trim().replace(/\s+/g, '-'))
+                 .filter(tag => tag) // Remove empty tags
+                 .join(',');
+         }
+         
+         // Helper function to format category: Title Case
+         function formatCategory(category) {
+             if (!category) return '';
+             return category.trim()
+                 .toLowerCase()
+                 .split(/[-\s]+/) // Split by hyphens or spaces
+                 .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                 .join(' ');
+         }
+         
          async function saveExpense(event) {
              event.preventDefault();
              
@@ -3864,8 +5088,8 @@
                  const recordId = document.getElementById('recordId').value;
                  
                  const fields = {
-                    Item: document.getElementById('itemName').value,
-                    Category: document.getElementById('category').value,
+                    Item: document.getElementById('itemName').value.trim(),
+                    Category: formatCategory(document.getElementById('category').value),
                     Year: parseInt(document.getElementById('year').value),
                     Month: document.getElementById('month').value,
                     Day: parseInt(document.getElementById('day').value),
@@ -3873,8 +5097,8 @@
                     LLC: document.getElementById('llc').value,
                     AmarContribution: amarContribution,
                     PriyaContribution: priyaContribution,
-                    Tags: document.getElementById('tags').value || '',
-                    Notes: document.getElementById('notes').value || ''
+                    Tags: formatTags(document.getElementById('tags').value),
+                    Notes: document.getElementById('notes').value.trim() || ''
                 };
                  
                  // Check for similar item names (only for new expenses, not edits)
@@ -4814,7 +6038,13 @@
              }
              
              if (allCategories.size === 0) {
-                 tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><p>No categories found. Add some expenses first!</p></td></tr>';
+                 tbody.innerHTML = `
+                     <tr class="no-categories-row"><td colspan="6" class="text-center py-8 text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><p>No categories found. Add some expenses first!</p></td></tr>
+                     <div class="budget-card text-center py-8 text-gray-400 border-none shadow-none">
+                         <i class="fas fa-inbox text-3xl mb-2"></i>
+                         <p class="text-sm">No categories found. Add some expenses first!</p>
+                     </div>
+                 `;
                  return;
              }
              
@@ -4890,7 +6120,59 @@
                      `;
                  }
                  
-                 return `
+                 // Mobile card HTML
+                 const mobileCard = `
+                     <div class="budget-card ${statusClass}">
+                         <div class="budget-card-header">
+                             <div class="budget-card-category">${category}</div>
+                             <div class="budget-card-recurring">
+                                 <input type="checkbox" 
+                                        id="recurring-mobile-${category}" 
+                                        ${isRecurring ? 'checked' : ''}
+                                        class="w-4 h-4 text-purple-600 border-gray-300 rounded cursor-pointer"
+                                        onchange="toggleRecurring('${category.replace(/'/g, "\\'")}', this.checked)">
+                                 <span>Recurring</span>
+                             </div>
+                         </div>
+                         <div class="budget-card-body">
+                             <div class="budget-card-row">
+                                 <span class="budget-card-label">Monthly Budget</span>
+                                 <input type="number" 
+                                        id="budget-mobile-${category}" 
+                                        value="${baseBudget}" 
+                                        min="0" 
+                                        step="0.01"
+                                        class="budget-card-input px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                        onchange="updateCategoryBudget('${category.replace(/'/g, "\\'")}', this.value)">
+                             </div>
+                             ${rollover > 0 ? `
+                                 <div class="budget-rollover">
+                                     <i class="fas fa-plus-circle"></i>
+                                     <span>$${rollover.toFixed(2)} rollover → $${totalBudget.toFixed(2)} total</span>
+                                 </div>
+                             ` : ''}
+                             <div class="budget-card-row">
+                                 <span class="budget-card-label">Current Spending</span>
+                                 <span class="budget-card-value ${spent > totalBudget && totalBudget > 0 ? 'text-red-600' : spent === totalBudget && totalBudget > 0 ? 'text-gray-700' : 'text-green-600'}">
+                                     $${spent.toFixed(2)}
+                                 </span>
+                             </div>
+                             <div class="budget-card-row">
+                                 <span class="budget-card-label">Status</span>
+                                 <div>${statusHTML}</div>
+                             </div>
+                         </div>
+                         <div class="budget-card-actions">
+                             <button onclick="deleteCategoryBudget('${category.replace(/'/g, "\\'")}')" 
+                                     class="budget-card-delete">
+                                 <i class="fas fa-trash mr-1"></i>Delete
+                             </button>
+                         </div>
+                     </div>
+                 `;
+                 
+                 // Desktop table row HTML
+                 const desktopRow = `
                      <tr class="border-b hover:bg-purple-50 transition-colors ${statusClass}">
                          <td class="px-4 py-3 text-sm font-semibold text-gray-800">${category}</td>
                          <td class="px-4 py-3 text-sm">
@@ -4916,6 +6198,8 @@
                          </td>
                      </tr>
                  `;
+                 
+                 return mobileCard + desktopRow;
              }).join('');
              
              // Calculate totals for footer
@@ -4935,7 +6219,7 @@
                  grandTotalSpending += spent;
              });
              
-             // Update footer totals
+             // Update footer totals (desktop)
              document.getElementById('budgetTotalAmount').textContent = `$${grandTotalBudget.toFixed(2)}`;
              document.getElementById('budgetTotalSpending').textContent = `$${grandTotalSpending.toFixed(2)}`;
              
@@ -4950,6 +6234,40 @@
                  const percentage = (grandTotalSpending / grandTotalBudget * 100).toFixed(0);
                  statusEl.innerHTML = `<span class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>${percentage}% Used</span>`;
              }
+             
+             // Add mobile total summary card
+             let statusText = '--';
+             if (grandTotalBudget > 0) {
+                 if (totalRemaining < 0) {
+                     statusText = `<i class="fas fa-exclamation-circle mr-1"></i>Over by $${Math.abs(totalRemaining).toFixed(2)}`;
+                 } else {
+                     const percentage = (grandTotalSpending / grandTotalBudget * 100).toFixed(0);
+                     statusText = `<i class="fas fa-check-circle mr-1"></i>${percentage}% Used`;
+                 }
+             }
+             
+             const mobileTotalCard = `
+                 <div class="budget-total-mobile">
+                     <div class="text-center mb-3">
+                         <div class="text-sm font-semibold opacity-90">TOTAL SUMMARY</div>
+                     </div>
+                     <div class="budget-total-row">
+                         <span class="budget-total-label">Total Budget</span>
+                         <span class="budget-total-value">$${grandTotalBudget.toFixed(2)}</span>
+                     </div>
+                     <div class="budget-total-row">
+                         <span class="budget-total-label">Total Spending</span>
+                         <span class="budget-total-value">$${grandTotalSpending.toFixed(2)}</span>
+                     </div>
+                     <div class="budget-total-row">
+                         <span class="budget-total-label">Status</span>
+                         <span class="budget-total-value text-sm">${statusText}</span>
+                     </div>
+                 </div>
+             `;
+             
+             // Append mobile total card to tbody
+             tbody.innerHTML += mobileTotalCard;
          }
          
          async function updateCategoryBudget(category, value) {
@@ -4957,6 +6275,12 @@
              const selectedYear = parseInt(document.getElementById('budgetYearFilter').value);
              const selectedMonth = document.getElementById('budgetMonthFilter').value;
              const monthKey = `${selectedYear}-${selectedMonth}`;
+             
+             // Sync mobile and desktop inputs
+             const desktopInput = document.getElementById(`budget-${category}`);
+             const mobileInput = document.getElementById(`budget-mobile-${category}`);
+             if (desktopInput) desktopInput.value = budget;
+             if (mobileInput) mobileInput.value = budget;
              
              try {
                  const budgetInfo = categoryBudgets[monthKey] && categoryBudgets[monthKey][category];
@@ -5010,6 +6334,12 @@
              const selectedYear = parseInt(document.getElementById('budgetYearFilter').value);
              const selectedMonth = document.getElementById('budgetMonthFilter').value;
              const monthKey = `${selectedYear}-${selectedMonth}`;
+             
+             // Sync mobile and desktop checkboxes
+             const desktopCheckbox = document.getElementById(`recurring-${category}`);
+             const mobileCheckbox = document.getElementById(`recurring-mobile-${category}`);
+             if (desktopCheckbox) desktopCheckbox.checked = isRecurring;
+             if (mobileCheckbox) mobileCheckbox.checked = isRecurring;
              
              try {
                  const budgetInfo = categoryBudgets[monthKey] && categoryBudgets[monthKey][category];
@@ -5630,6 +6960,218 @@
              document.body.appendChild(modal);
          }
          
+         function showPersonContributions(person, year, month) {
+             // Filter expenses where this person contributed
+             const personExpenses = allExpenses.filter(exp => {
+                 const expYear = parseInt(exp.fields.Year);
+                 const expMonth = parseInt(exp.fields.Month);
+                 const contribution = person === 'Amar' ? (exp.fields.AmarContribution || 0) : (exp.fields.PriyaContribution || 0);
+                 return expYear === year && expMonth === month && contribution > 0;
+             });
+             
+             // Get standalone payments from this person
+             const personPayments = allPayments.filter(p => {
+                 const payYear = parseInt(p.fields.Year);
+                 const payMonth = parseInt(p.fields.Month);
+                 return payYear === year && payMonth === month && p.fields.Person === person;
+             });
+             
+             // Sort expenses by date (most recent first)
+             personExpenses.sort((a, b) => {
+                 const dateA = new Date(a.fields.Year, a.fields.Month - 1, a.fields.Day || 1);
+                 const dateB = new Date(b.fields.Year, b.fields.Month - 1, b.fields.Day || 1);
+                 const dateCompare = dateB - dateA;
+                 
+                 if (dateCompare === 0) {
+                     const createdA = new Date(a.createdTime || 0);
+                     const createdB = new Date(b.createdTime || 0);
+                     return createdB - createdA;
+                 }
+                 
+                 return dateCompare;
+             });
+             
+             // Sort payments by date (most recent first)
+             personPayments.sort((a, b) => {
+                 const dateA = new Date(a.fields.Year, a.fields.Month - 1, a.fields.Day || 1);
+                 const dateB = new Date(b.fields.Year, b.fields.Month - 1, b.fields.Day || 1);
+                 return dateB - dateA;
+             });
+             
+             const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+             const totalFromExpenses = personExpenses.reduce((sum, exp) => {
+                 const contribution = person === 'Amar' ? (exp.fields.AmarContribution || 0) : (exp.fields.PriyaContribution || 0);
+                 return sum + contribution;
+             }, 0);
+             const totalFromPayments = personPayments.reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             const totalContribution = totalFromExpenses + totalFromPayments;
+             
+             const personColor = person === 'Amar' ? 'blue' : 'pink';
+             const personIcon = person === 'Amar' ? '👤' : '👤';
+             
+             // Create modal
+             const modal = document.createElement('div');
+             modal.className = 'modal active';
+             modal.style.zIndex = '10001'; // Above monthly summary modal
+             
+             modal.innerHTML = `
+                 <div class="modal-content" style="max-width: 700px; max-height: 90vh; overflow-y: auto;">
+                     <div class="flex justify-between items-center mb-6">
+                         <div>
+                             <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                 <i class="fas fa-user text-${personColor}-600"></i>
+                                 ${personIcon} ${person}'s Contributions
+                             </h2>
+                             <p class="text-sm text-gray-600 mt-1">${monthNames[month - 1]} ${year} • ${personExpenses.length} expenses + ${personPayments.length} payments</p>
+                         </div>
+                         <button onclick="this.closest('.modal').remove()" class="text-gray-400 hover:text-gray-600">
+                             <i class="fas fa-times text-2xl"></i>
+                         </button>
+                     </div>
+                     
+                     <div class="bg-gradient-to-r from-${personColor}-500 to-${personColor}-600 text-white p-4 rounded-lg mb-6">
+                         <div class="text-sm opacity-90">Total Contribution</div>
+                         <div class="text-3xl font-bold">$${totalContribution.toFixed(2)}</div>
+                         <div class="text-sm opacity-90 mt-1">
+                             $${totalFromExpenses.toFixed(2)} from expenses • $${totalFromPayments.toFixed(2)} from standalone payments
+                         </div>
+                     </div>
+                     
+                     ${personExpenses.length > 0 ? `
+                         <div class="mb-6">
+                             <h3 class="text-lg font-bold mb-3 flex items-center gap-2">
+                                 <i class="fas fa-receipt text-purple-600"></i>
+                                 Expense Contributions
+                             </h3>
+                             <div class="space-y-3">
+                                 ${personExpenses.map(exp => {
+                                     const item = exp.fields.Item || 'Unnamed';
+                                     const actual = exp.fields.Actual || 0;
+                                     const contribution = person === 'Amar' ? (exp.fields.AmarContribution || 0) : (exp.fields.PriyaContribution || 0);
+                                     const day = exp.fields.Day;
+                                     const llc = exp.fields.LLC === 'Yes';
+                                     const category = exp.fields.Category || 'Other';
+                                     const amarContrib = exp.fields.AmarContribution || 0;
+                                     const priyaContrib = exp.fields.PriyaContribution || 0;
+                                     const notes = exp.fields.Notes || '';
+                                     
+                                     let dateDisplay = '';
+                                     if (day !== undefined && day !== null && day !== '') {
+                                         dateDisplay = `${monthNames[month - 1]} ${day}, ${year}`;
+                                     } else {
+                                         dateDisplay = `${monthNames[month - 1]} ${year}`;
+                                     }
+                                     
+                                     return `
+                                        <div class="border border-gray-200 rounded-lg p-4 hover:bg-${personColor}-50 hover:shadow-md transition-all cursor-pointer" 
+                                             onclick="viewExpenseDetails('${exp.id}')" 
+                                             style="cursor: pointer;">
+                                            <div class="flex justify-between items-start mb-2">
+                                                <div class="flex-1">
+                                                    <div class="font-semibold text-gray-800 flex items-center gap-2">
+                                                        ${item}
+                                                        ${llc ? '<span class="badge badge-llc text-xs">LLC</span>' : ''}
+                                                        <span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">${category}</span>
+                                                    </div>
+                                                    <div class="text-sm text-gray-600 mt-1">
+                                                        <i class="fas fa-calendar mr-1"></i>${dateDisplay}
+                                                    </div>
+                                                </div>
+                                                <div class="text-right">
+                                                    <div class="text-sm text-gray-600">Total: $${actual.toFixed(2)}</div>
+                                                    <div class="text-xl font-bold text-${personColor}-600">$${contribution.toFixed(2)}</div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="flex gap-4 text-xs text-gray-600 mt-3 pt-3 border-t border-gray-100">
+                                                <div class="flex items-center gap-1">
+                                                    <i class="fas fa-user text-blue-500"></i>
+                                                    <span>Amar: $${amarContrib.toFixed(2)}</span>
+                                                </div>
+                                                <div class="flex items-center gap-1">
+                                                    <i class="fas fa-user text-pink-500"></i>
+                                                    <span>Priya: $${priyaContrib.toFixed(2)}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            ${notes && notes.trim() !== '' ? `
+                                                <div class="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                                                    <i class="fas fa-sticky-note mr-1"></i>${notes}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    `;
+                                 }).join('')}
+                             </div>
+                         </div>
+                     ` : ''}
+                     
+                     ${personPayments.length > 0 ? `
+                         <div class="mb-6">
+                             <h3 class="text-lg font-bold mb-3 flex items-center gap-2">
+                                 <i class="fas fa-hand-holding-usd text-green-600"></i>
+                                 Standalone Payments
+                             </h3>
+                             <div class="space-y-3">
+                                 ${personPayments.map(payment => {
+                                     const amount = payment.fields.Amount || 0;
+                                     const day = payment.fields.Day;
+                                     const notes = payment.fields.Notes || '';
+                                     
+                                     let dateDisplay = '';
+                                     if (day !== undefined && day !== null && day !== '') {
+                                         dateDisplay = `${monthNames[month - 1]} ${day}, ${year}`;
+                                     } else {
+                                         dateDisplay = `${monthNames[month - 1]} ${year}`;
+                                     }
+                                     
+                                     return `
+                                        <div class="border border-gray-200 rounded-lg p-4 bg-green-50">
+                                            <div class="flex justify-between items-start mb-2">
+                                                <div class="flex-1">
+                                                    <div class="font-semibold text-gray-800 flex items-center gap-2">
+                                                        <i class="fas fa-money-bill-wave text-green-600"></i>
+                                                        Standalone Payment
+                                                    </div>
+                                                    <div class="text-sm text-gray-600 mt-1">
+                                                        <i class="fas fa-calendar mr-1"></i>${dateDisplay}
+                                                    </div>
+                                                </div>
+                                                <div class="text-right">
+                                                    <div class="text-2xl font-bold text-green-600">$${amount.toFixed(2)}</div>
+                                                </div>
+                                            </div>
+                                            
+                                            ${notes && notes.trim() !== '' ? `
+                                                <div class="mt-2 text-sm text-gray-600 bg-white p-2 rounded">
+                                                    <i class="fas fa-sticky-note mr-1"></i>${notes}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    `;
+                                 }).join('')}
+                             </div>
+                         </div>
+                     ` : ''}
+                     
+                     ${personExpenses.length === 0 && personPayments.length === 0 ? `
+                         <div class="text-center py-8 text-gray-400">
+                             <i class="fas fa-inbox text-4xl mb-3"></i>
+                             <p>No contributions found for ${person} in ${monthNames[month - 1]} ${year}</p>
+                         </div>
+                     ` : ''}
+                     
+                     <div class="mt-6 pt-4 border-t border-gray-200">
+                         <button onclick="this.closest('.modal').remove()" class="w-full btn-secondary">
+                             <i class="fas fa-arrow-left mr-2"></i>Back to Summary
+                         </button>
+                     </div>
+                 </div>
+             `;
+             
+             document.body.appendChild(modal);
+         }
+         
          async function loadMonthlySummary() {
              const year = parseInt(document.getElementById('summaryYear').value);
              const month = parseInt(document.getElementById('summaryMonth').value);
@@ -5769,7 +7311,9 @@
                              Contribution Breakdown
                          </h3>
                          <div class="space-y-6">
-                             <div class="p-4 bg-blue-50 rounded-lg">
+                             <div class="p-4 bg-blue-50 rounded-lg cursor-pointer hover:bg-blue-100 hover:shadow-md transition-all" 
+                                  onclick="showPersonContributions('Amar', ${year}, ${month})"
+                                  style="cursor: pointer;">
                                  <div class="flex justify-between items-center mb-2">
                                      <span class="text-lg font-bold">👤 Amar</span>
                                      <span class="text-2xl font-bold text-blue-600">$${amarTotal.toFixed(2)}</span>
@@ -5779,9 +7323,14 @@
                                  <div class="mt-2 text-sm ${amarDiff >= 0 ? 'text-green-600' : 'text-red-600'}">
                                      ${amarDiff >= 0 ? '+' : ''}$${amarDiff.toFixed(2)} vs 50/50 split
                                  </div>
+                                 <div class="text-xs text-blue-600 mt-2 opacity-75 hover:opacity-100 transition-opacity">
+                                     <i class="fas fa-arrow-right mr-1"></i>Click to view all contributions
+                                 </div>
                              </div>
                              
-                             <div class="p-4 bg-pink-50 rounded-lg">
+                             <div class="p-4 bg-pink-50 rounded-lg cursor-pointer hover:bg-pink-100 hover:shadow-md transition-all" 
+                                  onclick="showPersonContributions('Priya', ${year}, ${month})"
+                                  style="cursor: pointer;">
                                  <div class="flex justify-between items-center mb-2">
                                      <span class="text-lg font-bold">👤 Priya</span>
                                      <span class="text-2xl font-bold text-pink-600">$${priyaTotal.toFixed(2)}</span>
@@ -5790,6 +7339,9 @@
                                  <div class="font-mono text-xs bg-white p-2 rounded">${priyaBar} ${priyaPercentage.toFixed(0)}%</div>
                                  <div class="mt-2 text-sm ${priyaDiff >= 0 ? 'text-green-600' : 'text-red-600'}">
                                      ${priyaDiff >= 0 ? '+' : ''}$${priyaDiff.toFixed(2)} vs 50/50 split
+                                 </div>
+                                 <div class="text-xs text-pink-600 mt-2 opacity-75 hover:opacity-100 transition-opacity">
+                                     <i class="fas fa-arrow-right mr-1"></i>Click to view all contributions
                                  </div>
                              </div>
                              
@@ -7691,7 +9243,8 @@
              displaySearchResults(results, filterDesc.join(', ') || 'Advanced Filters');
          }
          
-         function clearAllFilters() {
+         function clearSearchFilters() {
+             console.log('🔍 clearSearchFilters() called for Advanced Search tab');
              document.getElementById('naturalSearchInput').value = '';
              document.getElementById('minAmount').value = '';
              document.getElementById('maxAmount').value = '';
