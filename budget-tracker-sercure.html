@@ -636,8 +636,8 @@
                         <div>
                            <label class="text-xs font-semibold text-gray-600 mb-1 block">Amount Range</label>
                            <div class="flex gap-2">
-                              <input type="number" id="minAmount" placeholder="Min $" class="input-field text-sm" oninput="filterExpenses()">
-                              <input type="number" id="maxAmount" placeholder="Max $" class="input-field text-sm" oninput="filterExpenses()">
+                              <input type="tel" id="minAmount" placeholder="Min $" class="input-field text-sm" oninput="filterExpenses()">
+                              <input type="tel" id="maxAmount" placeholder="Max $" class="input-field text-sm" oninput="filterExpenses()">
                            </div>
                         </div>
                         <div>
@@ -695,7 +695,10 @@
             <div id="paymentsTab" class="p-3 md:p-6" style="display: none;">
                <div class="flex justify-between items-center mb-6">
                   <h3 class="text-lg font-bold text-gray-800"><i class="fas fa-hand-holding-usd mr-2 text-green-500"></i>Payment History</h3>
-                  <button onclick="openContributionModal('Amar')" class="btn-primary"><i class="fas fa-plus mr-2"></i>Add Payment</button>
+                  <div class="flex gap-2">
+                     <button onclick="openRentalIncomeModal()" class="btn-secondary" style="background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);"><i class="fas fa-home mr-2"></i>Add Rental Income</button>
+                     <button onclick="openContributionModal('Amar')" class="btn-primary"><i class="fas fa-plus mr-2"></i>Add Payment</button>
+                  </div>
                </div>
                <div class="payment-row expense-header">
                   <div>Date</div>
@@ -1060,6 +1063,15 @@
                <input type="hidden" id="contributionPerson">
                <input type="hidden" id="paymentRecordId">
                <div class="mb-4">
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Payment Type</label>
+                  <select id="contributionPaymentType" class="input-field" required onchange="handlePaymentTypeChange()">
+                     <option value="Regular">Regular Payment</option>
+                     <option value="RentalIncome">Rental Income (Auto-split 50/50)</option>
+                     <option value="PriyaMortgageContribution">Priya's Mortgage Contribution</option>
+                  </select>
+                  <p class="text-xs text-gray-500 mt-1" id="paymentTypeHint"><i class="fas fa-info-circle mr-1"></i>Select the type of payment</p>
+               </div>
+               <div class="mb-4" id="personSelectDiv">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">Person</label>
                   <select id="contributionPersonSelect" class="input-field" required onchange="updateContributionPerson()">
                      <option value="Amar">Amar</option>
@@ -1067,9 +1079,9 @@
                   </select>
                </div>
                <div class="mb-4">
-                  <label class="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
-                  <input type="number" id="contributionAmount" class="input-field" step="0.01" required placeholder="0.00" autofocus>
-                  <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Enter the payment amount</p>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2"><span id="amountLabel">Amount</span></label>
+                  <input type="tel" id="contributionAmount" class="input-field" required placeholder="0.00" autofocus>
+                  <p class="text-xs text-gray-500 mt-1" id="amountHint"><i class="fas fa-info-circle mr-1"></i>Enter the payment amount</p>
                </div>
                <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">Description (Optional)</label>
@@ -1252,7 +1264,7 @@
                </div>
                <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
-                  <input type="number" id="fixedAmount" class="input-field" step="0.01" required placeholder="0.00">
+                  <input type="tel" id="fixedAmount" class="input-field" required placeholder="0.00">
                </div>
                <div class="mb-4">
                   <label class="block text-sm font-semibold text-gray-700 mb-2">LLC Account</label>
@@ -1508,8 +1520,8 @@
                      <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Amount Range</label>
                         <div class="flex gap-2">
-                           <input type="number" id="minAmount" class="input-field" placeholder="Min" step="0.01">
-                           <input type="number" id="maxAmount" class="input-field" placeholder="Max" step="0.01">
+                           <input type="tel" id="filterMinAmount" class="input-field" placeholder="Min $">
+                           <input type="tel" id="filterMaxAmount" class="input-field" placeholder="Max $">
                         </div>
                      </div>
                      <div>
@@ -1639,48 +1651,67 @@
              }
          }
          
-         // Auto-format currency input (1014 → 10.14 or 10.14 → 10.14)
-         function formatCurrencyInput(input) {
-             let value = input.value.trim();
+         // Real-time currency formatting: formats as you type (1100 → 11.00)
+         function formatCurrencyInputRealtime(input) {
+             // Store cursor position
+             let cursorPosition = input.selectionStart;
+             let oldValue = input.value;
+             let oldLength = oldValue.length;
              
-             // Handle empty input - budget defaults to 0, others stay empty
-             if (value === '' || value === '0') {
-                 if (input.id === 'budget') {
-                     input.value = '0';
-                 } else {
-                     input.value = '';
-                 }
-                 return;
-             }
+             // Get only digits
+             let digitsOnly = input.value.replace(/[^\d]/g, '');
              
-             // Check if user typed a decimal point (e.g., "10.14")
-             if (value.includes('.')) {
-                 // User entered decimal manually, just parse and format
-                 let numValue = parseFloat(value);
-                 if (!isNaN(numValue) && numValue > 0) {
-                     input.value = numValue.toFixed(2);
-                 } else if (input.id === 'budget') {
-                     input.value = '0';
-                 }
-                 return;
-             }
-             
-             // No decimal point, assume cents format (e.g., "1014" → "10.14")
-             let digitsOnly = value.replace(/[^\d]/g, '');
+             // Handle empty input
              if (digitsOnly === '' || digitsOnly === '0') {
                  if (input.id === 'budget') {
-                     input.value = '0';
+                     input.value = '0.00';
                  } else {
                      input.value = '';
                  }
                  return;
              }
              
-             // Convert to number and divide by 100
+             // Remove leading zeros
+             digitsOnly = digitsOnly.replace(/^0+/, '') || '0';
+             
+             // Convert to cents and format
              let numValue = parseInt(digitsOnly, 10);
              let formatted = (numValue / 100).toFixed(2);
              
+             // Update value
              input.value = formatted;
+             
+             // Calculate new cursor position
+             let newLength = formatted.length;
+             let lengthDiff = newLength - oldLength;
+             
+             // Adjust cursor position (keep it in same relative position)
+             let newPosition = cursorPosition + lengthDiff;
+             
+             // Don't place cursor in decimal point
+             if (formatted[newPosition] === '.') {
+                 newPosition++;
+             }
+             
+             // Keep cursor in valid range
+             newPosition = Math.max(0, Math.min(newPosition, formatted.length));
+             
+             // Restore cursor position
+             input.setSelectionRange(newPosition, newPosition);
+         }
+         
+         // Initialize currency input with formatted value
+         function initializeCurrencyInput(input) {
+             if (input.value === '' || input.value === '0') {
+                 if (input.id === 'budget') {
+                     input.value = '0.00';
+                 } else {
+                     input.value = '';
+                     input.placeholder = '0.00';
+                 }
+             } else {
+                 formatCurrencyInputRealtime(input);
+             }
          }
          
          document.addEventListener('DOMContentLoaded', function() {
@@ -1718,26 +1749,71 @@
              loadFixedExpenses();
              loadLLCExpenses();
              
-             // Setup auto-formatting for currency inputs (on blur, not on every keystroke)
-             const currencyInputs = ['actual', 'budget', 'amarContributionInput', 'priyaContributionInput'];
-             currencyInputs.forEach(id => {
+             // Setup real-time currency formatting for all amount inputs
+             const currencyInputIds = [
+                 'actual', 
+                 'budget', 
+                 'amarContributionInput', 
+                 'priyaContributionInput',
+                 'contributionAmount',
+                 'fixedAmount',
+                 'minAmount',
+                 'maxAmount',
+                 'filterMinAmount',
+                 'filterMaxAmount'
+             ];
+             
+             currencyInputIds.forEach(id => {
                  const input = document.getElementById(id);
                  if (input) {
-                     // Clear "0" from budget field on focus
-                     if (id === 'budget') {
+                     // Initialize with placeholder
+                     initializeCurrencyInput(input);
+                     
+                     // Format in real-time as user types
+                     input.addEventListener('input', function(e) {
+                         formatCurrencyInputRealtime(this);
+                     });
+                     
+                     // Clear placeholder on focus for non-budget fields
+                     if (id !== 'budget') {
                          input.addEventListener('focus', function(e) {
-                             if (this.value === '0') {
+                             if (this.value === '' || this.value === '0.00') {
                                  this.value = '';
                              }
                          });
                      }
                      
-                     // Format when user finishes typing (leaves the field)
+                     // Ensure formatted on blur
                      input.addEventListener('blur', function(e) {
-                         formatCurrencyInput(this);
+                         if (this.value.trim() === '') {
+                             if (id === 'budget') {
+                                 this.value = '0.00';
+                             }
+                         }
                      });
                  }
              });
+             
+             // Also setup for dynamically created modals - use event delegation
+             document.addEventListener('focus', function(e) {
+                 if (e.target.type === 'number' || e.target.type === 'tel') {
+                     if (e.target.id && (e.target.id.toLowerCase().includes('amount') || 
+                         e.target.id.toLowerCase().includes('contribution') || 
+                         e.target.id === 'actual' || e.target.id === 'budget')) {
+                         
+                         // Initialize if not already done
+                         if (!e.target.dataset.currencyFormatted) {
+                             initializeCurrencyInput(e.target);
+                             e.target.dataset.currencyFormatted = 'true';
+                             
+                             // Add input listener
+                             e.target.addEventListener('input', function() {
+                                 formatCurrencyInputRealtime(this);
+                             });
+                         }
+                     }
+                 }
+             }, true);
              
              // Pull-to-refresh functionality
              let touchStartY = 0;
@@ -2381,8 +2457,45 @@
              `;
             
             // Show contributor details - only show those who contributed
-            const amarContrib = fields.AmarContribution || 0;
-            const priyaContrib = fields.PriyaContribution || 0;
+            let amarContrib = fields.AmarContribution || 0;
+            let priyaContrib = fields.PriyaContribution || 0;
+            let adjustmentNote = '';
+            
+            // For mortgage expenses, calculate adjusted contributions based on Priya's mortgage payments
+            if (fields.Category === 'Mortgage' && amarContrib > 0) {
+                // Get Priya's mortgage contributions for the same month/year
+                const expenseYear = String(fields.Year);
+                const expenseMonth = fields.Month;
+                
+                const priyaMortgagePayments = allPayments
+                    .filter(p => 
+                        p.fields.Person === 'Priya' && 
+                        p.fields.PaymentType === 'PriyaMortgageContribution' &&
+                        String(p.fields.Year) === expenseYear &&
+                        p.fields.Month === expenseMonth
+                    )
+                    .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+                
+                if (priyaMortgagePayments > 0) {
+                    // Distribute Priya's mortgage payment proportionally across all mortgage expenses
+                    const totalMortgageExpenses = allExpenses
+                        .filter(exp => 
+                            exp.fields.Category === 'Mortgage' &&
+                            String(exp.fields.Year) === expenseYear &&
+                            exp.fields.Month === expenseMonth
+                        )
+                        .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+                    
+                    // Calculate this expense's share of the adjustment
+                    const adjustmentRatio = totalMortgageExpenses > 0 ? amarContrib / totalMortgageExpenses : 0;
+                    const thisExpenseAdjustment = priyaMortgagePayments * adjustmentRatio;
+                    
+                    amarContrib = Math.max(0, amarContrib - thisExpenseAdjustment);
+                    priyaContrib = priyaContrib + thisExpenseAdjustment;
+                    adjustmentNote = `<p class="text-xs text-blue-600 mt-1"><i class="fas fa-info-circle mr-1"></i>Adjusted for Priya's mortgage contribution</p>`;
+                }
+            }
+            
             const hasAmarContrib = amarContrib > 0;
             const hasPriyaContrib = priyaContrib > 0;
             
@@ -2395,6 +2508,7 @@
                         <div class="bg-blue-50 p-4 rounded border-l-4 border-blue-500">
                             <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Amar's Contribution</p>
                             <p class="text-2xl font-bold text-blue-600">$${amarContrib.toFixed(2)}</p>
+                            ${adjustmentNote}
                         </div>
                     `;
                 }
@@ -2404,6 +2518,7 @@
                         <div class="bg-pink-50 p-4 rounded border-l-4 border-pink-500">
                             <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Priya's Contribution</p>
                             <p class="text-2xl font-bold text-pink-600">$${priyaContrib.toFixed(2)}</p>
+                            ${adjustmentNote}
                         </div>
                     `;
                 }
@@ -2535,12 +2650,21 @@
                  const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
                  const personColor = fields.Person === 'Amar' ? 'text-blue-600' : 'text-pink-600';
                  const personBg = fields.Person === 'Amar' ? 'bg-blue-100' : 'bg-pink-100';
+                 
+                 // Payment type badge
+                 let typeBadge = '';
+                 if (fields.PaymentType === 'RentalIncome') {
+                     typeBadge = '<span class="inline-block px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-semibold ml-2"><i class="fas fa-home mr-1"></i>Rental Income</span>';
+                 } else if (fields.PaymentType === 'PriyaMortgageContribution') {
+                     typeBadge = '<span class="inline-block px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold ml-2"><i class="fas fa-home mr-1"></i>Mortgage Contribution</span>';
+                 }
+                 
                  return `
                     <div class="payment-row">
                         <div class="expense-item"><span class="expense-label">Date:</span><span class="text-gray-600">${monthDisplay} ${fields.Year || 'N/A'}</span></div>
                         <div class="expense-item"><span class="expense-label">Person:</span><span class="inline-block px-3 py-1 ${personBg} ${personColor} rounded-full text-sm font-semibold">${fields.Person || 'N/A'}</span></div>
                         <div class="expense-item"><span class="expense-label">Amount:</span><span class="font-bold text-green-600 text-lg">$${(fields.Amount || 0).toFixed(2)}</span></div>
-                        <div class="expense-item"><span class="expense-label">Description:</span><span class="text-gray-700">${fields.Description || 'Payment'}</span></div>
+                        <div class="expense-item"><span class="expense-label">Description:</span><span class="text-gray-700">${fields.Description || 'Payment'}${typeBadge}</span></div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
                             <button onclick="editPayment('${payment.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
                             <button onclick="deletePayment('${payment.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
@@ -2631,17 +2755,37 @@
                  filteredPayments = filteredPayments.filter(p => p.fields.Month === selectedMonth);
              }
              
-             const amarContribFromExpenses = expenses.reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             // Calculate contributions separately for mortgage and non-mortgage expenses
+             const amarMortgageContrib = expenses
+                 .filter(exp => exp.fields.Category === 'Mortgage')
+                 .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             const amarNonMortgageContrib = expenses
+                 .filter(exp => exp.fields.Category !== 'Mortgage')
+                 .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             
              const priyaContribFromExpenses = expenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
+             
+             // Separate Priya's mortgage contributions from regular payments
+             const priyaMortgageContributions = filteredPayments
+                 .filter(p => p.fields.Person === 'Priya' && !p.fields.FromExpense && p.fields.PaymentType === 'PriyaMortgageContribution')
+                 .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             
              // Only count standalone payments (not from expenses, to avoid double counting)
              const amarContribFromPayments = filteredPayments.filter(p => p.fields.Person === 'Amar' && !p.fields.FromExpense).reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
-             const priyaContribFromPayments = filteredPayments.filter(p => p.fields.Person === 'Priya' && !p.fields.FromExpense).reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
-             const amarContribTotal = amarContribFromExpenses + amarContribFromPayments;
-             const priyaContribTotal = priyaContribFromExpenses + priyaContribFromPayments;
+             const priyaContribFromPayments = filteredPayments
+                 .filter(p => p.fields.Person === 'Priya' && !p.fields.FromExpense && p.fields.PaymentType !== 'PriyaMortgageContribution')
+                 .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             
+             // Reduce only Amar's mortgage contribution by Priya's mortgage payments, keep non-mortgage contributions unchanged
+             const amarAdjustedMortgageContrib = Math.max(0, amarMortgageContrib - priyaMortgageContributions);
+             const amarContribTotal = amarNonMortgageContrib + amarAdjustedMortgageContrib + amarContribFromPayments;
+             const priyaContribTotal = priyaContribFromExpenses + priyaContribFromPayments + priyaMortgageContributions;
              
              // Debug logging
              console.log('Filter:', selectedYear, selectedMonth);
-             console.log('Amar - From Expenses:', amarContribFromExpenses, 'From Payments:', amarContribFromPayments, 'Total:', amarContribTotal);
+             console.log('Amar - Mortgage:', amarMortgageContrib, 'Non-Mortgage:', amarNonMortgageContrib, 'Payments:', amarContribFromPayments);
+             console.log('Priya - Mortgage Contributions:', priyaMortgageContributions);
+             console.log('Amar - Adjusted Mortgage:', amarAdjustedMortgageContrib, 'Total:', amarContribTotal);
              console.log('Priya - From Expenses:', priyaContribFromExpenses, 'From Payments:', priyaContribFromPayments, 'Total:', priyaContribTotal);
              console.log('Filtered Payments Count:', filteredPayments.length);
              const amarRemaining = amarShare - amarContribTotal;
@@ -3149,30 +3293,69 @@
              const ctx = document.getElementById('contributionTrendChart');
              if (!ctx) return;
              
-             // Group contributions by month (from expenses)
+             // Group contributions by month (from expenses) with mortgage separation
              const monthlyData = {};
              allExpenses.forEach(exp => {
                  const key = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
                  if (!monthlyData[key]) {
-                     monthlyData[key] = { amar: 0, priya: 0, amarShare: 0, priyaShare: 0 };
+                     monthlyData[key] = { 
+                         amarMortgage: 0, 
+                         amarNonMortgage: 0, 
+                         priya: 0, 
+                         amarShare: 0, 
+                         priyaShare: 0 
+                     };
                  }
-                 monthlyData[key].amar += (exp.fields.AmarContribution || 0);
+                 
+                 // Separate Amar's mortgage from non-mortgage contributions
+                 if (exp.fields.Category === 'Mortgage') {
+                     monthlyData[key].amarMortgage += (exp.fields.AmarContribution || 0);
+                 } else {
+                     monthlyData[key].amarNonMortgage += (exp.fields.AmarContribution || 0);
+                 }
+                 
                  monthlyData[key].priya += (exp.fields.PriyaContribution || 0);
                  monthlyData[key].amarShare += (exp.fields.Actual || 0) / 2;
                  monthlyData[key].priyaShare += (exp.fields.Actual || 0) / 2;
              });
              
-             // Add standalone payments
+             // Add standalone payments and track mortgage contributions
              allPayments.forEach(payment => {
                  const key = `${payment.fields.Year}-${String(payment.fields.Month).padStart(2, '0')}`;
                  if (!monthlyData[key]) {
-                     monthlyData[key] = { amar: 0, priya: 0, amarShare: 0, priyaShare: 0 };
+                     monthlyData[key] = { 
+                         amarMortgage: 0, 
+                         amarNonMortgage: 0, 
+                         priya: 0, 
+                         amarShare: 0, 
+                         priyaShare: 0 
+                     };
                  }
+                 
                  if (payment.fields.Person === 'Amar') {
-                     monthlyData[key].amar += (payment.fields.Amount || 0);
-                 } else if (payment.fields.Person === 'Priya') {
+                     monthlyData[key].amarNonMortgage += (payment.fields.Amount || 0);
+                 } else if (payment.fields.Person === 'Priya' && payment.fields.PaymentType !== 'PriyaMortgageContribution') {
                      monthlyData[key].priya += (payment.fields.Amount || 0);
                  }
+                 // Priya's mortgage contributions will be handled in adjustment below
+             });
+             
+             // Apply mortgage adjustments for each month
+             Object.keys(monthlyData).forEach(key => {
+                 const [year, month] = key.split('-');
+                 const priyaMortgageContribs = allPayments
+                     .filter(p => 
+                         String(p.fields.Year) === year &&
+                         String(p.fields.Month).padStart(2, '0') === month &&
+                         p.fields.Person === 'Priya' &&
+                         p.fields.PaymentType === 'PriyaMortgageContribution'
+                     )
+                     .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+                 
+                 // Adjust Amar's mortgage contribution and add to Priya's total
+                 const amarAdjustedMortgage = Math.max(0, monthlyData[key].amarMortgage - priyaMortgageContribs);
+                 monthlyData[key].amar = monthlyData[key].amarNonMortgage + amarAdjustedMortgage;
+                 monthlyData[key].priya += priyaMortgageContribs;
              });
              
              const sortedMonths = Object.keys(monthlyData).sort().slice(-12); // Last 12 months
@@ -4182,8 +4365,38 @@
              });
              
              const total = expenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
-             const amarTotal = expenses.reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
-             const priyaTotal = expenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
+             
+             // Calculate contributions with mortgage adjustments
+             const amarMortgageContrib = expenses
+                 .filter(exp => exp.fields.Category === 'Mortgage')
+                 .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             const amarNonMortgageContrib = expenses
+                 .filter(exp => exp.fields.Category !== 'Mortgage')
+                 .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             const priyaContribFromExpenses = expenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
+             
+             // Get unique year-month combinations from filtered expenses
+             const filteredPeriods = new Set(expenses.map(exp => `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`));
+             
+             // Calculate Priya's mortgage contributions for the filtered periods
+             let priyaMortgageContribs = 0;
+             filteredPeriods.forEach(period => {
+                 const [year, month] = period.split('-');
+                 const periodContrib = allPayments
+                     .filter(p => 
+                         String(p.fields.Year) === year &&
+                         String(p.fields.Month).padStart(2, '0') === month &&
+                         p.fields.Person === 'Priya' &&
+                         p.fields.PaymentType === 'PriyaMortgageContribution'
+                     )
+                     .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+                 priyaMortgageContribs += periodContrib;
+             });
+             
+             // Apply adjustment
+             const amarAdjustedMortgage = Math.max(0, amarMortgageContrib - priyaMortgageContribs);
+             const amarTotal = amarNonMortgageContrib + amarAdjustedMortgage;
+             const priyaTotal = priyaContribFromExpenses + priyaMortgageContribs;
              
              const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
              
@@ -4243,8 +4456,41 @@
                          const year = exp.fields.Year;
                          const llc = exp.fields.LLC === 'Yes';
                          const category = exp.fields.Category || 'Other';
-                         const amarContrib = exp.fields.AmarContribution || 0;
-                         const priyaContrib = exp.fields.PriyaContribution || 0;
+                         let amarContrib = exp.fields.AmarContribution || 0;
+                         let priyaContrib = exp.fields.PriyaContribution || 0;
+                         
+                         // For mortgage expenses, calculate adjusted contributions
+                         if (category === 'Mortgage' && amarContrib > 0) {
+                             const expenseYear = String(year);
+                             const expenseMonth = String(month).padStart(2, '0');
+                             
+                             const priyaMortgagePayments = allPayments
+                                 .filter(p => 
+                                     p.fields.Person === 'Priya' && 
+                                     p.fields.PaymentType === 'PriyaMortgageContribution' &&
+                                     String(p.fields.Year) === expenseYear &&
+                                     String(p.fields.Month).padStart(2, '0') === expenseMonth
+                                 )
+                                 .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+                             
+                             if (priyaMortgagePayments > 0) {
+                                 // Get total mortgage expenses for this month
+                                 const totalMortgageExpenses = allExpenses
+                                     .filter(e => 
+                                         e.fields.Category === 'Mortgage' &&
+                                         String(e.fields.Year) === expenseYear &&
+                                         String(e.fields.Month).padStart(2, '0') === expenseMonth
+                                     )
+                                     .reduce((sum, e) => sum + (e.fields.AmarContribution || 0), 0);
+                                 
+                                 // Calculate this expense's share of the adjustment
+                                 const adjustmentRatio = totalMortgageExpenses > 0 ? amarContrib / totalMortgageExpenses : 0;
+                                 const thisExpenseAdjustment = priyaMortgagePayments * adjustmentRatio;
+                                 
+                                 amarContrib = Math.max(0, amarContrib - thisExpenseAdjustment);
+                                 priyaContrib = priyaContrib + thisExpenseAdjustment;
+                             }
+                         }
                          const notes = exp.fields.Notes || '';
                          const tags = exp.fields.Tags || '';
                          
@@ -4555,12 +4801,81 @@
              document.getElementById('expenseModal').classList.remove('active');
          }
          
+         function handlePaymentTypeChange() {
+             const paymentType = document.getElementById('contributionPaymentType').value;
+             const personSelectDiv = document.getElementById('personSelectDiv');
+             const amountLabel = document.getElementById('amountLabel');
+             const amountHint = document.getElementById('amountHint');
+             const paymentTypeHint = document.getElementById('paymentTypeHint');
+             const descriptionInput = document.getElementById('contributionDescription');
+             
+             if (paymentType === 'RentalIncome') {
+                 // Hide person selector for rental income
+                 personSelectDiv.style.display = 'none';
+                 amountLabel.textContent = 'Total Rental Amount';
+                 amountHint.innerHTML = '<i class="fas fa-info-circle mr-1"></i>Will be split equally: 50% Amar, 50% Priya';
+                 paymentTypeHint.innerHTML = '<i class="fas fa-home mr-1 text-green-600"></i>Rental income will be automatically split 50/50 between Amar and Priya';
+                 descriptionInput.value = 'Rental Income';
+             } else if (paymentType === 'PriyaMortgageContribution') {
+                 // Lock to Priya for mortgage contribution
+                 personSelectDiv.style.display = 'block';
+                 document.getElementById('contributionPersonSelect').value = 'Priya';
+                 document.getElementById('contributionPersonSelect').disabled = true;
+                 document.getElementById('contributionPerson').value = 'Priya';
+                 amountLabel.textContent = 'Contribution Amount';
+                 amountHint.innerHTML = '<i class="fas fa-info-circle mr-1"></i>This will reduce Amar\'s net mortgage contribution';
+                 paymentTypeHint.innerHTML = '<i class="fas fa-home mr-1 text-blue-600"></i>This contribution offsets Amar\'s mortgage payments';
+                 descriptionInput.value = 'Mortgage Contribution';
+             } else {
+                 // Regular payment
+                 personSelectDiv.style.display = 'block';
+                 document.getElementById('contributionPersonSelect').disabled = false;
+                 amountLabel.textContent = 'Amount';
+                 amountHint.innerHTML = '<i class="fas fa-info-circle mr-1"></i>Enter the payment amount';
+                 paymentTypeHint.innerHTML = '<i class="fas fa-info-circle mr-1"></i>Select the type of payment';
+                 descriptionInput.value = '';
+             }
+         }
+         
+         function openRentalIncomeModal() {
+             document.getElementById('contributionModalTitle').textContent = 'Add Rental Income';
+             document.getElementById('contributionForm').reset();
+             document.getElementById('contributionPerson').value = '';
+             document.getElementById('paymentRecordId').value = '';
+             
+             // Set payment type to Rental Income
+             document.getElementById('contributionPaymentType').value = 'RentalIncome';
+             handlePaymentTypeChange();
+             
+             // Populate year dropdown
+             const yearSelect = document.getElementById('contributionYear');
+             yearSelect.innerHTML = '';
+             const currentYear = new Date().getFullYear();
+             for (let year = 2025; year <= 2045; year++) {
+                 const option = document.createElement('option');
+                 option.value = year;
+                 option.textContent = year;
+                 if (year === currentYear) option.selected = true;
+                 yearSelect.appendChild(option);
+             }
+             
+             // Set current month
+             const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+             document.getElementById('contributionMonth').value = currentMonth;
+             
+             document.getElementById('contributionModal').classList.add('active');
+         }
+         
          function openContributionModal(person) {
              document.getElementById('contributionModalTitle').textContent = `Add ${person}'s Payment`;
              document.getElementById('contributionForm').reset();
              document.getElementById('contributionPerson').value = person;
              document.getElementById('contributionPersonSelect').value = person;
              document.getElementById('paymentRecordId').value = '';
+             
+             // Reset payment type to Regular
+             document.getElementById('contributionPaymentType').value = 'Regular';
+             handlePaymentTypeChange();
              
              // Populate year dropdown
              const yearSelect = document.getElementById('contributionYear');
@@ -4597,10 +4912,24 @@
              allExpenses.forEach(exp => {
                  const key = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
                  if (!monthlyData[key]) {
-                     monthlyData[key] = { spending: 0, contributions: 0, year: exp.fields.Year, month: exp.fields.Month };
+                     monthlyData[key] = { 
+                         spending: 0, 
+                         amarMortgage: 0,
+                         amarNonMortgage: 0,
+                         priya: 0,
+                         year: exp.fields.Year, 
+                         month: exp.fields.Month 
+                     };
                  }
                  monthlyData[key].spending += (exp.fields.Actual || 0);
-                 monthlyData[key].contributions += (exp.fields.AmarContribution || 0) + (exp.fields.PriyaContribution || 0);
+                 
+                 // Separate Amar's mortgage from non-mortgage contributions
+                 if (exp.fields.Category === 'Mortgage') {
+                     monthlyData[key].amarMortgage += (exp.fields.AmarContribution || 0);
+                 } else {
+                     monthlyData[key].amarNonMortgage += (exp.fields.AmarContribution || 0);
+                 }
+                 monthlyData[key].priya += (exp.fields.PriyaContribution || 0);
              });
              
              // Add standalone payments (exclude FromExpense to avoid double counting)
@@ -4608,10 +4937,48 @@
                  if (!payment.fields.FromExpense) {
                      const key = `${payment.fields.Year}-${String(payment.fields.Month).padStart(2, '0')}`;
                      if (!monthlyData[key]) {
-                         monthlyData[key] = { spending: 0, contributions: 0, year: payment.fields.Year, month: payment.fields.Month };
+                         monthlyData[key] = { 
+                             spending: 0, 
+                             amarMortgage: 0,
+                             amarNonMortgage: 0,
+                             priya: 0,
+                             year: payment.fields.Year, 
+                             month: payment.fields.Month 
+                         };
                      }
-                     monthlyData[key].contributions += (payment.fields.Amount || 0);
+                     
+                     // Handle Priya's mortgage contributions separately
+                     if (payment.fields.Person === 'Priya' && payment.fields.PaymentType === 'PriyaMortgageContribution') {
+                         // Don't add yet - will be used to adjust Amar's mortgage contribution
+                     } else {
+                         // Add regular payments to respective person
+                         if (payment.fields.Person === 'Amar') {
+                             monthlyData[key].amarNonMortgage += (payment.fields.Amount || 0);
+                         } else {
+                             monthlyData[key].priya += (payment.fields.Amount || 0);
+                         }
+                     }
                  }
+             });
+             
+             // Calculate final contributions with mortgage adjustments
+             Object.keys(monthlyData).forEach(key => {
+                 const data = monthlyData[key];
+                 
+                 // Get Priya's mortgage contributions for this month
+                 const priyaMortgageContribs = allPayments
+                     .filter(p => 
+                         !p.fields.FromExpense &&
+                         String(p.fields.Year) === String(data.year) &&
+                         String(p.fields.Month).padStart(2, '0') === key.split('-')[1] &&
+                         p.fields.Person === 'Priya' &&
+                         p.fields.PaymentType === 'PriyaMortgageContribution'
+                     )
+                     .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+                 
+                 // Adjust Amar's mortgage contribution and add to Priya's
+                 const amarAdjustedMortgage = Math.max(0, data.amarMortgage - priyaMortgageContribs);
+                 data.contributions = data.amarNonMortgage + amarAdjustedMortgage + data.priya + priyaMortgageContribs;
              });
              
              // Check for mismatches
@@ -4710,34 +5077,86 @@
          async function saveStandaloneContribution(event) {
              event.preventDefault();
              const recordId = document.getElementById('paymentRecordId').value;
+             const paymentType = document.getElementById('contributionPaymentType').value;
              const person = document.getElementById('contributionPerson').value;
              const amount = parseFloat(document.getElementById('contributionAmount').value) || 0;
              const description = document.getElementById('contributionDescription').value || 'Payment';
              const year = parseInt(document.getElementById('contributionYear').value);
              const month = document.getElementById('contributionMonth').value;
              
-             // Save to Payments table
-             const fields = {
-                 Person: person,
-                 Amount: amount,
-                 Description: description,
-                 Year: year,
-                 Month: month
-             };
-             
              try {
-                 const url = recordId 
-                     ? `https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}/${recordId}`
-                     : `https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`;
-                 const response = await fetch(url, {
-                     method: recordId ? 'PATCH' : 'POST',
-                     headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ fields })
-                 });
-                 if (!response.ok) throw new Error('Failed to save payment');
-                 closeContributionModal();
-                 await loadData();
-                 showNotification(recordId ? 'Payment updated!' : `${person}'s payment of $${amount.toFixed(2)} recorded!`, 'success');
+                 if (paymentType === 'RentalIncome' && !recordId) {
+                     // Create two separate payment records (50/50 split)
+                     const splitAmount = amount / 2;
+                     
+                     // Create Amar's rental income payment
+                     const amarFields = {
+                         Person: 'Amar',
+                         Amount: splitAmount,
+                         Description: description || 'Rental Income',
+                         Year: year,
+                         Month: month,
+                         PaymentType: 'RentalIncome'
+                     };
+                     
+                     const amarResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
+                         method: 'POST',
+                         headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ fields: amarFields })
+                     });
+                     if (!amarResponse.ok) throw new Error('Failed to save Amar\'s rental income');
+                     
+                     // Create Priya's rental income payment
+                     const priyaFields = {
+                         Person: 'Priya',
+                         Amount: splitAmount,
+                         Description: description || 'Rental Income',
+                         Year: year,
+                         Month: month,
+                         PaymentType: 'RentalIncome'
+                     };
+                     
+                     const priyaResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
+                         method: 'POST',
+                         headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ fields: priyaFields })
+                     });
+                     if (!priyaResponse.ok) throw new Error('Failed to save Priya\'s rental income');
+                     
+                     closeContributionModal();
+                     await loadData();
+                     showNotification(`Rental income of $${amount.toFixed(2)} split equally: $${splitAmount.toFixed(2)} each to Amar and Priya`, 'success');
+                     
+                 } else {
+                     // Regular payment or Priya's mortgage contribution
+                     const fields = {
+                         Person: person,
+                         Amount: amount,
+                         Description: description,
+                         Year: year,
+                         Month: month,
+                         PaymentType: paymentType
+                     };
+                     
+                     const url = recordId 
+                         ? `https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}/${recordId}`
+                         : `https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`;
+                     const response = await fetch(url, {
+                         method: recordId ? 'PATCH' : 'POST',
+                         headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ fields })
+                     });
+                     if (!response.ok) throw new Error('Failed to save payment');
+                     
+                     closeContributionModal();
+                     await loadData();
+                     
+                     let message = recordId ? 'Payment updated!' : `${person}'s payment of $${amount.toFixed(2)} recorded!`;
+                     if (paymentType === 'PriyaMortgageContribution') {
+                         message = `Priya's mortgage contribution of $${amount.toFixed(2)} recorded (reduces Amar's net contribution)`;
+                     }
+                     showNotification(message, 'success');
+                 }
              } catch (error) {
                  showNotification('Error: ' + error.message, 'error');
              }
@@ -4753,6 +5172,10 @@
              document.getElementById('contributionPersonSelect').value = payment.fields.Person || 'Amar';
              document.getElementById('contributionAmount').value = payment.fields.Amount || '';
              document.getElementById('contributionDescription').value = payment.fields.Description || '';
+             
+             // Set payment type (default to Regular if not set)
+             document.getElementById('contributionPaymentType').value = payment.fields.PaymentType || 'Regular';
+             handlePaymentTypeChange();
              
              // Populate year dropdown
              const yearSelect = document.getElementById('contributionYear');
@@ -7229,14 +7652,30 @@
                  categoryTotals[cat] = (categoryTotals[cat] || 0) + (exp.fields.Actual || 0);
              });
              
-             // Contributions
-             const amarContribFromExpenses = monthExpenses.reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
-             const priyaContribFromExpenses = monthExpenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
-             const amarContribFromPayments = monthPayments.filter(p => p.fields.Person === 'Amar').reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
-             const priyaContribFromPayments = monthPayments.filter(p => p.fields.Person === 'Priya').reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             // Contributions - separate mortgage from non-mortgage
+             const amarMortgageContrib = monthExpenses
+                 .filter(exp => exp.fields.Category === 'Mortgage')
+                 .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+             const amarNonMortgageContrib = monthExpenses
+                 .filter(exp => exp.fields.Category !== 'Mortgage')
+                 .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
              
-             const amarTotal = amarContribFromExpenses + amarContribFromPayments;
-             const priyaTotal = priyaContribFromExpenses + priyaContribFromPayments;
+             const priyaContribFromExpenses = monthExpenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
+             
+             // Separate Priya's mortgage contributions from regular payments
+             const priyaMortgageContributions = monthPayments
+                 .filter(p => p.fields.Person === 'Priya' && p.fields.PaymentType === 'PriyaMortgageContribution')
+                 .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             
+             const amarContribFromPayments = monthPayments.filter(p => p.fields.Person === 'Amar').reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             const priyaContribFromPayments = monthPayments
+                 .filter(p => p.fields.Person === 'Priya' && p.fields.PaymentType !== 'PriyaMortgageContribution')
+                 .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+             
+             // Reduce only Amar's mortgage contribution by Priya's mortgage payments, keep non-mortgage contributions unchanged
+             const amarAdjustedMortgageContrib = Math.max(0, amarMortgageContrib - priyaMortgageContributions);
+             const amarTotal = amarNonMortgageContrib + amarAdjustedMortgageContrib + amarContribFromPayments;
+             const priyaTotal = priyaContribFromExpenses + priyaContribFromPayments + priyaMortgageContributions;
              const totalContributions = amarTotal + priyaTotal;
              
              const amarPercentage = totalContributions > 0 ? (amarTotal / totalContributions * 100) : 0;
@@ -9198,8 +9637,8 @@
          }
          
          function applyAdvancedFilters() {
-             const minAmount = parseFloat(document.getElementById('minAmount').value);
-             const maxAmount = parseFloat(document.getElementById('maxAmount').value);
+             const minAmount = parseFloat(document.getElementById('filterMinAmount').value);
+             const maxAmount = parseFloat(document.getElementById('filterMaxAmount').value);
              const startDate = document.getElementById('startDate').value;
              const endDate = document.getElementById('endDate').value;
              const category = document.getElementById('searchCategory').value;
@@ -9246,8 +9685,8 @@
          function clearSearchFilters() {
              console.log('🔍 clearSearchFilters() called for Advanced Search tab');
              document.getElementById('naturalSearchInput').value = '';
-             document.getElementById('minAmount').value = '';
-             document.getElementById('maxAmount').value = '';
+             document.getElementById('filterMinAmount').value = '';
+             document.getElementById('filterMaxAmount').value = '';
              document.getElementById('startDate').value = '';
              document.getElementById('endDate').value = '';
              document.getElementById('searchCategory').value = '';
