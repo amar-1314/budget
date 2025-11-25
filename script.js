@@ -87,7 +87,21 @@ if (!SUPABASE_URL && !SUPABASE_ANON_KEY) {
 // Just check if credentials are available
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     console.log('✅ Supabase credentials found');
-
+    
+    // Log notification status
+    if ('Notification' in window) {
+        console.log('📱 Notification API available');
+        console.log('🔔 Notification permission:', Notification.permission);
+    } else {
+        console.warn('⚠️ Notification API not available in this browser');
+    }
+    
+    if ('serviceWorker' in navigator) {
+        console.log('⚙️ Service Worker supported');
+    } else {
+        console.warn('⚠️ Service Worker not supported in this browser');
+    }
+    
     // Initialize Supabase Realtime for cross-device notifications
     initializeRealtimeNotifications();
 }
@@ -141,10 +155,19 @@ async function initializeRealtimeNotifications() {
                     // Check if this expense was created by this device
                     const lastExpenseDeviceId = sessionStorage.getItem('last_expense_device_id');
 
+                    console.log('🔍 Device check:', {
+                        currentDevice: deviceId,
+                        lastExpenseDevice: lastExpenseDeviceId,
+                        shouldNotify: lastExpenseDeviceId !== deviceId
+                    });
+
                     // Only notify if it's from a different device/session
                     if (lastExpenseDeviceId !== deviceId) {
+                        console.log('✅ Different device - triggering notification!');
+
                         // Show notification
                         if ('serviceWorker' in navigator && swRegistration) {
+                            console.log('📱 Using Service Worker notification');
                             swRegistration.showNotification('💰 New Expense Added', {
                                 body: `${newExpense.Item || 'Expense'} - $${(newExpense.Actual || 0).toFixed(2)}`,
                                 icon: './icon-192.png',
@@ -156,17 +179,31 @@ async function initializeRealtimeNotifications() {
                                     url: './',
                                     expenseId: newExpense.id
                                 }
+                            }).then(() => {
+                                console.log('✅ Notification shown successfully!');
+                            }).catch(err => {
+                                console.error('❌ Failed to show notification:', err);
                             });
                         } else if ('Notification' in window && Notification.permission === 'granted') {
+                            console.log('📱 Using basic Notification API');
                             new Notification('💰 New Expense Added', {
                                 body: `${newExpense.Item || 'Expense'} - $${(newExpense.Actual || 0).toFixed(2)}`,
                                 icon: './icon-192.png',
                                 tag: 'expense-notification'
                             });
+                        } else {
+                            console.warn('⚠️ Notification not available:', {
+                                hasServiceWorker: 'serviceWorker' in navigator,
+                                hasSwRegistration: !!swRegistration,
+                                hasNotification: 'Notification' in window,
+                                permission: Notification?.permission
+                            });
                         }
 
                         // Reload data to show the new expense
                         loadData();
+                    } else {
+                        console.log('⏭️ Same device - skipping notification (self-prevention)');
                     }
                 }
             )
