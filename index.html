@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#8b5cf6">
+    <title>Family Budget Tracker</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body class="bg-gray-50">
+    <div id="globalLoadingOverlay"
+        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <div style="position: relative; width: 120px; height: 120px;">
+            <div class="fancy-spinner"></div>
+            <div class="fancy-spinner-inner"></div>
+            <div class="fancy-spinner-dot"></div>
+        </div>
+        <p
+            style="font-size: 24px; font-weight: 700; color: white; margin-top: 32px; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            Budget Tracker</p>
+        <p id="globalLoadingText" style="font-size: 16px; color: rgba(255,255,255,0.9); margin-top: 8px; font-weight: 500;">Loading your
+            data...</p>
+        <div style="margin-top: 24px; display: flex; gap: 8px;">
+            <div class="loading-dot" style="animation-delay: 0s;"></div>
+            <div class="loading-dot" style="animation-delay: 0.2s;"></div>
+            <div class="loading-dot" style="animation-delay: 0.4s;"></div>
+        </div>
+    </div>
+    <div id="notification" class="notification">
+        <div class="flex items-center gap-3"><i class="fas fa-check-circle text-green-500"></i><span
+                id="notificationText"></span></div>
+    </div>
+    <div id="slideMenu"
+        class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50">
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-bars mr-2"></i>Menu</h2>
+                <button onclick="toggleMenu()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="space-y-3">
+                <button onclick="openBudgetManager(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-wallet text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Budget Manager</div>
+                        <div class="text-xs text-gray-500">Set budgets per category</div>
+                    </div>
+                </button>
+                <button onclick="openFixedExpensesModal(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-repeat text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Fixed Expenses</div>
+                        <div class="text-xs text-gray-500">Manage recurring expenses</div>
+                    </div>
+                </button>
+                <button onclick="openLLCExpensesModal(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-building text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">LLC Eligible Expenses</div>
+                        <div class="text-xs text-gray-500">Define business-eligible items</div>
+                    </div>
+                </button>
+                <button onclick="openMonthlySummary(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-chart-bar text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Monthly Summary</div>
+                        <div class="text-xs text-gray-500">View detailed monthly reports</div>
+                    </div>
+                </button>
+                <button onclick="openPredictiveBudgeting(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-crystal-ball text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Predictive Budgeting</div>
+                        <div class="text-xs text-gray-500">AI-powered spending predictions</div>
+                    </div>
+                </button>
+                <button onclick="openAIInsights(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-brain text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">AI Insights</div>
+                        <div class="text-xs text-gray-500">Smart spending analysis & tips</div>
+                    </div>
+                </button>
+                <button onclick="openAdvancedAnalytics(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-chart-pie text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Advanced Analytics</div>
+                        <div class="text-xs text-gray-500">Heatmaps, trends & visualizations</div>
+                    </div>
+                </button>
+                <button onclick="openSmartSearch(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-search text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Smart Search</div>
+                        <div class="text-xs text-gray-500">Advanced search & filters</div>
+                    </div>
+                </button>
+                <button onclick="openSettings(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-cog text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Settings</div>
+                        <div class="text-xs text-gray-500">Configure your account</div>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div id="menuOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-40" style="display: none;"
+        onclick="toggleMenu()"></div>
+    <div class="gradient-bg text-white py-4 md:py-8 px-4 md:px-6 shadow-lg">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl md:text-4xl font-bold mb-1 md:mb-2"><i
+                            class="fas fa-chart-line mr-2 md:mr-3"></i>Budget Tracker</h1>
+                    <p class="text-purple-100 text-xs md:text-base">Amar & Priya</p>
+                </div>
+                <div class="flex items-center gap-2 md:gap-4">
+                    <button onclick="toggleMenu()"
+                        class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700"
+                        title="Menu">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <button onclick="showMismatchNotifications()"
+                        class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700 relative"
+                        title="Notifications" id="notificationBtn">
+                        <i class="fas fa-bell"></i>
+                        <span id="notificationBadge"
+                            class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold"
+                            style="display: none;">0</span>
+                    </button>
+                    <button onclick="openSettings()"
+                        class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700"
+                        title="Settings"><i class="fas fa-cog"></i><span
+                            class="hidden md:inline ml-2">Settings</span></button>
+                    <button onclick="openAddExpenseModal()"
+                        class="desktop-only btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700"><i
+                            class="fas fa-plus mr-2"></i>Add Expense</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <button onclick="openAddExpenseModal()" class="fab mobile-only">
+        <i class="fas fa-plus"></i>
+    </button>
+    <div class="max-w-7xl mx-auto px-3 md:px-6 py-4 md:py-8">
+        <div class="mb-4 md:mb-6 flex items-center gap-2 md:gap-4 flex-wrap">
+            <label class="font-semibold text-gray-700 text-sm md:text-base">Filter:</label>
+            <select id="yearSelector" onchange="filterByPeriod()" class="input-field flex-1 min-w-[100px] md:w-40">
+                <option value="all">All Years</option>
+            </select>
+            <select id="monthSelector" onchange="filterByPeriod()" class="input-field flex-1 min-w-[120px] md:w-48">
+                <option value="all">All Months</option>
+            </select>
+            <button onclick="loadData()" class="btn-secondary text-sm md:text-base"><i
+                    class="fas fa-sync-alt mr-1 md:mr-2"></i><span class="hidden md:inline">Refresh</span><i
+                    class="fas fa-sync-alt md:hidden"></i></button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-6 mb-6 md:mb-8">
+            <div class="stat-card">
+                <div class="relative z-10">
+                    <div class="text-purple-100 text-xs md:text-sm font-semibold mb-1">BUDGET</div>
+                    <div class="text-xl md:text-3xl font-bold" id="totalBudget">$0</div>
+                </div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="relative z-10">
+                    <div class="text-pink-100 text-xs md:text-sm font-semibold mb-1">SPENT</div>
+                    <div class="text-xl md:text-3xl font-bold" id="totalActual">$0</div>
+                </div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="relative z-10">
+                    <div class="text-blue-100 text-xs md:text-sm font-semibold mb-1">LLC</div>
+                    <div class="text-xl md:text-3xl font-bold" id="llcTotal">$0</div>
+                </div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+                <div class="relative z-10">
+                    <div class="text-green-100 text-xs md:text-sm font-semibold mb-1">LEFT</div>
+                    <div class="text-xl md:text-3xl font-bold" id="remaining">$0</div>
+                </div>
+            </div>
+            <div class="stat-card" style="background: linear-gradient(135deg, #FFD89B 0%, #19547B 100%);">
+                <div class="relative z-10">
+                    <div class="text-yellow-100 text-xs md:text-sm font-semibold mb-1">RENTAL</div>
+                    <div class="text-xl md:text-3xl font-bold" id="rentalIncomeTotal">$0</div>
+                </div>
+            </div>
+            <div class="stat-card cursor-pointer"
+                style="background: linear-gradient(135deg, #FA8BFF 0%, #2BD2FF 90%, #2BFF88 100%);"
+                onclick="openPredictiveBudgeting()" title="Click to view detailed predictions">
+                <div class="relative z-10">
+                    <div class="text-white text-xs md:text-sm font-semibold mb-1 flex items-center gap-1">
+                        <i class="fas fa-crystal-ball"></i>
+                        <span>PREDICTED</span>
+                    </div>
+                    <div class="text-xl md:text-3xl font-bold" id="predictedTotal">$0</div>
+                    <div class="text-xs text-white opacity-75 mt-1">Next Month</div>
+                </div>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="relative group cursor-pointer"
+                            onclick="document.getElementById('amarPictureInput').click()">
+                            <div
+                                class="w-16 h-16 rounded-full overflow-hidden bg-blue-100 flex items-center justify-center border-2 border-blue-300">
+                                <img id="amarPicture" src="" alt="Amar" class="w-full h-full object-cover"
+                                    style="display: none;">
+                                <i id="amarPictureIcon" class="fas fa-user-circle text-blue-500 text-4xl"></i>
+                            </div>
+                            <div
+                                class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-camera text-white text-xl"></i>
+                            </div>
+                        </div>
+                        <input type="file" id="amarPictureInput" accept="image/*" style="display: none;"
+                            onchange="uploadProfilePicture('Amar', this)">
+                        <h3 class="text-xl font-bold text-gray-800">Amar's Share</h3>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-2xl font-bold text-blue-600" id="amarShare">$0</div>
+                        <div class="text-xs text-gray-500">Share: 50%</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">Contributed</span>
+                        <span class="font-semibold text-blue-600"><span id="amarContribution">$0</span> (<span
+                                id="amarContributionPercent">0</span>%)</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="amarContributionProgress"
+                            style="width: 0%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">Net Due (w/ Rental)</span>
+                        <span class="font-semibold text-gray-700" id="amarRemaining">$0</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="amarRemainingProgress" style="width: 100%; background: #e5e7eb;">
+                        </div>
+                    </div>
+                </div>
+                <button onclick="openContributionModal('Amar')" class="btn-primary w-full text-sm py-2"><i
+                        class="fas fa-plus mr-2"></i>Add Payment</button>
+            </div>
+            <div class="card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="relative group cursor-pointer"
+                            onclick="document.getElementById('priyaPictureInput').click()">
+                            <div
+                                class="w-16 h-16 rounded-full overflow-hidden bg-pink-100 flex items-center justify-center border-2 border-pink-300">
+                                <img id="priyaPicture" src="" alt="Priya" class="w-full h-full object-cover"
+                                    style="display: none;">
+                                <i id="priyaPictureIcon" class="fas fa-user-circle text-pink-500 text-4xl"></i>
+                            </div>
+                            <div
+                                class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-camera text-white text-xl"></i>
+                            </div>
+                        </div>
+                        <input type="file" id="priyaPictureInput" accept="image/*" style="display: none;"
+                            onchange="uploadProfilePicture('Priya', this)">
+                        <h3 class="text-xl font-bold text-gray-800">Priya's Share</h3>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-2xl font-bold text-pink-600" id="priyaShare">$0</div>
+                        <div class="text-xs text-gray-500">Share: 50%</div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">Contributed</span>
+                        <span class="font-semibold text-pink-600"><span id="priyaContribution">$0</span> (<span
+                                id="priyaContributionPercent">0</span>%)</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="priyaContributionProgress"
+                            style="width: 0%; background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-gray-600">Net Due (w/ Rental)</span>
+                        <span class="font-semibold text-gray-700" id="priyaRemaining">$0</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="priyaRemainingProgress"
+                            style="width: 100%; background: #e5e7eb;"></div>
+                    </div>
+                </div>
+                <button onclick="openContributionModal('Priya')" class="btn-primary w-full text-sm py-2"
+                    style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"><i
+                        class="fas fa-plus mr-2"></i>Add Payment</button>
+            </div>
+        </div>
+        <div class="card mb-8">
+            <div class="border-b border-gray-200 px-3 md:px-6 overflow-x-auto">
+                <div class="flex gap-2 min-w-max"><button class="tab-button active" onclick="switchTab('expenses')"><i
+                            class="fas fa-list mr-1 md:mr-2"></i><span class="hidden md:inline">Expenses</span><span
+                            class="md:hidden">List</span></button><button class="tab-button"
+                        onclick="switchTab('payments')"><i class="fas fa-hand-holding-usd mr-1 md:mr-2"></i><span
+                            class="hidden md:inline">Payments</span><span class="md:hidden">Pay</span></button><button
+                        class="tab-button" onclick="switchTab('category')"><i
+                            class="fas fa-filter mr-1 md:mr-2"></i>Filters</button><button class="tab-button"
+                        onclick="switchTab('analytics')"><i class="fas fa-chart-pie mr-1 md:mr-2"></i><span
+                            class="hidden md:inline">Analytics</span><span
+                            class="md:hidden">Charts</span></button><button class="tab-button"
+                        onclick="switchTab('trends')"><i
+                            class="fas fa-chart-line mr-1 md:mr-2"></i>Trends</button><button class="tab-button"
+                        onclick="switchTab('insights')"><i class="fas fa-lightbulb mr-1 md:mr-2"></i>Insights</button>
+                </div>
+            </div>
+            <div id="expensesTab" class="p-3 md:p-6">
+                <div class="mb-4 space-y-3">
+                    <div class="flex gap-2">
+                        <div class="flex-1">
+                            <input type="text" id="expenseSearch" placeholder="🔍 Search expenses..."
+                                class="input-field" oninput="filterExpenses()">
+                        </div>
+                        <button onclick="toggleAdvancedFilters()" class="btn-secondary whitespace-nowrap">
+                            <i class="fas fa-filter mr-2"></i>Filters
+                        </button>
+                    </div>
+                    <div id="advancedFilters" style="display: none;" class="space-y-3 p-4 bg-gray-50 rounded-lg">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div>
+                                <label class="text-xs font-semibold text-gray-600 mb-1 block">Amount Range</label>
+                                <div class="flex gap-2">
+                                    <input type="tel" id="minAmount" placeholder="Min $" class="input-field text-sm"
+                                        oninput="filterExpenses()">
+                                    <input type="tel" id="maxAmount" placeholder="Max $" class="input-field text-sm"
+                                        oninput="filterExpenses()">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-gray-600 mb-1 block">Day Range (within selected
+                                    month)</label>
+                                <div class="flex gap-2">
+                                    <input type="number" id="startDay" placeholder="From" min="1" max="31"
+                                        class="input-field text-sm" oninput="filterExpenses()">
+                                    <input type="number" id="endDay" placeholder="To" min="1" max="31"
+                                        class="input-field text-sm" oninput="filterExpenses()">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="text-xs font-semibold text-gray-600 mb-1 block">Tags</label>
+                                <select id="tagFilter" class="input-field text-sm" onchange="filterExpenses()">
+                                    <option value="">All Tags</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="flex justify-end mt-3">
+                            <button onclick="clearExpenseFilters()"
+                                class="px-4 py-2 text-sm text-purple-600 hover:text-purple-800 font-semibold bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+                                style="min-height: 44px; touch-action: manipulation;">
+                                <i class="fas fa-times-circle mr-1"></i>Clear All Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="expense-row expense-header">
+                    <div>Item</div>
+                    <div>Category</div>
+                    <div>Date</div>
+                    <div>Amount</div>
+                    <div>Tags</div>
+                    <div>LLC</div>
+                    <div>Receipt</div>
+                    <div>Actions</div>
+                </div>
+                <div id="expensesList" style="min-height: 300px;">
+                    <div class="text-center py-12 text-gray-400"
+                        style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 250px;">
+                        <div class="loading mb-4"></div>
+                        <p style="font-size: 16px; font-weight: 500;">Loading expenses...</p>
+                    </div>
+                </div>
+                <!-- Pagination Controls -->
+                <div id="paginationControls" class="mt-6 flex items-center justify-between" style="display: none;">
+                    <div class="text-sm text-gray-600">
+                        Showing <span id="paginationInfo"></span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="changePage('prev')" id="prevPageBtn"
+                            class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled>
+                            <i class="fas fa-chevron-left mr-1"></i>Previous
+                        </button>
+                        <button onclick="changePage('next')" id="nextPageBtn"
+                            class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                            Next<i class="fas fa-chevron-right ml-1"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div id="paymentsTab" class="p-3 md:p-6" style="display: none;">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-bold text-gray-800"><i
+                            class="fas fa-hand-holding-usd mr-2 text-green-500"></i>Payment History</h3>
+                    <div class="flex gap-2">
+                        <button onclick="openRentalIncomeModal()" class="btn-secondary"
+                            style="background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);"><i
+                                class="fas fa-home mr-2"></i>Add Rental Income</button>
+                        <button onclick="openContributionModal('Amar')" class="btn-primary"><i
+                                class="fas fa-plus mr-2"></i>Add Payment</button>
+                    </div>
+                </div>
+                <div class="payment-row expense-header">
+                    <div>Date</div>
+                    <div>Person</div>
+                    <div>Amount</div>
+                    <div>Description</div>
+                    <div>Actions</div>
+                </div>
+                <div id="paymentsList">
+                    <div class="text-center py-12 text-gray-400">
+                        <div class="loading mx-auto mb-4"></div>
+                        <p>Loading payments...</p>
+                    </div>
+                </div>
+            </div>
+            <div id="categoryTab" class="p-6" style="display: none;">
+                <div class="mb-6">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                        <i class="fas fa-filter text-purple-600"></i>
+                        Filter Expenses
+                    </h3>
+                    <p class="text-sm text-gray-600 mb-6">Select filters below to view specific expenses. Tags will
+                        update based on selected category.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                        <!-- Year Filter -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-calendar text-green-600 mr-1"></i>Year
+                            </label>
+                            <select id="filterYear" onchange="updateFilteredView()" class="input-field w-full">
+                                <option value="">All Years</option>
+                            </select>
+                        </div>
+
+                        <!-- Month Filter - Custom Multi-Select -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-calendar-alt text-teal-600 mr-1"></i>Month
+                            </label>
+                            <div class="custom-dropdown" id="monthDropdown">
+                                <button type="button" class="custom-dropdown-button"
+                                    onclick="toggleDropdown('monthDropdown')">
+                                    <span id="monthDropdownText" class="custom-dropdown-placeholder">Select
+                                        months...</span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                <div class="custom-dropdown-content" id="monthDropdownContent">
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_01" value="01"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_01">January</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_02" value="02"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_02">February</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_03" value="03"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_03">March</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_04" value="04"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_04">April</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_05" value="05"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_05">May</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_06" value="06"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_06">June</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_07" value="07"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_07">July</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_08" value="08"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_08">August</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_09" value="09"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_09">September</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_10" value="10"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_10">October</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_11" value="11"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_11">November</label>
+                                    </div>
+                                    <div class="custom-dropdown-item" onclick="event.stopPropagation()">
+                                        <input type="checkbox" id="month_12" value="12"
+                                            onchange="updateMonthSelection()">
+                                        <label for="month_12">December</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Category Filter - Custom Multi-Select -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-tag text-purple-600 mr-1"></i>Category
+                            </label>
+                            <div class="custom-dropdown" id="categoryDropdown">
+                                <button type="button" class="custom-dropdown-button"
+                                    onclick="toggleDropdown('categoryDropdown')">
+                                    <span id="categoryDropdownText" class="custom-dropdown-placeholder">Select
+                                        categories...</span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                <div class="custom-dropdown-content" id="categoryDropdownContent">
+                                    <!-- Categories will be populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tag Filter - Custom Multi-Select -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-tags text-blue-600 mr-1"></i>Tag
+                            </label>
+                            <div class="custom-dropdown" id="tagDropdown">
+                                <button type="button" class="custom-dropdown-button"
+                                    onclick="toggleDropdown('tagDropdown')">
+                                    <span id="tagDropdownText" class="custom-dropdown-placeholder">Select tags...</span>
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                <div class="custom-dropdown-content" id="tagDropdownContent">
+                                    <!-- Tags will be populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Contributor Filter -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-user text-pink-600 mr-1"></i>Contributor
+                            </label>
+                            <select id="filterContributor" onchange="updateFilteredView()" class="input-field w-full">
+                                <option value="">All Contributors</option>
+                                <option value="Amar">Amar</option>
+                                <option value="Priya">Priya</option>
+                                <option value="Both">Both (Split)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3 mb-6">
+                        <button onclick="clearAllFilters()" class="btn-secondary flex-1">
+                            <i class="fas fa-times mr-2"></i>Clear All Filters
+                        </button>
+                        <button onclick="applyFiltersToExpensesTab()" class="btn-primary flex-1">
+                            <i class="fas fa-list mr-2"></i>View in Expenses Tab
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Results -->
+                <div id="filterResults">
+                    <div class="text-center py-12 text-gray-400">
+                        <i class="fas fa-filter text-6xl mb-4"></i>
+                        <p class="text-lg font-semibold">Select filters above to view results</p>
+                        <p class="text-sm mt-2">Choose year, month, category, tag, or contributor to get started</p>
+                    </div>
+                </div>
+            </div>
+            <div id="analyticsTab" class="p-6" style="display: none;">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                                class="fas fa-chart-pie mr-2 text-purple-500"></i>Expense Distribution</h3>
+                        <div class="chart-container">
+                            <canvas id="pieChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                                class="fas fa-balance-scale mr-2 text-blue-500"></i>LLC vs Personal</h3>
+                        <div class="chart-container">
+                            <canvas id="llcChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                                class="fas fa-chart-bar mr-2 text-green-500"></i>Spending Per Category Per Month</h3>
+                        <div class="chart-container">
+                            <canvas id="categoryMonthlyChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                                class="fas fa-hand-holding-usd mr-2 text-blue-500"></i>Contributions Per Month</h3>
+                        <div class="chart-container">
+                            <canvas id="contributionsMonthlyChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                            class="fas fa-percentage mr-2 text-purple-500"></i>Contribution Coverage Per Year</h3>
+                    <div class="chart-container">
+                        <canvas id="contributionCoverageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div id="trendsTab" class="p-6" style="display: none;">
+                <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                        class="fas fa-chart-line mr-2 text-green-500"></i>Monthly Spending Trends</h3>
+                <div class="chart-container" style="height: 400px;">
+                    <canvas id="lineChart"></canvas>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-8">
+                    <div class="card p-6 text-center">
+                        <div class="text-gray-500 text-sm mb-2">Average Monthly</div>
+                        <div class="text-3xl font-bold text-purple-600" id="avgMonthly">$0</div>
+                    </div>
+                    <div class="card p-6 text-center">
+                        <div class="text-gray-500 text-sm mb-2">Highest Month</div>
+                        <div class="text-3xl font-bold text-red-600" id="highestMonth">$0</div>
+                    </div>
+                    <div class="card p-6 text-center">
+                        <div class="text-gray-500 text-sm mb-2">Lowest Month</div>
+                        <div class="text-3xl font-bold text-green-600" id="lowestMonth">$0</div>
+                    </div>
+                    <div class="card p-6 text-center">
+                        <div class="text-gray-500 text-sm mb-2">Yearly Total</div>
+                        <div class="text-3xl font-bold text-blue-600" id="yearlyTotal">$0</div>
+                    </div>
+                </div>
+                <div class="mt-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                            class="fas fa-chart-area mr-2 text-indigo-500"></i>Year-over-Year Comparison</h3>
+                    <div class="chart-container" style="height: 350px;">
+                        <canvas id="yearComparisonChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div id="insightsTab" class="p-6" style="display: none;">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="card p-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                                class="fas fa-arrow-trend-up mr-2 text-purple-500"></i>Spending Trend</h3>
+                        <div id="trendIndicator" class="text-center py-8"></div>
+                    </div>
+                    <div class="card p-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                                class="fas fa-exclamation-triangle mr-2 text-orange-500"></i>Budget Alerts</h3>
+                        <div id="budgetAlerts" class="space-y-3"></div>
+                    </div>
+                </div>
+                <div class="card p-6 mb-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                            class="fas fa-trophy mr-2 text-yellow-500"></i>Top Spending Categories</h3>
+                    <div id="topCategories"></div>
+                </div>
+                <div class="card p-6 mb-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                            class="fas fa-hand-holding-usd mr-2 text-green-500"></i>Contribution Trends</h3>
+                    <div class="chart-container">
+                        <canvas id="contributionTrendChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4"><i
+                            class="fas fa-lightbulb mr-2 text-blue-500"></i>Smart Recommendations</h3>
+                    <div id="recommendations" class="space-y-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="expenseModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i
+                        class="fas fa-plus-circle mr-2 text-purple-500"></i><span id="modalTitle">Add Expense</span>
+                </h2>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i
+                        class="fas fa-times text-2xl"></i></button>
+            </div>
+            <form id="expenseForm" onsubmit="saveExpense(event)">
+                <input type="hidden" id="recordId">
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Item Name</label><input type="text"
+                        id="itemName" class="input-field" list="itemList" autocomplete="off" required
+                        placeholder="e.g., Walmart, Costco" oninput="suggestCategoryFromItem()">
+                    <datalist id="itemList"></datalist>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label><input type="text"
+                        id="category" class="input-field" list="categoryList" autocomplete="off" required
+                        placeholder="e.g., Grocery, Gas, Utilities" onblur="this.value = formatCategory(this.value)">
+                    <datalist id="categoryList"></datalist>
+                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Will be formatted as
+                        Title Case (e.g., "gas" → "Gas")</p>
+                </div>
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div><label class="block text-sm font-semibold text-gray-700 mb-2">Year</label><select id="year"
+                            class="input-field" required></select></div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
+                        <select id="month" class="input-field" required>
+                            <option value="01">January</option>
+                            <option value="02">February</option>
+                            <option value="03">March</option>
+                            <option value="04">April</option>
+                            <option value="05">May</option>
+                            <option value="06">June</option>
+                            <option value="07">July</option>
+                            <option value="08">August</option>
+                            <option value="09">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <div><label class="block text-sm font-semibold text-gray-700 mb-2">Day</label><input type="number"
+                            id="day" class="input-field" min="1" max="31" required placeholder="1-31"></div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Amount <span
+                            class="text-red-500">*</span></label>
+                    <input type="tel" id="actual" class="input-field" placeholder="0.00" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">LLC Account</label>
+                    <select id="llc" class="input-field">
+                        <option value="No">No - Personal Expense</option>
+                        <option value="Yes">Yes - Business Eligible</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Select "Yes" if this
+                        expense should be paid through LLC account</p>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2"><i
+                            class="fas fa-tags mr-2 text-purple-500"></i>Tags</label>
+                    <input type="text" id="tags" class="input-field" list="tagsList" autocomplete="off"
+                        placeholder="e.g., vacation, emergency, gift (comma-separated)"
+                        onblur="this.value = formatTags(this.value)">
+                    <datalist id="tagsList"></datalist>
+                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Will be formatted as
+                        lowercase-with-hyphens (e.g., "Dining Out" → "dining-out")</p>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2"><i
+                            class="fas fa-sticky-note mr-2 text-purple-500"></i>Notes</label>
+                    <textarea id="notes" class="input-field" rows="3"
+                        placeholder="Add any additional notes or details about this expense..."></textarea>
+                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-info-circle mr-1"></i>Optional notes for
+                        reference</p>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2"><i
+                            class="fas fa-receipt mr-2 text-purple-500"></i>Receipt</label>
+                    <input type="file" id="receiptFile" class="input-field"
+                        accept="image/jpeg,image/jpg,image/png,image/gif,image/heic,image/heif,application/pdf"
+                        onchange="handleReceiptFileChange()">
+                    <p class="text-xs text-gray-500 mt-1"><i class="fas fa-images mr-1"></i>Take photo or choose from
+                        gallery (images, PDF)</p>
+
+                    <!-- OCR Scan Button -->
+                    <div id="ocrScanSection" style="display: none;" class="mt-3">
+                        <button type="button" onclick="scanReceiptWithOCR()" class="btn-primary w-full" id="ocrScanBtn">
+                            <i class="fas fa-magic mr-2"></i>Scan Receipt with OCR
+                        </button>
+                        <p class="text-xs text-gray-500 mt-1 text-center"><i class="fas fa-robot mr-1"></i>Extract text
+                            from receipt automatically</p>
+                    </div>
+
+                    <div id="currentReceipt" class="mt-3" style="display: none;">
+                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                            <div class="flex items-center gap-3">
+                                <i class="fas fa-file-image text-purple-500 text-xl"></i>
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800" id="receiptFileName">Current Receipt
+                                    </p>
+                                    <a id="receiptViewLink" href="#" target="_blank"
+                                        class="text-xs text-blue-600 hover:underline">View Receipt</a>
+                                </div>
+                            </div>
+                            <button type="button" onclick="removeReceipt()" class="text-red-500 hover:text-red-700"
+                                title="Remove receipt">
+                                <i class="fas fa-times-circle text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                    <div class="border-t pt-4 mb-6">
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4">Data Migration</h3>
+                        <button onclick="migrateAirtableReceiptsToSupabase()" class="w-full btn-secondary mb-4">
+                            <i class="fas fa-cloud-upload-alt mr-2"></i>Migrate Airtable Receipts to Supabase
+                        </button>
+
+                        <h3 class="text-lg font-semibold text-gray-800 mb-4"><i
+                                class="fas fa-hand-holding-usd text-green-500 mr-2"></i>Contributions</h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Amar's
+                                    Contribution</label>
+                                <input type="tel" id="amarContributionInput" class="input-field" placeholder="0.00">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">Priya's
+                                    Contribution</label>
+                                <input type="tel" id="priyaContributionInput" class="input-field" placeholder="0.00">
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Enter the amount
+                            each person has contributed towards their share</p>
+                    </div>
+                    <div class="flex gap-3"><button type="submit" class="btn-primary flex-1"><i
+                                class="fas fa-save mr-2"></i>Save Expense</button><button type="button"
+                            onclick="closeModal()" class="btn-secondary">Cancel</button></div>
+            </form>
+        </div>
+    </div>
+    <div id="contributionModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i
+                        class="fas fa-hand-holding-usd mr-2 text-green-500"></i><span id="contributionModalTitle">Add
+                        Payment</span></h2>
+                <button onclick="closeContributionModal()" class="text-gray-400 hover:text-gray-600"><i
+                        class="fas fa-times text-2xl"></i></button>
+            </div>
+            <form id="contributionForm" onsubmit="saveStandaloneContribution(event)">
+                <input type="hidden" id="contributionPerson">
+                <input type="hidden" id="paymentRecordId">
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Payment Type</label>
+                    <select id="contributionPaymentType" class="input-field" required
+                        onchange="handlePaymentTypeChange()">
+                        <option value="Regular">Regular Payment</option>
+                        <option value="RentalIncome">Rental Income (Auto-split 50/50)</option>
+                        <option value="PriyaMortgageContribution">Priya's Mortgage Contribution</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1" id="paymentTypeHint"><i
+                            class="fas fa-info-circle mr-1"></i>Select the type of payment</p>
+                </div>
+                <div class="mb-4" id="personSelectDiv">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Person</label>
+                    <select id="contributionPersonSelect" class="input-field" required
+                        onchange="updateContributionPerson()">
+                        <option value="Amar">Amar</option>
+                        <option value="Priya">Priya</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2"><span
+                            id="amountLabel">Amount</span></label>
+                    <input type="tel" id="contributionAmount" class="input-field" required placeholder="0.00" autofocus>
+                    <p class="text-xs text-gray-500 mt-1" id="amountHint"><i class="fas fa-info-circle mr-1"></i>Enter
+                        the payment amount</p>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Description (Optional)</label>
+                    <input type="text" id="contributionDescription" class="input-field"
+                        placeholder="e.g., Bank transfer, Cash payment">
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div><label class="block text-sm font-semibold text-gray-700 mb-2">Year</label><select
+                            id="contributionYear" class="input-field" required></select></div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
+                        <select id="contributionMonth" class="input-field" required>
+                            <option value="01">January</option>
+                            <option value="02">February</option>
+                            <option value="03">March</option>
+                            <option value="04">April</option>
+                            <option value="05">May</option>
+                            <option value="06">June</option>
+                            <option value="07">July</option>
+                            <option value="08">August</option>
+                            <option value="09">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
+                    <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>This will create a payment
+                        record without linking to a specific expense.</p>
+                </div>
+                <div class="flex gap-3"><button type="submit" class="btn-primary flex-1"><i
+                            class="fas fa-save mr-2"></i>Save Payment</button><button type="button"
+                        onclick="closeContributionModal()" class="btn-secondary">Cancel</button></div>
+            </form>
+        </div>
+    </div>
+    <div id="mismatchModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i
+                        class="fas fa-exclamation-triangle mr-2 text-red-500"></i>Contribution Mismatches</h2>
+                <button onclick="closeMismatchModal()" class="text-gray-400 hover:text-gray-600"><i
+                        class="fas fa-times text-2xl"></i></button>
+            </div>
+            <div id="mismatchList" class="space-y-4">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-check-circle text-6xl text-green-500 mb-4"></i>
+                    <p class="text-lg">No mismatches found!</p>
+                    <p class="text-sm mt-2">All contributions match spending for each month.</p>
+                </div>
+            </div>
+            <div class="mt-6">
+                <button onclick="closeMismatchModal()" class="btn-secondary w-full">Close</button>
+            </div>
+        </div>
+    </div>
+    <!-- Budget Manager Modal -->
+    <div id="budgetManagerModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-wallet mr-2 text-purple-600"></i>Budget
+                    Manager</h2>
+                <button onclick="closeBudgetManager()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <div class="mb-6 flex items-center gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Year</label>
+                    <select id="budgetYearFilter" onchange="renderBudgetTable()"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Month</label>
+                    <select id="budgetMonthFilter" onchange="renderBudgetTable()"
+                        class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500">
+                        <option value="01">January</option>
+                        <option value="02">February</option>
+                        <option value="03">March</option>
+                        <option value="04">April</option>
+                        <option value="05">May</option>
+                        <option value="06">June</option>
+                        <option value="07">July</option>
+                        <option value="08">August</option>
+                        <option value="09">September</option>
+                        <option value="10">October</option>
+                        <option value="11">November</option>
+                        <option value="12">December</option>
+                    </select>
+                </div>
+                <div class="flex-1 p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+                    <div class="text-sm">
+                        <i class="fas fa-info-circle text-purple-600 mr-1"></i>
+                        <span class="font-semibold">Tip:</span> Mark categories as <strong>Recurring</strong> to
+                        auto-copy to next month. 💰 Unspent amounts automatically roll over!
+                    </div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gradient-to-r from-purple-100 to-blue-100">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Category</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Monthly Budget</th>
+                            <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Recurring</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Current Spending</th>
+                            <th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Status</th>
+                            <th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="budgetTableBody">
+                        <tr>
+                            <td colspan="6" class="text-center py-8 text-gray-400">Loading...</td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="bg-gradient-to-r from-purple-50 to-blue-50 border-t-2 border-purple-300">
+                        <tr>
+                            <td class="px-4 py-3 text-sm font-bold text-gray-800">TOTAL</td>
+                            <td class="px-4 py-3 text-sm">
+                                <div class="font-bold text-purple-700 text-lg" id="budgetTotalAmount">$0.00</div>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <span class="text-xs text-gray-500">--</span>
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                <div class="font-bold text-pink-700 text-lg" id="budgetTotalSpending">$0.00</div>
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                <div class="text-sm" id="budgetTotalStatus">--</div>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <span class="text-xs text-gray-500">--</span>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="mt-6 flex gap-3">
+                <button onclick="addNewCategoryBudget()" class="btn-primary flex-1">
+                    <i class="fas fa-plus mr-2"></i>Add New Category Budget
+                </button>
+                <button onclick="closeBudgetManager()" class="btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+    <div id="fixedExpensesModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-repeat mr-2 text-purple-600"></i>Fixed
+                    Expenses</h2>
+                <button onclick="closeFixedExpensesModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Fixed expenses are automatically
+                    added to each month on the 1st. Changes only affect future months.</p>
+            </div>
+            <div class="mb-6">
+                <button onclick="openAddFixedExpenseForm()" class="btn-primary w-full">
+                    <i class="fas fa-plus mr-2"></i>Add Fixed Expense
+                </button>
+            </div>
+            <div id="fixedExpensesList" class="space-y-3">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-inbox text-4xl mb-3"></i>
+                    <p>No fixed expenses yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="addFixedExpenseModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800" id="fixedExpenseModalTitle">Add Fixed Expense</h2>
+                <button onclick="closeAddFixedExpenseForm()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <form id="fixedExpenseForm" onsubmit="saveFixedExpense(event)">
+                <input type="hidden" id="fixedExpenseId">
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Item Name</label>
+                    <input type="text" id="fixedItemName" class="input-field" required
+                        placeholder="e.g., Rent, Mortgage, Insurance">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                    <input type="text" id="fixedCategory" class="input-field" list="categoryList" required
+                        placeholder="e.g., Housing, Utilities">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Amount</label>
+                    <input type="tel" id="fixedAmount" class="input-field" required placeholder="0.00">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">LLC Account</label>
+                    <select id="fixedLLC" class="input-field">
+                        <option value="No">No - Personal Expense</option>
+                        <option value="Yes">Yes - Business Eligible</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Start From</label>
+                    <div class="grid grid-cols-2 gap-4">
+                        <select id="fixedStartYear" class="input-field" required></select>
+                        <select id="fixedStartMonth" class="input-field" required>
+                            <option value="01">January</option>
+                            <option value="02">February</option>
+                            <option value="03">March</option>
+                            <option value="04">April</option>
+                            <option value="05">May</option>
+                            <option value="06">June</option>
+                            <option value="07">July</option>
+                            <option value="08">August</option>
+                            <option value="09">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">This expense will be added from this month onwards</p>
+                </div>
+                <div class="flex gap-3">
+                    <button type="submit" class="btn-primary flex-1"><i class="fas fa-save mr-2"></i>Save</button>
+                    <button type="button" onclick="closeAddFixedExpenseForm()" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="llcExpensesModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-building mr-2 text-purple-600"></i>LLC
+                    Eligible Expenses</h2>
+                <button onclick="closeLLCExpensesModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Define which expense items are
+                    eligible for LLC/business deduction. No cost needed, just item name and category.</p>
+            </div>
+            <div class="mb-6">
+                <button onclick="openAddLLCExpenseForm()" class="btn-primary w-full">
+                    <i class="fas fa-plus mr-2"></i>Add LLC Eligible Expense
+                </button>
+            </div>
+            <div id="llcExpensesList" class="space-y-3">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-inbox text-4xl mb-3"></i>
+                    <p>No LLC eligible expenses defined yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="addLLCExpenseModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800" id="llcExpenseModalTitle">Add LLC Eligible Expense</h2>
+                <button onclick="closeAddLLCExpenseForm()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <form id="llcExpenseForm" onsubmit="saveLLCExpense(event)">
+                <input type="hidden" id="llcExpenseId">
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Expense Item</label>
+                    <input type="text" id="llcItemName" class="input-field" required
+                        placeholder="e.g., Internet, Office Supplies, Software">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                    <input type="text" id="llcCategoryName" class="input-field" list="existingCategories" required
+                        placeholder="Start typing to see existing categories">
+                    <datalist id="existingCategories"></datalist>
+                    <p class="text-xs text-gray-500 mt-1">Select existing or type new category</p>
+                </div>
+                <div class="flex gap-3">
+                    <button type="submit" class="btn-primary flex-1"><i class="fas fa-save mr-2"></i>Save</button>
+                    <button type="button" onclick="closeAddLLCExpenseForm()" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="expenseDetailModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-receipt mr-2 text-purple-600"></i>Expense
+                    Details</h2>
+                <button onclick="closeExpenseDetailModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div id="expenseDetailContent" class="space-y-4">
+                <!-- Content will be populated dynamically -->
+            </div>
+            <div class="mt-6 flex gap-3">
+                <button onclick="editExpenseFromDetail()" class="btn-primary flex-1">
+                    <i class="fas fa-edit mr-2"></i>Edit Expense
+                </button>
+                <button onclick="closeExpenseDetailModal()" class="btn-secondary">Close</button>
+            </div>
+        </div>
+    </div>
+    <div id="monthlySummaryModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i
+                        class="fas fa-chart-bar mr-2 text-purple-600"></i>Monthly Summary</h2>
+                <button onclick="closeMonthlySummary()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="mb-6 flex gap-4">
+                <select id="summaryYear" class="input-field flex-1" onchange="loadMonthlySummary()"></select>
+                <select id="summaryMonth" class="input-field flex-1" onchange="loadMonthlySummary()">
+                    <option value="01">January</option>
+                    <option value="02">February</option>
+                    <option value="03">March</option>
+                    <option value="04">April</option>
+                    <option value="05">May</option>
+                    <option value="06">June</option>
+                    <option value="07">July</option>
+                    <option value="08">August</option>
+                    <option value="09">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                </select>
+            </div>
+            <div id="monthlySummaryContent">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                    <p>Loading summary...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="predictiveBudgetingModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i
+                        class="fas fa-crystal-ball mr-2 text-purple-600"></i>Predictive Budgeting</h2>
+                <button onclick="closePredictiveBudgeting()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>AI-powered predictions based on
+                    your spending history and patterns.</p>
+            </div>
+            <div id="predictiveBudgetingContent">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                    <p>Analyzing your spending patterns...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="aiInsightsModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-brain mr-2 text-purple-600"></i>AI
+                    Insights</h2>
+                <button onclick="closeAIInsights()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Smart analysis of your spending
+                    patterns with actionable recommendations.</p>
+            </div>
+            <div id="aiInsightsContent">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                    <p>Analyzing your spending data...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="advancedAnalyticsModal" class="modal">
+        <div class="modal-content" style="max-width: 1200px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i
+                        class="fas fa-chart-pie mr-2 text-purple-600"></i>Advanced Analytics</h2>
+                <button onclick="closeAdvancedAnalytics()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div id="advancedAnalyticsContent">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                    <p>Loading analytics...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- OCR Results Modal -->
+    <div id="ocrResultsModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-robot mr-2 text-purple-600"></i>OCR Scan
+                    Results</h2>
+                <button onclick="closeOCRResultsModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <!-- Receipt Preview -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3"><i class="fas fa-image mr-2"></i>Receipt Image</h3>
+                <div class="bg-gray-100 rounded-lg p-4 flex justify-center">
+                    <img id="ocrReceiptPreview" src="" alt="Receipt"
+                        style="max-height: 300px; max-width: 100%; object-fit: contain;">
+                </div>
+            </div>
+
+            <!-- Parsed Receipt Data -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3"><i class="fas fa-table mr-2"></i>Parsed Receipt
+                    Data</h3>
+                <div class="bg-white rounded-lg p-4 border border-gray-200">
+                    <div id="ocrExtractedText"></div>
+                </div>
+            </div>
+
+            <!-- Raw Text Toggle -->
+            <div class="mb-6">
+                <details class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <summary class="font-semibold text-gray-700 cursor-pointer"><i
+                            class="fas fa-align-left mr-2"></i>Raw Extracted Text</summary>
+                    <pre id="ocrRawText"
+                        class="text-xs text-gray-600 whitespace-pre-wrap font-mono mt-3 max-h-64 overflow-y-auto"></pre>
+                </details>
+            </div>
+
+            <!-- OCR Metadata -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3"><i class="fas fa-info-circle mr-2"></i>OCR
+                    Information</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-blue-50 p-3 rounded-lg">
+                        <div class="text-xs text-gray-600 mb-1">Processing Time</div>
+                        <div class="text-lg font-bold text-blue-600" id="ocrProcessingTime">-</div>
+                    </div>
+                    <div class="bg-green-50 p-3 rounded-lg">
+                        <div class="text-xs text-gray-600 mb-1">Confidence</div>
+                        <div class="text-lg font-bold text-green-600" id="ocrConfidence">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Raw JSON Response -->
+            <div class="mb-6">
+                <details class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <summary class="font-semibold text-gray-700 cursor-pointer"><i class="fas fa-code mr-2"></i>Raw JSON
+                        Response (for debugging)</summary>
+                    <pre id="ocrRawJson"
+                        class="text-xs text-gray-600 whitespace-pre-wrap mt-3 max-h-64 overflow-y-auto"></pre>
+                </details>
+            </div>
+
+            <div class="flex gap-3">
+                <button onclick="closeOCRResultsModal()" class="btn-secondary flex-1">
+                    <i class="fas fa-times mr-2"></i>Close
+                </button>
+                <button onclick="scanAnotherReceipt()" class="btn-primary flex-1">
+                    <i class="fas fa-redo mr-2"></i>Scan Another
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settingsModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-cog mr-2"></i>Settings</h2>
+                <button onclick="closeSettingsModal()" class="text-gray-400 hover:text-gray-600"><i
+                        class="fas fa-times text-2xl"></i></button>
+            </div>
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Data Migration</h3>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Supabase Settings</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="supabaseUrl" class="block text-sm font-semibold text-gray-700 mb-1">Supabase Project URL</label>
+                            <input type="text" id="supabaseUrl" class="input-field w-full" placeholder="https://xxxx.supabase.co">
+                        </div>
+                        <div>
+                            <label for="supabaseAnonKey" class="block text-sm font-semibold text-gray-700 mb-1">Supabase Anon/Public Key</label>
+                            <input type="password" id="supabaseAnonKey" class="input-field w-full" placeholder="ey....">
+                        </div>
+                    </div>
+                </div>
+                <div class="border-t pt-4">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Push Notifications</h3>
+                    <p class="text-sm text-gray-600 mb-3">Get notified when new expenses are added (works when app is added to home screen)</p>
+                    <button onclick="requestNotificationPermission()" class="w-full btn-secondary mb-2">
+                        <i class="fas fa-bell mr-2"></i>Enable Push Notifications
+                    </button>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="saveSettings()" class="btn-primary flex-1">Save Settings</button>
+                    <button onclick="closeSettingsModal()" class="btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="smartSearchModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-search mr-2 text-purple-600"></i>Smart
+                    Search & Filters</h2>
+                <button onclick="closeSmartSearch()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+
+            <!-- Natural Language Search -->
+            <div class="mb-6">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-magic mr-2 text-purple-500"></i>Natural Language Search
+                </label>
+                <div class="flex gap-2">
+                    <input type="text" id="naturalSearchInput" class="input-field flex-1"
+                        placeholder='Try: "grocery over $100 last month" or "dining in October"'>
+                    <button onclick="performNaturalSearch()" class="btn-primary">
+                        <i class="fas fa-search mr-2"></i>Search
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">
+                    <i class="fas fa-lightbulb mr-1"></i>
+                    Examples: "mortgage in 2025", "expenses over $500", "gas last 3 months"
+                </p>
+            </div>
+
+            <!-- Quick Filters -->
+            <div class="mb-6">
+                <label class="block text-sm font-semibold text-gray-700 mb-3">
+                    <i class="fas fa-bolt mr-2 text-yellow-500"></i>Quick Filters
+                </label>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="applyQuickFilter('dining')"
+                        class="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm font-semibold">
+                        <i class="fas fa-utensils mr-1"></i>Dining
+                    </button>
+                    <button onclick="applyQuickFilter('shopping')"
+                        class="px-4 py-2 bg-pink-100 text-pink-700 rounded-lg hover:bg-pink-200 text-sm font-semibold">
+                        <i class="fas fa-shopping-bag mr-1"></i>Shopping
+                    </button>
+                    <button onclick="applyQuickFilter('misc')"
+                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-semibold">
+                        <i class="fas fa-ellipsis-h mr-1"></i>Misc
+                    </button>
+                    <button onclick="applyQuickFilter('over100')"
+                        class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">
+                        Over $100
+                    </button>
+                    <button onclick="applyQuickFilter('over500')"
+                        class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">
+                        Over $500
+                    </button>
+                    <button onclick="applyQuickFilter('llcOnly')"
+                        class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm font-semibold">
+                        LLC Expenses
+                    </button>
+                </div>
+            </div>
+
+            <!-- Advanced Filters -->
+            <div class="card p-6 mb-6">
+                <h3 class="text-lg font-bold mb-4">Advanced Filters</h3>
+                <div class="grid grid-cols-1 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Amount Range</label>
+                            <div class="flex gap-2">
+                                <input type="tel" id="filterMinAmount" class="input-field" placeholder="Min $">
+                                <input type="tel" id="filterMaxAmount" class="input-field" placeholder="Max $">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                            <select id="searchCategory" class="input-field">
+                                <option value="">All Categories</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Date Range</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <input type="date" id="startDate" class="input-field" placeholder="Start Date">
+                            <input type="date" id="endDate" class="input-field" placeholder="End Date">
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-3 mt-4">
+                    <button onclick="applyAdvancedFilters()" class="btn-primary">
+                        <i class="fas fa-filter mr-2"></i>Apply Filters
+                    </button>
+                    <button onclick="clearSearchFilters()" class="btn-secondary">
+                        <i class="fas fa-times mr-2"></i>Clear All
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search Results -->
+            <div id="searchResults">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-search text-4xl mb-3"></i>
+                    <p>Enter search criteria above to find expenses</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
