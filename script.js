@@ -100,115 +100,165 @@ async function fetchWithRetry(url, options = {}, retries = 3, timeout = 10000) {
     }
 }
 
+// Enhanced retry wrapper for database operations with exponential backoff
+async function retryOperation(operation, operationName = 'Database operation', maxRetries = 3) {
+    let lastNotificationTime = 0;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+            return await operation();
+        } catch (error) {
+            const isLastAttempt = attempt === maxRetries - 1;
+
+            // Check if error is retryable (network errors, timeouts, 5xx errors, rate limits)
+            const isRetryable =
+                error.name === 'AbortError' ||
+                error.message.includes('fetch') ||
+                error.message.includes('network') ||
+                error.message.includes('timeout') ||
+                error.message.includes('429') || // Rate limit
+                error.message.includes('503') || // Service unavailable
+                error.message.includes('502') || // Bad gateway
+                error.message.includes('504');   // Gateway timeout
+
+            if (!isRetryable || isLastAttempt) {
+                console.error(`${operationName} failed after ${attempt + 1} attempt(s):`, error);
+                throw error;
+            }
+
+            // Exponential backoff: 1s, 2s, 4s
+            const delayMs = Math.min(1000 * Math.pow(2, attempt), 5000);
+            console.warn(`${operationName} failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delayMs}ms...`, error.message);
+
+            // Show user-friendly notification (throttled to avoid spam)
+            const now = Date.now();
+            if (now - lastNotificationTime > 3000) { // Only show once every 3 seconds
+                showNotification(`Connection issue, retrying... (${attempt + 1}/${maxRetries})`, 'info');
+                lastNotificationTime = now;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+    }
+}
+
 // ==================== SUPABASE HELPER FUNCTIONS ====================
 
-// Supabase API helper - GET request
+// Supabase API helper - GET request with retry logic
 async function supabaseGet(tableName, filters = {}) {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        throw new Error('Supabase credentials not configured');
-    }
-
-    let url = `${SUPABASE_URL}/rest/v1/${tableName}?select=*`;
-
-    // Add filters if provided
-    if (Object.keys(filters).length > 0) {
-        const filterParams = Object.entries(filters).map(([key, value]) =>
-            `${key}=eq.${encodeURIComponent(value)}`
-        ).join('&');
-        url += `&${filterParams}`;
-    }
-
-    const response = await fetch(url, {
-        headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
+    return await retryOperation(async () => {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            throw new Error('Supabase credentials not configured');
         }
-    });
 
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Supabase GET error: ${error}`);
-    }
+        let url = `${SUPABASE_URL}/rest/v1/${tableName}?select=*`;
 
-    return await response.json();
+        // Add filters if provided
+        if (Object.keys(filters).length > 0) {
+            const filterParams = Object.entries(filters).map(([key, value]) =>
+                `${key}=eq.${encodeURIComponent(value)}`
+            ).join('&');
+            url += `&${filterParams}`;
+        }
+
+        const response = await fetchWithRetry(url, {
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            }
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Supabase GET error (${response.status}): ${error}`);
+        }
+
+        return await response.json();
+    }, `Supabase GET ${tableName}`);
 }
 
-// Supabase API helper - POST request
+// Supabase API helper - POST request with retry logic
 async function supabasePost(tableName, data) {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        throw new Error('Supabase credentials not configured');
-    }
-
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}`, {
-        method: 'POST',
-        headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-        },
-        body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Supabase POST error: ${error}`);
-    }
-
-    const result = await response.json();
-    return Array.isArray(result) ? result[0] : result;
-}
-
-// Supabase API helper - PATCH request
-async function supabasePatch(tableName, id, data) {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        throw new Error('Supabase credentials not configured');
-    }
-
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${id}`, {
-        method: 'PATCH',
-        headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-        },
-        body: JSON.stringify(data)
-    });
-
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Supabase PATCH error: ${error}`);
-    }
-
-    const result = await response.json();
-    return Array.isArray(result) ? result[0] : result;
-}
-
-// Supabase API helper - DELETE request
-async function supabaseDelete(tableName, id) {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        throw new Error('Supabase credentials not configured');
-    }
-
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${id}`, {
-        method: 'DELETE',
-        headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
+    return await retryOperation(async () => {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            throw new Error('Supabase credentials not configured');
         }
-    });
 
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Supabase DELETE error: ${error}`);
-    }
+        const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/${tableName}`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(data)
+        });
 
-    return true;
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Supabase POST error (${response.status}): ${error}`);
+        }
+
+        const result = await response.json();
+        return Array.isArray(result) ? result[0] : result;
+    }, `Supabase POST ${tableName}`);
+}
+
+// Supabase API helper - PATCH request with retry logic
+async function supabasePatch(tableName, id, data) {
+    return await retryOperation(async () => {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            throw new Error('Supabase credentials not configured');
+        }
+
+        const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${id}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Supabase PATCH error (${response.status}): ${error}`);
+        }
+
+        const result = await response.json();
+        return Array.isArray(result) ? result[0] : result;
+    }, `Supabase PATCH ${tableName}/${id}`);
+}
+
+// Supabase API helper - DELETE request with retry logic
+async function supabaseDelete(tableName, id) {
+    return await retryOperation(async () => {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            throw new Error('Supabase credentials not configured');
+        }
+
+        const response = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/${tableName}?id=eq.${id}`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            }
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Supabase DELETE error (${response.status}): ${error}`);
+        }
+
+        return true;
+    }, `Supabase DELETE ${tableName}/${id}`);
 }
 
 // Convert Airtable record format to Supabase format
@@ -613,7 +663,7 @@ async function uploadProfilePicture(person, input) {
     const file = input.files[0];
     if (!file) return;
 
-    // Check file size (max 5MB for Airtable)
+    // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
         alert('Image size should be less than 5MB');
         return;
@@ -628,72 +678,42 @@ async function uploadProfilePicture(person, input) {
     showNotification('Uploading picture...', 'info');
 
     try {
-        // First, check if profile exists
-        const listResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}`, {
-            headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
+        // Convert file to base64
+        const reader = new FileReader();
+
+        const base64Promise = new Promise((resolve, reject) => {
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
         });
+
+        const base64Data = await base64Promise;
+
+        // Check if profile exists
+        const profiles = await supabaseGet(PROFILES_TABLE, { Person: person });
 
         let profileId = null;
-        if (listResponse.ok) {
-            const data = await listResponse.json();
-            const existingProfile = data.records.find(r => r.fields.Person === person);
-            if (existingProfile) {
-                profileId = existingProfile.id;
-            }
+        if (profiles && profiles.length > 0) {
+            profileId = profiles[0].id;
         }
 
-        // Create or update profile record first
-        const profileUrl = profileId
-            ? `https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}/${profileId}`
-            : `https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}`;
-
-        const profileResponse = await fetch(profileUrl, {
-            method: profileId ? 'PATCH' : 'POST',
-            headers: {
-                'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                fields: { Person: person }
-            })
-        });
-
-        if (!profileResponse.ok) throw new Error('Failed to create/update profile');
-        const profileData = await profileResponse.json();
-        const recordId = profileData.id;
-
-        // Upload image as attachment
-        const reader = new FileReader();
-        reader.onloadend = async function () {
-            try {
-                const base64 = reader.result.split(',')[1];
-
-                const uploadUrl = `https://content.airtable.com/v0/${BASE_ID}/${recordId}/Picture/uploadAttachment`;
-                const uploadResponse = await fetch(uploadUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        contentType: file.type,
-                        file: base64,
-                        filename: `${person.toLowerCase()}_profile.${file.name.split('.').pop()}`
-                    })
-                });
-
-                if (!uploadResponse.ok) throw new Error('Failed to upload picture');
-
-                // Reload pictures to show the new one
-                await loadProfilePictures();
-                showNotification(`${person}'s picture updated!`, 'success');
-            } catch (error) {
-                console.error('Upload error:', error);
-                showNotification('Error uploading picture: ' + error.message, 'error');
-            }
+        // Create or update profile record with base64 image
+        const profileData = {
+            Person: person,
+            Picture: base64Data
         };
 
-        reader.readAsDataURL(file);
+        if (profileId) {
+            // Update existing profile
+            await supabasePatch(PROFILES_TABLE, profileId, profileData);
+        } else {
+            // Create new profile
+            await supabasePost(PROFILES_TABLE, profileData);
+        }
+
+        // Reload pictures to show the new one
+        await loadProfilePictures();
+        showNotification(`${person}'s picture updated!`, 'success');
 
     } catch (error) {
         console.error('Profile picture upload error:', error);
@@ -957,7 +977,7 @@ function renderFilteredExpenses(expenses) {
                         <div class="expense-item"><span class="expense-label">Amount:</span><span class="font-bold text-lg ${actualColorClass}">$${actual.toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">Tags:</span><div class="flex flex-wrap">${tagsContent || '<span class="text-gray-400 text-xs">—</span>'}</div></div>
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
-                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<a href="${fields.Receipt[0].url}" target="_blank" class="text-purple-600 hover:text-purple-800" title="View Receipt"><i class="fas fa-receipt text-xl"></i></a>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
+                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<button onclick="event.stopPropagation(); viewReceipt(${JSON.stringify(JSON.stringify(fields.Receipt))});" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
                             <button onclick="event.stopPropagation(); editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
                             <button onclick="event.stopPropagation(); deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
@@ -1057,7 +1077,7 @@ function renderExpenses() {
                         <div class="expense-item"><span class="expense-label">Amount:</span><span class="font-bold text-lg ${actualColorClass}">$${actual.toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">Tags:</span><div class="flex flex-wrap">${tagsContent || '<span class="text-gray-400 text-xs">—</span>'}</div></div>
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
-                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<a href="${fields.Receipt[0].url}" target="_blank" class="text-purple-600 hover:text-purple-800" title="View Receipt"><i class="fas fa-receipt text-xl"></i></a>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
+                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<button onclick="event.stopPropagation(); viewReceipt(${JSON.stringify(JSON.stringify(fields.Receipt))});" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
                             <button onclick="event.stopPropagation(); editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
                             <button onclick="event.stopPropagation(); deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
@@ -1255,9 +1275,9 @@ function viewExpenseDetails(expenseId) {
             detailHTML += `
                      <div class="bg-gray-50 p-4 rounded mb-4">
                          <p class="text-xs text-gray-500 mb-2"><i class="fas fa-receipt mr-1"></i>Receipt</p>
-                         <a href="${fields.Receipt[0].url}" target="_blank" class="btn-primary inline-block">
-                             <i class="fas fa-external-link-alt mr-2"></i>View Receipt
-                         </a>
+                         <button onclick="viewReceipt(${JSON.stringify(JSON.stringify(fields.Receipt))});" class="btn-primary">
+                             <i class="fas fa-image mr-2"></i>View Receipt
+                         </button>
                      </div>
                  `;
         }
@@ -1269,6 +1289,95 @@ function viewExpenseDetails(expenseId) {
 function closeExpenseDetailModal() {
     document.getElementById('expenseDetailModal').classList.remove('active');
     currentExpenseIdForDetail = null;
+}
+
+// View receipt in a modal (prevents navigation issues with base64 data URLs on mobile)
+function viewReceipt(receiptData) {
+    try {
+        // Parse receipt data if it's a string
+        let receipt;
+        if (typeof receiptData === 'string') {
+            try {
+                receipt = JSON.parse(receiptData);
+            } catch (e) {
+                // If it's already a URL string
+                receipt = [{ url: receiptData }];
+            }
+        } else {
+            receipt = receiptData;
+        }
+
+        // Get the receipt URL
+        const receiptUrl = Array.isArray(receipt) && receipt[0]?.url ? receipt[0].url : receipt.url || receipt;
+
+        if (!receiptUrl) {
+            showNotification('No receipt available', 'error');
+            return;
+        }
+
+        // Create modal dynamically
+        const modal = document.createElement('div');
+        modal.className = 'modal active';
+        modal.style.zIndex = '10002'; // Higher than other modals
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 95vw; max-height: 95vh; overflow: auto;">
+                <div class="modal-header" style="position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e5e7eb;">
+                    <h2 class="modal-title"><i class="fas fa-receipt mr-2"></i>Receipt</h2>
+                    <button class="close-modal" onclick="this.closest('.modal').remove()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="p-4" style="text-align: center;">
+                    <img src="${receiptUrl}" 
+                         alt="Receipt" 
+                         style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+                         onerror="this.parentElement.innerHTML='<p class=\\'text-red-500\\'>Error loading receipt image</p>'">
+                </div>
+                <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #e5e7eb;">
+                    <button class="btn-secondary" onclick="this.closest('.modal').remove()">
+                        <i class="fas fa-times mr-2"></i>Close
+                    </button>
+                    ${receiptUrl.startsWith('data:') ? `
+                    <button class="btn-primary" onclick="downloadBase64Receipt('${receiptUrl}', 'receipt.${receiptUrl.split(';')[0].split('/')[1] || 'png'}')">
+                        <i class="fas fa-download mr-2"></i>Download
+                    </button>
+                    ` : `
+                    <a href="${receiptUrl}" download class="btn-primary" style="text-decoration: none;">
+                        <i class="fas fa-download mr-2"></i>Download
+                    </a>
+                    `}
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Close modal when clicking outside
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+    } catch (error) {
+        console.error('Error viewing receipt:', error);
+        showNotification('Error viewing receipt: ' + error.message, 'error');
+    }
+}
+
+// Download base64 receipt as a file
+function downloadBase64Receipt(dataUrl, filename) {
+    try {
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('Download started', 'success');
+    } catch (error) {
+        console.error('Error downloading receipt:', error);
+        showNotification('Error downloading receipt', 'error');
+    }
 }
 
 function editExpenseFromDetail() {
