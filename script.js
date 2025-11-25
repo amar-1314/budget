@@ -8,6 +8,23 @@ const FIXED_EXPENSES_TABLE = 'FixedExpenses';
 const LLC_EXPENSES_TABLE = 'LLCEligibleExpenses';
 const BUDGETS_TABLE = 'Budgets';
 
+// ==================== FULL-PAGE LOADER FUNCTIONS ====================
+function showLoader(message = 'Processing...') {
+    const loader = document.getElementById('fullPageLoader');
+    const loaderText = document.getElementById('loaderText');
+    if (loader) {
+        loaderText.textContent = message;
+        loader.classList.add('active');
+    }
+}
+
+function hideLoader() {
+    const loader = document.getElementById('fullPageLoader');
+    if (loader) {
+        loader.classList.remove('active');
+    }
+}
+
 // Try to get credentials from URL parameters first (works in private mode!)
 const urlParams = new URLSearchParams(window.location.search);
 
@@ -79,7 +96,7 @@ const itemsPerPage = 10;
 let currentExpenseIdForDetail = null;
 
 // Utility function for fetch with timeout and retry
-async function fetchWithRetry(url, options = {}, retries = 3, timeout = 10000) {
+async function fetchWithRetry(url, options = {}, retries = 3, timeout = 30000) {
     for (let i = 0; i < retries; i++) {
         try {
             const controller = new AbortController();
@@ -95,7 +112,7 @@ async function fetchWithRetry(url, options = {}, retries = 3, timeout = 10000) {
         } catch (error) {
             if (i === retries - 1) throw error;
             console.log(`Retry ${i + 1}/${retries} for ${url}`);
-            await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+            await new Promise(resolve => setTimeout(resolve, 500 * (i + 1))); // Faster backoff: 500ms, 1s, 1.5s
         }
     }
 }
@@ -126,8 +143,8 @@ async function retryOperation(operation, operationName = 'Database operation', m
                 throw error;
             }
 
-            // Exponential backoff: 1s, 2s, 4s
-            const delayMs = Math.min(1000 * Math.pow(2, attempt), 5000);
+            // Faster backoff: 500ms, 1s, 1.5s instead of 1s, 2s, 4s
+            const delayMs = 500 * (attempt + 1);
             console.warn(`${operationName} failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delayMs}ms...`, error.message);
 
             // Show user-friendly notification (throttled to avoid spam)
@@ -977,7 +994,7 @@ function renderFilteredExpenses(expenses) {
                         <div class="expense-item"><span class="expense-label">Amount:</span><span class="font-bold text-lg ${actualColorClass}">$${actual.toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">Tags:</span><div class="flex flex-wrap">${tagsContent || '<span class="text-gray-400 text-xs">—</span>'}</div></div>
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
-                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<button onclick="event.stopPropagation(); viewReceipt(${JSON.stringify(JSON.stringify(fields.Receipt))});" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
+                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<button onclick="event.stopPropagation(); viewReceiptFromExpense('${expense.id}');" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
                             <button onclick="event.stopPropagation(); editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
                             <button onclick="event.stopPropagation(); deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
@@ -1077,7 +1094,7 @@ function renderExpenses() {
                         <div class="expense-item"><span class="expense-label">Amount:</span><span class="font-bold text-lg ${actualColorClass}">$${actual.toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">Tags:</span><div class="flex flex-wrap">${tagsContent || '<span class="text-gray-400 text-xs">—</span>'}</div></div>
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
-                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<button onclick="event.stopPropagation(); viewReceipt(${JSON.stringify(JSON.stringify(fields.Receipt))});" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
+                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<button onclick="event.stopPropagation(); viewReceiptFromExpense('${expense.id}');" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
                             <button onclick="event.stopPropagation(); editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
                             <button onclick="event.stopPropagation(); deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
@@ -1275,7 +1292,7 @@ function viewExpenseDetails(expenseId) {
             detailHTML += `
                      <div class="bg-gray-50 p-4 rounded mb-4">
                          <p class="text-xs text-gray-500 mb-2"><i class="fas fa-receipt mr-1"></i>Receipt</p>
-                         <button onclick="viewReceipt(${JSON.stringify(JSON.stringify(fields.Receipt))});" class="btn-primary">
+                         <button onclick="viewReceiptFromExpense('${currentExpenseIdForDetail}');" class="btn-primary">
                              <i class="fas fa-image mr-2"></i>View Receipt
                          </button>
                      </div>
@@ -1315,37 +1332,38 @@ function viewReceipt(receiptData) {
             return;
         }
 
+        // Determine file extension from data URL
+        let fileExt = 'png';
+        if (receiptUrl.startsWith('data:')) {
+            const mimeMatch = receiptUrl.match(/data:image\/([a-z]+);/);
+            if (mimeMatch) fileExt = mimeMatch[1];
+        }
+
         // Create modal dynamically
         const modal = document.createElement('div');
         modal.className = 'modal active';
         modal.style.zIndex = '10002'; // Higher than other modals
         modal.innerHTML = `
-            <div class="modal-content" style="max-width: 95vw; max-height: 95vh; overflow: auto;">
-                <div class="modal-header" style="position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e5e7eb;">
-                    <h2 class="modal-title"><i class="fas fa-receipt mr-2"></i>Receipt</h2>
-                    <button class="close-modal" onclick="this.closest('.modal').remove()">
+            <div class="modal-content" style="max-width: 100%; width: 95vw; max-height: 95vh; padding: 0; display: flex; flex-direction: column;">
+                <div class="modal-header" style="position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e5e7eb; padding: 16px; flex-shrink: 0;">
+                    <h2 class="modal-title" style="margin: 0; font-size: 18px;"><i class="fas fa-receipt mr-2"></i>Receipt</h2>
+                    <button class="close-modal" onclick="this.closest('.modal').remove()" style="position: absolute; right: 16px; top: 16px;">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="p-4" style="text-align: center;">
+                <div style="flex: 1; overflow: auto; padding: 16px; text-align: center; background: #f9fafb;">
                     <img src="${receiptUrl}" 
                          alt="Receipt" 
-                         style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
-                         onerror="this.parentElement.innerHTML='<p class=\\'text-red-500\\'>Error loading receipt image</p>'">
+                         style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); background: white;"
+                         onerror="this.parentElement.innerHTML='<p style=\\'color: #ef4444; padding: 20px;\\'>Error loading receipt image</p>'">
                 </div>
-                <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #e5e7eb;">
-                    <button class="btn-secondary" onclick="this.closest('.modal').remove()">
+                <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #e5e7eb; padding: 16px; display: flex; gap: 12px; flex-shrink: 0;">
+                    <button class="btn-secondary" onclick="this.closest('.modal').remove()" style="flex: 1;">
                         <i class="fas fa-times mr-2"></i>Close
                     </button>
-                    ${receiptUrl.startsWith('data:') ? `
-                    <button class="btn-primary" onclick="downloadBase64Receipt('${receiptUrl}', 'receipt.${receiptUrl.split(';')[0].split('/')[1] || 'png'}')">
+                    <button class="btn-primary" onclick="downloadReceiptFromModal(this)" data-url="${receiptUrl.replace(/"/g, '&quot;')}" data-filename="receipt.${fileExt}" style="flex: 1;">
                         <i class="fas fa-download mr-2"></i>Download
                     </button>
-                    ` : `
-                    <a href="${receiptUrl}" download class="btn-primary" style="text-decoration: none;">
-                        <i class="fas fa-download mr-2"></i>Download
-                    </a>
-                    `}
                 </div>
             </div>
         `;
@@ -1364,12 +1382,29 @@ function viewReceipt(receiptData) {
     }
 }
 
+// Helper function to view receipt from expense ID (avoids JSON in HTML onclick)
+function viewReceiptFromExpense(expenseId) {
+    const expense = allExpenses.find(exp => exp.id === expenseId);
+    if (expense && expense.fields.Receipt) {
+        viewReceipt(expense.fields.Receipt);
+    } else {
+        showNotification('No receipt found for this expense', 'error');
+    }
+}
+
+// Download receipt from modal button (gets data from data attributes)
+function downloadReceiptFromModal(button) {
+    const dataUrl = button.getAttribute('data-url');
+    const filename = button.getAttribute('data-filename');
+    downloadBase64Receipt(dataUrl, filename);
+}
+
 // Download base64 receipt as a file
 function downloadBase64Receipt(dataUrl, filename) {
     try {
         const link = document.createElement('a');
         link.href = dataUrl;
-        link.download = filename;
+        link.download = filename || 'receipt.png';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -4242,11 +4277,17 @@ function findSimilarCategories(newCategory, threshold = 0.7) {
 
     const newCatLower = newCategory.trim().toLowerCase();
 
+    // First check if exact match exists (case insensitive)
+    const exactMatchExists = existingCategories.some(cat => cat.toLowerCase() === newCatLower);
+
+    // If exact match exists, don't show any suggestions
+    if (exactMatchExists) {
+        return [];
+    }
+
     for (const existing of existingCategories) {
         const existingLower = existing.toLowerCase();
 
-        // Skip if exact match (case insensitive)
-        if (newCatLower === existingLower) continue;
 
         const similarity = getSimilarityScore(newCatLower, existingLower);
 
@@ -4380,6 +4421,9 @@ async function saveExpense(event) {
 
     // Set flag to prevent concurrent submissions
     isSavingExpense = true;
+
+    // Show full-page loader
+    showLoader('Saving expense...');
 
     // Get submit button and show loading immediately
     const submitBtn = event.target.querySelector('button[type="submit"]');
@@ -4517,6 +4561,7 @@ async function saveExpense(event) {
     } catch (error) {
         showNotification('Error saving expense: ' + error.message, 'error');
     } finally {
+        hideLoader();
         if (submitBtn) setButtonLoading(submitBtn, false);
         isSavingExpense = false; // Always reset flag when done
     }
@@ -5891,6 +5936,9 @@ async function createPaymentEntriesFromContributions(fields, expenseRecordId) {
 
 async function deleteExpense(id) {
     if (!confirm('Delete this expense?')) return;
+
+    showLoader('Deleting expense...');
+
     try {
         // DUAL-DELETE: Delete from Airtable
         try {
@@ -5919,6 +5967,8 @@ async function deleteExpense(id) {
         showNotification('Deleted!', 'success');
     } catch (error) {
         showNotification('Error: ' + error.message, 'error');
+    } finally {
+        hideLoader();
     }
 }
 
@@ -9870,7 +9920,16 @@ let swRegistration = null;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', async () => {
         try {
-            swRegistration = await navigator.serviceWorker.register('/service-worker.js');
+            // Determine the correct path for service worker
+            // For GitHub Pages: https://amar-1314.github.io/budget/
+            // For local: http://localhost/ or file://
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            const swPath = isGitHubPages && window.location.pathname.includes('/budget/')
+                ? '/budget/service-worker.js'  // GitHub Pages project site
+                : window.location.pathname.replace(/\/[^/]*$/, '/') + 'service-worker.js'; // Local or root
+
+            console.log('Registering Service Worker at:', swPath);
+            swRegistration = await navigator.serviceWorker.register(swPath);
             console.log('Service Worker registered:', swRegistration);
             
             // Check for updates
