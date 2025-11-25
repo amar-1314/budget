@@ -8,6 +8,10 @@ const FIXED_EXPENSES_TABLE = 'FixedExpenses';
 const LLC_EXPENSES_TABLE = 'LLCEligibleExpenses';
 const BUDGETS_TABLE = 'Budgets';
 
+// Airtable credentials (deprecated - not used, Supabase only)
+const BASE_ID = undefined;
+const AIRTABLE_API_KEY = undefined;
+
 // ==================== FULL-PAGE LOADER FUNCTIONS ====================
 function showLoader(message = 'Processing...') {
     const loader = document.getElementById('fullPageLoader');
@@ -83,6 +87,110 @@ if (!SUPABASE_URL && !SUPABASE_ANON_KEY) {
 // Just check if credentials are available
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     console.log('✅ Supabase credentials found');
+
+    // Initialize Supabase Realtime for cross-device notifications
+    initializeRealtimeNotifications();
+}
+
+// Realtime notification subscription
+let realtimeChannel = null;
+
+async function initializeRealtimeNotifications() {
+    // Only set up if notifications are enabled
+    if (localStorage.getItem('notifications_enabled') !== 'true') {
+        console.log('📱 Notifications not enabled, skipping realtime setup');
+        return;
+    }
+
+    try {
+        // Create Supabase client if not exists
+        if (!supabaseClient && SUPABASE_URL && SUPABASE_ANON_KEY) {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+
+        if (!supabaseClient) {
+            console.warn('⚠️ Supabase client not available for realtime');
+            return;
+        }
+
+        // Generate a unique device ID for this browser/device
+        let deviceId = localStorage.getItem('device_id');
+        if (!deviceId) {
+            deviceId = 'device_' + Math.random().toString(36).substring(2, 15);
+            localStorage.setItem('device_id', deviceId);
+        }
+
+        console.log('📱 Setting up realtime notifications for device:', deviceId);
+
+        // Subscribe to Budget table inserts
+        realtimeChannel = supabaseClient
+            .channel('expense-notifications')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: TABLE_NAME
+                },
+                (payload) => {
+                    console.log('📬 New expense detected:', payload);
+
+                    // Get the new expense data
+                    const newExpense = payload.new;
+
+                    // Check if this expense was created by this device
+                    const lastExpenseDeviceId = sessionStorage.getItem('last_expense_device_id');
+
+                    // Only notify if it's from a different device/session
+                    if (lastExpenseDeviceId !== deviceId) {
+                        // Show notification
+                        if ('serviceWorker' in navigator && swRegistration) {
+                            swRegistration.showNotification('💰 New Expense Added', {
+                                body: `${newExpense.Item || 'Expense'} - $${(newExpense.Actual || 0).toFixed(2)}`,
+                                icon: './icon-192.png',
+                                badge: './icon-192.png',
+                                tag: 'expense-notification',
+                                requireInteraction: false,
+                                vibrate: [200, 100, 200],
+                                data: {
+                                    url: './',
+                                    expenseId: newExpense.id
+                                }
+                            });
+                        } else if ('Notification' in window && Notification.permission === 'granted') {
+                            new Notification('💰 New Expense Added', {
+                                body: `${newExpense.Item || 'Expense'} - $${(newExpense.Actual || 0).toFixed(2)}`,
+                                icon: './icon-192.png',
+                                tag: 'expense-notification'
+                            });
+                        }
+
+                        // Reload data to show the new expense
+                        loadData();
+                    }
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('✅ Realtime notifications subscribed!');
+                    showNotification('✅ Cross-device notifications active!', 'success');
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.warn('⚠️ Realtime channel error - Cross-device notifications unavailable');
+                    console.warn('💡 To fix: Enable Realtime in Supabase Dashboard → Database → Replication → Budget table');
+                    showNotification('⚠️ Realtime not enabled in Supabase. Cross-device notifications disabled.', 'error');
+                } else if (status === 'TIMED_OUT') {
+                    console.warn('⏱️ Realtime connection timed out - Retrying...');
+                } else if (status === 'CLOSED') {
+                    console.log('🔌 Realtime connection closed');
+                }
+            });
+
+    } catch (error) {
+        console.warn('⚠️ Failed to set up realtime notifications:', error.message);
+        console.warn('💡 Cross-device notifications will not work. Local notifications still available.');
+        console.warn('💡 To fix: Enable Realtime in Supabase Dashboard → Database → Replication');
+        // Don't show error notification to user - gracefully degrade
+    }
 }
 
 let allExpenses = [];
@@ -162,13 +270,22 @@ async function retryOperation(operation, operationName = 'Database operation', m
 // ==================== SUPABASE HELPER FUNCTIONS ====================
 
 // Supabase API helper - GET request with retry logic
-async function supabaseGet(tableName, filters = {}) {
+async function supabaseGet(tableName, filters = {}, limit = null) {
     return await retryOperation(async () => {
         if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
             throw new Error('Supabase credentials not configured');
         }
 
         let url = `${SUPABASE_URL}/rest/v1/${tableName}?select=*`;
+
+        // Add limit for large tables to prevent timeout
+        // Budget table: limit to last 1000 records by default
+        if (limit) {
+            url += `&limit=${limit}`;
+        } else if (tableName === TABLE_NAME) {
+            // For Budget table, add default limit and order by id desc to get latest
+            url += `&limit=1000&order=id.desc`;
+        }
 
         // Add filters if provided
         if (Object.keys(filters).length > 0) {
@@ -4442,6 +4559,7 @@ async function saveExpense(event) {
 
             if (result.action === 'cancel') {
                 // User wants to manually select
+                hideLoader(); // Hide the full-page loader
                 if (submitBtn) setButtonLoading(submitBtn, false);
                 isSavingExpense = false;
                 document.getElementById('category').focus();
@@ -4457,6 +4575,7 @@ async function saveExpense(event) {
     // Validate actual amount
     const actualAmount = parseFloat(document.getElementById('actual').value);
     if (!actualAmount || actualAmount <= 0) {
+        hideLoader(); // Hide the full-page loader
         showNotification('Please enter a valid actual amount', 'error');
         document.getElementById('actual').focus();
         if (submitBtn) setButtonLoading(submitBtn, false);
@@ -4477,6 +4596,7 @@ async function saveExpense(event) {
         const contributionChoice = await showContributionHelper(actualAmount, amarContribution, priyaContribution);
 
         if (contributionChoice === 'cancel') {
+            hideLoader(); // Hide the full-page loader
             if (submitBtn) setButtonLoading(submitBtn, false);
             isSavingExpense = false; // Reset flag
             return; // User cancelled
@@ -4526,6 +4646,7 @@ async function saveExpense(event) {
             if (similarItems.length > 0) {
                 const confirmed = await showSimilarItemWarning(fields.Item, similarItems);
                 if (!confirmed) {
+                    hideLoader(); // Hide the full-page loader
                     if (submitBtn) setButtonLoading(submitBtn, false);
                     isSavingExpense = false; // Reset flag
                     return; // User cancelled
@@ -4539,6 +4660,7 @@ async function saveExpense(event) {
             if (duplicates.length > 0) {
                 const confirmed = await showDuplicateConfirmation(duplicates, fields);
                 if (!confirmed) {
+                    hideLoader(); // Hide the full-page loader
                     if (submitBtn) setButtonLoading(submitBtn, false);
                     isSavingExpense = false; // Reset flag
                     return; // User cancelled
@@ -5866,6 +5988,12 @@ async function saveExpenseToSupabase(recordId, fields) {
         
         // Send push notification for new expenses
         if (!recordId && localStorage.getItem('notifications_enabled') === 'true') {
+            // Mark this device as the creator to prevent self-notification
+            const deviceId = localStorage.getItem('device_id');
+            if (deviceId) {
+                sessionStorage.setItem('last_expense_device_id', deviceId);
+            }
+
             sendPushNotification(
                 '💰 New Expense Added',
                 `${cleanFields.Item} - $${cleanFields.Actual.toFixed(2)}`
@@ -5940,32 +6068,14 @@ async function deleteExpense(id) {
     showLoader('Deleting expense...');
 
     try {
-        // DUAL-DELETE: Delete from Airtable
-        try {
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}/${id}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-            if (!response.ok) throw new Error('Failed to delete from Airtable');
-        } catch (airtableError) {
-            console.error('Airtable delete error:', airtableError);
-            // Continue to try Supabase
-        }
-
-        // DUAL-DELETE: Also delete from Supabase if configured
-        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-            try {
-                await supabaseDelete(TABLE_NAME, id);
-                console.log('✅ Deleted from Supabase successfully');
-            } catch (supabaseError) {
-                console.error('⚠️ Failed to delete from Supabase:', supabaseError);
-                // Don't throw - continue if Airtable succeeded
-            }
-        }
+        // Delete from Supabase
+        await supabaseDelete(TABLE_NAME, id);
+        console.log('✅ Deleted from Supabase successfully');
 
         await loadData();
         showNotification('Deleted!', 'success');
     } catch (error) {
+        console.error('Delete error:', error);
         showNotification('Error: ' + error.message, 'error');
     } finally {
         hideLoader();
@@ -9967,6 +10077,9 @@ async function requestNotificationPermission() {
             showNotification('✅ Push notifications enabled! You will receive notifications even when the app is closed.', 'success');
             localStorage.setItem('notifications_enabled', 'true');
             
+            // Set up realtime notifications for cross-device alerts
+            await initializeRealtimeNotifications();
+
             // Test notification
             setTimeout(() => {
                 sendPushNotification('🎉 Notifications Active', 'You will now receive alerts for new expenses!');
