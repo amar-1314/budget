@@ -3,10 +3,11 @@
 
 const CACHE_NAME = 'budget-tracker-v1';
 const urlsToCache = [
-  '/',
-  '/index.html',
-  '/script.js',
-  '/style.css'
+  './',
+  './index.html',
+  './script.js',
+  './style.css',
+  './manifest.json'
 ];
 
 // Install event - cache resources
