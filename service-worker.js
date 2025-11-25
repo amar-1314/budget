@@ -100,6 +100,33 @@ self.addEventListener('push', (event) => {
   );
 });
 
+// Notification click event - open/focus the app when notification is clicked
+self.addEventListener('notificationclick', (event) => {
+  console.log('Service Worker: Notification clicked', event);
+
+  event.notification.close();
+
+  // Get the URL to open (default to home page)
+  const urlToOpen = event.notification.data?.url || './';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUnassigned: true })
+      .then((clientList) => {
+        // Check if app is already open
+        for (const client of clientList) {
+          if (client.url.includes(self.registration.scope) && 'focus' in client) {
+            // Focus existing window
+            return client.focus();
+          }
+        }
+        // Open new window if app is not open
+        if (clients.openWindow) {
+          return clients.openWindow(urlToOpen);
+        }
+      })
+  );
+});
+
 // Notification click event - open app
 self.addEventListener('notificationclick', (event) => {
   console.log('Service Worker: Notification clicked', event);
