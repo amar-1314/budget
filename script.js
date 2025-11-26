@@ -9841,11 +9841,31 @@ function openSettings() {
     closeAllModalsExcept('settingsModal');
     document.getElementById('supabaseUrl').value = SUPABASE_URL || '';
     document.getElementById('supabaseAnonKey').value = SUPABASE_ANON_KEY || '';
+    
+    // Update status text
+    const statusEl = document.getElementById('supabaseStatus');
+    if (statusEl) {
+        statusEl.textContent = SUPABASE_URL ? 'Connected to Supabase' : 'Not configured';
+    }
+    
     document.getElementById('settingsModal').classList.add('active');
 }
 
 function closeSettingsModal() {
     document.getElementById('settingsModal').classList.remove('active');
+}
+
+function toggleSupabaseConfig() {
+    const panel = document.getElementById('supabaseConfigPanel');
+    const icon = document.getElementById('supabaseToggleIcon');
+    
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        icon.style.transform = 'rotate(180deg)';
+    } else {
+        panel.classList.add('hidden');
+        icon.style.transform = 'rotate(0deg)';
+    }
 }
 
 // Receipt migration function removed - receipts are now stored as base64 in Supabase
