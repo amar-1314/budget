@@ -1736,6 +1736,10 @@ function renderPayments() {
     const selectedYear = document.getElementById('yearSelector').value;
     const selectedMonth = document.getElementById('monthSelector').value;
     let filteredPayments = allPayments;
+    
+    // Filter out payments that were auto-created from expenses (FromExpense = true)
+    filteredPayments = filteredPayments.filter(p => p.fields.FromExpense !== true);
+    
     if (selectedYear !== 'all') {
         filteredPayments = filteredPayments.filter(p => String(p.fields.Year) === selectedYear);
     }
@@ -6267,9 +6271,36 @@ async function deleteExpense(id) {
     showLoader('Deleting expense...');
 
     try {
-        // Delete from Supabase
+        // First, find and delete associated payment records (FromExpense = true)
+        try {
+            // Get the expense details to find matching payments
+            const expense = allExpenses.find(e => e.id === id);
+            if (expense) {
+                const { Year, Month, Item, Category } = expense.fields;
+                
+                // Find payments created from this expense
+                const relatedPayments = allPayments.filter(p => 
+                    p.fields.FromExpense === true &&
+                    p.fields.Year === Year &&
+                    p.fields.Month === Month &&
+                    p.fields.Description?.includes(Item) &&
+                    p.fields.Description?.includes(Category)
+                );
+
+                // Delete each related payment
+                for (const payment of relatedPayments) {
+                    await supabaseDelete(PAYMENTS_TABLE, payment.id);
+                    console.log('✅ Deleted related payment:', payment.id);
+                }
+            }
+        } catch (paymentError) {
+            console.warn('Could not delete related payments:', paymentError);
+            // Continue with expense deletion even if payment deletion fails
+        }
+
+        // Delete the expense from Supabase
         await supabaseDelete(TABLE_NAME, id);
-        console.log('✅ Deleted from Supabase successfully');
+        console.log('✅ Deleted expense from Supabase');
 
         await loadData();
         showNotification('Deleted!', 'success');
