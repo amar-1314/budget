@@ -10007,6 +10007,67 @@ if ('Notification' in window) {
     notificationPermission = Notification.permission;
 }
 
+async function hardRefreshApp() {
+    if (!confirm('This will clear all cached data and reload the app with the latest version. Continue?')) {
+        return;
+    }
+
+    // Close settings modal first
+    closeSettingsModal();
+    
+    // Show full-page loader with custom message
+    const loaderText = document.getElementById('loaderText');
+    if (loaderText) loaderText.textContent = 'Clearing cache and updating...';
+    showLoader('Clearing cache and updating...');
+
+    try {
+        // 1. Unregister all service workers
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const registration of registrations) {
+                await registration.unregister();
+                console.log('✅ Unregistered service worker');
+            }
+        }
+
+        // Update loader message
+        if (loaderText) loaderText.textContent = 'Clearing cached files...';
+
+        // 2. Clear all caches
+        if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            for (const cacheName of cacheNames) {
+                await caches.delete(cacheName);
+                console.log('✅ Deleted cache:', cacheName);
+            }
+        }
+
+        // Update loader message
+        if (loaderText) loaderText.textContent = 'Preparing to reload...';
+
+        // 3. Clear session storage (but keep credentials)
+        const supabaseUrl = localStorage.getItem('supabase_url');
+        const supabaseKey = localStorage.getItem('supabase_anon_key');
+        const notifEnabled = localStorage.getItem('notifications_enabled');
+        const deviceId = localStorage.getItem('device_id');
+
+        sessionStorage.clear();
+
+        // 4. Show success message
+        if (loaderText) loaderText.textContent = '✅ Cache cleared! Reloading...';
+        
+        // 5. Reload the page (hard refresh)
+        setTimeout(() => {
+            window.location.reload(true);
+        }, 1500);
+
+    } catch (error) {
+        console.error('Hard refresh error:', error);
+        showNotification('Error refreshing. Try manually: Cmd+Shift+R', 'error');
+        hideLoader();
+    }
+}
+
 function saveSettings() {
     const newSupabaseUrl = document.getElementById('supabaseUrl').value;
     const newSupabaseKey = document.getElementById('supabaseAnonKey').value;
