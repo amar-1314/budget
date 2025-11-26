@@ -1,7 +1,7 @@
 // Service Worker for Budget Tracker
 // Enables background push notifications and offline support
 
-const CACHE_NAME = 'budget-tracker-v1';
+const CACHE_NAME = 'budget-tracker-v3'; // Updated to force cache refresh
 const urlsToCache = [
   './',
   './index.html',
@@ -45,7 +45,25 @@ self.addEventListener('activate', (event) => {
 });
 
 // Fetch event - serve from cache, fallback to network
+// IMPORTANT: Don't cache external API calls (Supabase, etc.)
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // Skip caching for:
+  // 1. External APIs (Supabase, etc.)
+  // 2. Chrome extensions
+  // 3. Non-HTTP(S) requests
+  if (
+    url.hostname.includes('supabase.co') ||
+    url.hostname.includes('airtable.com') ||
+    url.protocol === 'chrome-extension:' ||
+    (!url.protocol.startsWith('http'))
+  ) {
+    // Don't intercept - let it pass through
+    return;
+  }
+
+  // Only cache our own app files
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
@@ -122,28 +140,6 @@ self.addEventListener('notificationclick', (event) => {
         // Open new window if app is not open
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
-        }
-      })
-  );
-});
-
-// Notification click event - open app
-self.addEventListener('notificationclick', (event) => {
-  console.log('Service Worker: Notification clicked', event);
-  event.notification.close();
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        // If app is already open, focus it
-        for (let client of clientList) {
-          if (client.url === '/' && 'focus' in client) {
-            return client.focus();
-          }
-        }
-        // Otherwise open new window
-        if (clients.openWindow) {
-          return clients.openWindow('/');
         }
       })
   );
