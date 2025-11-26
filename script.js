@@ -1,16 +1,13 @@
-console.log('🎬 SCRIPT STARTING TO LOAD...');
+console.log('🎬 SCRIPT STARTING TO LOAD... (v3.0.1)');
+console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
 
-// Airtable Configuration - Multiple storage methods for reliability
+// Supabase Table Configuration
 const TABLE_NAME = 'Budget';
 const PAYMENTS_TABLE = 'Payments';
 const PROFILES_TABLE = 'Profiles';
 const FIXED_EXPENSES_TABLE = 'FixedExpenses';
 const LLC_EXPENSES_TABLE = 'LLCEligibleExpenses';
 const BUDGETS_TABLE = 'Budgets';
-
-// Airtable credentials (deprecated - not used, Supabase only)
-const BASE_ID = undefined;
-const AIRTABLE_API_KEY = undefined;
 
 // ==================== FULL-PAGE LOADER FUNCTIONS ====================
 function showLoader(message = 'Processing...') {
@@ -36,9 +33,8 @@ const urlParams = new URLSearchParams(window.location.search);
 let SUPABASE_URL = urlParams.get('supabase_url') || localStorage.getItem('supabase_url');
 let SUPABASE_ANON_KEY = urlParams.get('supabase_key') || localStorage.getItem('supabase_anon_key');
 
-// Feature flag for data source (read operations)
-// 'airtable' or 'supabase' - defaults to 'supabase' for Supabase-only mode
-let DATA_SOURCE = localStorage.getItem('data_source') || 'supabase';
+// Data source is always Supabase
+const DATA_SOURCE = 'supabase';
 
 // Initialize Supabase client variable
 let supabaseClient = null;
@@ -83,11 +79,18 @@ if (!SUPABASE_URL && !SUPABASE_ANON_KEY) {
     }
 }
 
-// Supabase configuration already declared above at line 1667
-// Just check if credentials are available
+// Initialize Supabase client
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     console.log('✅ Supabase credentials found');
     
+    // Create Supabase client
+    if (window.supabase && window.supabase.createClient) {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✅ Supabase client initialized');
+    } else {
+        console.error('❌ Supabase library not loaded!');
+    }
+
     // Log notification status
     if ('Notification' in window) {
         console.log('📱 Notification API available');
@@ -95,15 +98,17 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     } else {
         console.warn('⚠️ Notification API not available in this browser');
     }
-    
+
     if ('serviceWorker' in navigator) {
         console.log('⚙️ Service Worker supported');
     } else {
         console.warn('⚠️ Service Worker not supported in this browser');
     }
-    
+
     // Initialize Supabase Realtime for cross-device notifications
     initializeRealtimeNotifications();
+} else {
+    console.error('❌ Supabase credentials not configured!');
 }
 
 // Realtime notification subscription
@@ -255,6 +260,40 @@ async function fetchWithRetry(url, options = {}, retries = 3, timeout = 30000) {
             clearTimeout(timeoutId);
             return response;
         } catch (error) {
+            // Check for CORS/redirect errors (Supabase paused)
+            if (error.message.includes('CORS') ||
+                error.message.includes('Failed to fetch') ||
+                error.message.includes('NetworkError')) {
+
+                // Don't retry on CORS errors - they won't fix themselves
+                console.error('❌ Network/CORS Error:', error.message);
+                console.error('🔍 This usually means:');
+                console.error('   1. Supabase project is PAUSED (most common)');
+                console.error('   2. Wrong API credentials');
+                console.error('   3. Network connectivity issue');
+                console.error(`📍 Failed URL: ${url}`);
+
+                // Only show alert on first error to avoid spam
+                if (i === 0 && url.includes('supabase.co')) {
+                    const projectId = url.split('//')[1]?.split('.')[0] || 'unknown';
+                    alert(`⚠️ Cannot connect to Supabase
+
+Possible causes:
+1. Project is PAUSED (most likely)
+   → Go to https://supabase.com/dashboard/projects
+   → Find project: ${projectId}
+   → Click "Restore" button
+
+2. Wrong API credentials
+   → Check Settings → API in Supabase dashboard
+
+3. Network issue
+   → Check your internet connection
+
+The app will keep trying to reconnect...`);
+                }
+            }
+
             if (i === retries - 1) throw error;
             console.log(`Retry ${i + 1}/${retries} for ${url}`);
             await new Promise(resolve => setTimeout(resolve, 500 * (i + 1))); // Faster backoff: 500ms, 1s, 1.5s
@@ -288,8 +327,8 @@ async function retryOperation(operation, operationName = 'Database operation', m
                 throw error;
             }
 
-            // Faster backoff: 500ms, 1s, 1.5s instead of 1s, 2s, 4s
-            const delayMs = 500 * (attempt + 1);
+            // Fast backoff: 100ms, 300ms, 500ms for quick recovery
+            const delayMs = 100 * (attempt + 1) * (attempt + 1); // 100ms, 400ms, 900ms
             console.warn(`${operationName} failed (attempt ${attempt + 1}/${maxRetries}), retrying in ${delayMs}ms...`, error.message);
 
             // Show user-friendly notification (throttled to avoid spam)
@@ -307,13 +346,25 @@ async function retryOperation(operation, operationName = 'Database operation', m
 // ==================== SUPABASE HELPER FUNCTIONS ====================
 
 // Supabase API helper - GET request with retry logic
-async function supabaseGet(tableName, filters = {}, limit = null) {
+async function supabaseGet(tableName, filters = {}, limit = null, selectColumns = null, orderBy = null) {
     return await retryOperation(async () => {
         if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
             throw new Error('Supabase credentials not configured');
         }
 
-        let url = `${SUPABASE_URL}/rest/v1/${tableName}?select=*`;
+        // Default column selection - exclude large binary fields
+        let columns = selectColumns;
+        if (!columns) {
+            // For Budget table, exclude Receipt by default (large base64 images)
+            // but include has_receipt to show/hide receipt icon
+            if (tableName === TABLE_NAME) {
+                columns = 'id,Item,Category,Year,Month,Day,Actual,Budget,LLC,AmarContribution,PriyaContribution,Tags,Notes,has_receipt';
+            } else {
+                columns = '*';
+            }
+        }
+
+        let url = `${SUPABASE_URL}/rest/v1/${tableName}?select=${columns}`;
 
         // Add limit for large tables to prevent timeout
         // Budget table: limit to last 1000 records by default
@@ -324,11 +375,21 @@ async function supabaseGet(tableName, filters = {}, limit = null) {
             url += `&limit=1000&order=id.desc`;
         }
 
-        // Add filters if provided
+        // Add custom order if specified (overrides default)
+        if (orderBy) {
+            url += `&order=${orderBy}`;
+        }
+
+        // Add filters if provided - supports operators: eq, gt, gte, lt, lte, like, in
         if (Object.keys(filters).length > 0) {
-            const filterParams = Object.entries(filters).map(([key, value]) =>
-                `${key}=eq.${encodeURIComponent(value)}`
-            ).join('&');
+            const filterParams = Object.entries(filters).map(([key, value]) => {
+                // Support range queries and operators
+                if (typeof value === 'object' && value.operator) {
+                    return `${key}=${value.operator}.${encodeURIComponent(value.value)}`;
+                }
+                // Default to exact match
+                return `${key}=eq.${encodeURIComponent(value)}`;
+            }).join('&');
             url += `&${filterParams}`;
         }
 
@@ -341,9 +402,41 @@ async function supabaseGet(tableName, filters = {}, limit = null) {
             }
         });
 
+        // Check for redirect responses (Supabase paused/billing issue)
+        if (response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) {
+            const redirectUrl = response.headers.get('Location') || 'unknown';
+            console.error('❌ Supabase is redirecting - Project may be PAUSED or has billing issues');
+            console.error('🔗 Redirect to:', redirectUrl);
+
+            // Show user-friendly error
+            const errorMsg = `
+⏸️ Supabase Project Appears to be PAUSED
+
+Your Supabase project needs to be reactivated:
+
+1. Go to: https://supabase.com/dashboard/projects
+2. Find project: ${SUPABASE_URL.split('//')[1].split('.')[0]}
+3. Click "Restore" or "Resume" button
+4. Wait 1-2 minutes for project to wake up
+5. Reload this page
+
+Note: Free tier projects pause after 1 week of inactivity.
+`;
+            alert(errorMsg);
+            throw new Error(`Supabase project is redirecting (likely paused). Visit dashboard to restore project.`);
+        }
+
         if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`Supabase GET error (${response.status}): ${error}`);
+            const errorText = await response.text();
+
+            // Check if response is HTML (common for paused projects)
+            if (errorText.includes('<html') || errorText.includes('<!DOCTYPE')) {
+                console.error('❌ Received HTML instead of JSON - Supabase project likely PAUSED');
+                alert('⏸️ Your Supabase project appears to be paused.\n\nPlease go to https://supabase.com/dashboard/projects and restore your project.');
+                throw new Error('Supabase project appears to be paused (received HTML instead of JSON)');
+            }
+
+            throw new Error(`Supabase GET error (${response.status}): ${errorText}`);
         }
 
         return await response.json();
@@ -432,53 +525,70 @@ async function supabaseDelete(tableName, id) {
     }, `Supabase DELETE ${tableName}/${id}`);
 }
 
-// Convert Airtable record format to Supabase format
-function airtableToSupabase(record, tableName) {
-    if (!record || !record.fields) return null;
-
-    // Define allowed fields per table (exclude Airtable system fields)
-    const allowedFields = {
-        'Budget': ['Item', 'Category', 'Year', 'Month', 'Day', 'Budget', 'Actual', 'LLC',
-            'AmarContribution', 'PriyaContribution', 'Tags', 'Notes', 'Receipt'],
-        'Payments': ['Person', 'Amount', 'Description', 'Year', 'Month', 'Day',
-            'PaymentType', 'FromExpense', 'Notes'],
-        'Profiles': ['Person', 'Picture'],
-        'FixedExpenses': ['Item', 'Category', 'Amount', 'LLC', 'StartYear', 'StartMonth'],
-        'LLCEligibleExpenses': ['Item', 'Category'],
-        'Budgets': ['Category', 'Year', 'Month', 'Amount', 'Recurring']
-    };
-
-    const allowed = allowedFields[tableName] || [];
-    const data = { id: record.id };
-
-    // Only copy allowed fields
-    allowed.forEach(field => {
-        if (record.fields.hasOwnProperty(field)) {
-            let value = record.fields[field];
-
-            // Handle attachment fields (convert to string URL)
-            if (Array.isArray(value) && value.length > 0 && value[0].url) {
-                value = value[0].url; // Take first attachment URL
-            }
-
-            data[field] = value;
-        }
-    });
-
-    return data;
-}
-
-// Convert Supabase format to Airtable record format (for compatibility)
+// Convert Supabase format to internal record format (for compatibility)
 function supabaseToAirtable(supabaseRecord) {
     const fields = { ...supabaseRecord };
     
-    // Parse Receipt field if it's a JSON string
-    if (fields.Receipt && typeof fields.Receipt === 'string') {
-        try {
-            fields.Receipt = JSON.parse(fields.Receipt);
-        } catch (e) {
-            console.warn('Failed to parse Receipt field:', e);
+    // Remove the 'id' from fields since it's at the top level
+    delete fields.id;
+
+    // Convert boolean values to "Yes"/"No" for LLC field
+    if (typeof fields.LLC === 'boolean') {
+        fields.LLC = fields.LLC ? 'Yes' : 'No';
+    } else if (fields.LLC === 'true' || fields.LLC === true) {
+        fields.LLC = 'Yes';
+    } else if (fields.LLC === 'false' || fields.LLC === false || fields.LLC === null || fields.LLC === '') {
+        fields.LLC = 'No';
+    }
+
+    // Convert boolean values for Recurring field in Budgets table
+    if (typeof fields.Recurring === 'boolean') {
+        fields.Recurring = fields.Recurring ? 'Yes' : 'No';
+    } else if (fields.Recurring === 'true' || fields.Recurring === true) {
+        fields.Recurring = 'Yes';
+    } else if (fields.Recurring === 'false' || fields.Recurring === false || fields.Recurring === null || fields.Recurring === '') {
+        fields.Recurring = 'No';
+    }
+
+    // Ensure Month is a string (zero-padded) - do this FIRST before numeric conversion
+    if (fields.Month !== undefined && fields.Month !== null && fields.Month !== '') {
+        fields.Month = String(fields.Month).padStart(2, '0');
+    }
+
+    // Ensure Year is a number
+    if (fields.Year !== undefined && fields.Year !== null && fields.Year !== '') {
+        fields.Year = parseInt(fields.Year) || new Date().getFullYear();
+    }
+
+    // Ensure Day is a number
+    if (fields.Day !== undefined && fields.Day !== null && fields.Day !== '') {
+        fields.Day = parseInt(fields.Day) || 1;
+    }
+
+    // Ensure numeric currency fields are actually numbers (not strings)
+    const numericFields = ['Actual', 'Budget', 'AmarContribution', 'PriyaContribution', 'Amount'];
+    numericFields.forEach(field => {
+        if (fields[field] !== undefined && fields[field] !== null && fields[field] !== '') {
+            const num = parseFloat(fields[field]);
+            fields[field] = isNaN(num) ? 0 : num;
+        } else if (fields[field] === '' || fields[field] === null) {
+            fields[field] = 0;
         }
+    });
+
+    // Receipt field handling - keep as base64 string from Supabase
+    // Only parse if it's actually a JSON array (old Airtable format)
+    if (fields.Receipt && typeof fields.Receipt === 'string') {
+        // Check if it's a JSON array (starts with '[')
+        if (fields.Receipt.trim().startsWith('[')) {
+            try {
+                fields.Receipt = JSON.parse(fields.Receipt);
+            } catch (e) {
+                // If parse fails, leave as-is (it's a base64 string)
+                console.warn('Receipt is not JSON, treating as base64 string');
+            }
+        }
+        // If it starts with 'data:image', it's already a base64 string - leave as-is
     }
     
     return {
@@ -487,18 +597,7 @@ function supabaseToAirtable(supabaseRecord) {
     };
 }
 
-// Get table name from Airtable table constant
-function getTableNameForMigration(tableConstant) {
-    const tableMap = {
-        [TABLE_NAME]: 'Budget',
-        [PAYMENTS_TABLE]: 'Payments',
-        [PROFILES_TABLE]: 'Profiles',
-        [FIXED_EXPENSES_TABLE]: 'FixedExpenses',
-        [LLC_EXPENSES_TABLE]: 'LLCEligibleExpenses',
-        [BUDGETS_TABLE]: 'Budgets'
-    };
-    return tableMap[tableConstant] || tableConstant;
-}
+// Table name mapping removed - direct Supabase table names used
 
 // Show loading spinner on button
 function setButtonLoading(button, loading) {
@@ -604,7 +703,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     populateYearDropdown();
-    updateDataSourceLabel(); // Update data source label in menu
     loadData();
     loadProfilePictures();
     loadFixedExpenses();
@@ -775,27 +873,13 @@ async function loadProfilePictures() {
     try {
         let data;
 
-        if (DATA_SOURCE === 'supabase') {
-            // Load from Supabase
-            try {
-                const profiles = await supabaseGet(PROFILES_TABLE);
-                data = { records: profiles.map(supabaseToAirtable) };
-            } catch (error) {
-                console.log('Profiles table not found in Supabase - will be created on first upload');
-                return;
-            }
-        } else {
-            // Load from Airtable
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-
-            if (!response.ok) {
-                console.log('Profiles table not found - will be created on first upload');
-                return;
-            }
-
-            data = await response.json();
+        // Load from Supabase
+        try {
+            const profiles = await supabaseGet(PROFILES_TABLE);
+            data = { records: profiles.map(supabaseToAirtable) };
+        } catch (error) {
+            console.log('Profiles table not found in Supabase - will be created on first upload');
+            return;
         }
 
         // Find Amar's profile
@@ -905,6 +989,9 @@ function populateYearDropdown() {
 }
 
 async function loadData() {
+    const startTime = performance.now();
+    console.log('⏱️ Loading data...');
+
     try {
         // Show loading in expenses list
         const expensesList = document.getElementById('expensesList');
@@ -912,50 +999,46 @@ async function loadData() {
             expensesList.innerHTML = '<div class="text-center py-12 text-gray-400"><div class="spinner mx-auto mb-4"></div><p>Loading expenses...</p></div>';
         }
 
-        // Load data based on feature flag
-        if (DATA_SOURCE === 'supabase') {
-            // Load from Supabase
-            try {
-                const expensesData = await supabaseGet(TABLE_NAME);
-                allExpenses = expensesData.map(supabaseToAirtable);
+        // Load from Supabase - LOAD IN PARALLEL for faster performance
+        const queryStart = performance.now();
 
-                try {
-                    const paymentsData = await supabaseGet(PAYMENTS_TABLE);
-                    allPayments = paymentsData.map(supabaseToAirtable);
-                } catch (e) {
-                    console.log('Payments table not found in Supabase - will be created on first payment');
-                    allPayments = [];
-                }
-            } catch (error) {
-                console.error('Error loading from Supabase:', error);
-                showNotification('Error loading from Supabase: ' + error.message, 'error');
-                throw error;
+        try {
+            const [expensesData, paymentsData] = await Promise.allSettled([
+                supabaseGet(TABLE_NAME),
+                supabaseGet(PAYMENTS_TABLE)
+            ]);
+
+            const queryEnd = performance.now();
+            console.log(`⚡ Database queries completed in ${(queryEnd - queryStart).toFixed(0)}ms`);
+
+            // Handle expenses
+            if (expensesData.status === 'fulfilled') {
+                allExpenses = expensesData.value.map(supabaseToAirtable);
+                console.log(`📊 Loaded ${allExpenses.length} expenses`);
+            } else {
+                console.error('Error loading expenses:', expensesData.reason);
+                throw expensesData.reason;
             }
-        } else {
-            // Load from Airtable (default)
-            const expensesResponse = await fetchWithRetry(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-            if (!expensesResponse.ok) throw new Error('Failed to fetch expenses');
-            const expensesData = await expensesResponse.json();
-            allExpenses = expensesData.records;
 
-            // Load payments with retry
-            try {
-                const paymentsResponse = await fetchWithRetry(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
-                    headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-                });
-                if (paymentsResponse.ok) {
-                    const paymentsData = await paymentsResponse.json();
-                    allPayments = paymentsData.records;
-                }
-            } catch (e) {
-                console.log('Payments table not found - will be created on first payment');
+            // Handle payments (optional table)
+            if (paymentsData.status === 'fulfilled') {
+                allPayments = paymentsData.value.map(supabaseToAirtable);
+                console.log(`💰 Loaded ${allPayments.length} payments`);
+            } else {
+                console.log('Payments table not found in Supabase - will be created on first payment');
                 allPayments = [];
             }
+        } catch (error) {
+            console.error('Error loading from Supabase:', error);
+            showNotification('Error loading from Supabase: ' + error.message, 'error');
+            throw error;
         }
 
+        const processingStart = performance.now();
         await loadCategoryBudgets(); // Load budget definitions
+        const budgetTime = performance.now();
+        console.log(`📋 Budgets loaded in ${(budgetTime - processingStart).toFixed(0)}ms`);
+
         populateFilters();
         populateCategorySelector();
         populateCategoryDatalist();
@@ -963,11 +1046,24 @@ async function loadData() {
         populateTagsDatalist();
         updateTagFilterDropdown();
         populateFilterDropdowns(); // Populate new Filters tab dropdowns
+        const filterTime = performance.now();
+        console.log(`🔍 Filters populated in ${(filterTime - budgetTime).toFixed(0)}ms`);
+
         renderExpenses();
+        const renderTime = performance.now();
+        console.log(`🎨 Expenses rendered in ${(renderTime - filterTime).toFixed(0)}ms`);
+
         renderPayments();
         updateStats();
         updateCharts();
         updateMismatchNotification();
+
+        const totalTime = performance.now() - startTime;
+        console.log(`✅ Total load time: ${totalTime.toFixed(0)}ms (${(totalTime/1000).toFixed(2)}s)`);
+
+        if (totalTime > 1000) {
+            console.warn(`⚠️ Load time exceeded 1 second!`);
+        }
 
         // Hide global loading overlay
         const overlay = document.getElementById('globalLoadingOverlay');
@@ -977,7 +1073,8 @@ async function loadData() {
 
         showNotification('Data loaded successfully!', 'success');
     } catch (error) {
-        console.error('Error:', error);
+        const errorTime = performance.now() - startTime;
+        console.error(`❌ Error after ${errorTime.toFixed(0)}ms:`, error);
 
         // Hide global loading overlay even on error
         const overlay = document.getElementById('globalLoadingOverlay');
@@ -1148,7 +1245,7 @@ function renderFilteredExpenses(expenses) {
                         <div class="expense-item"><span class="expense-label">Amount:</span><span class="font-bold text-lg ${actualColorClass}">$${actual.toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">Tags:</span><div class="flex flex-wrap">${tagsContent || '<span class="text-gray-400 text-xs">—</span>'}</div></div>
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
-                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<button onclick="event.stopPropagation(); viewReceiptFromExpense('${expense.id}');" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
+                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.has_receipt ? `<button onclick="event.stopPropagation(); viewReceiptFromExpense('${expense.id}');" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
                             <button onclick="event.stopPropagation(); editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
                             <button onclick="event.stopPropagation(); deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
@@ -1248,7 +1345,7 @@ function renderExpenses() {
                         <div class="expense-item"><span class="expense-label">Amount:</span><span class="font-bold text-lg ${actualColorClass}">$${actual.toFixed(2)}</span></div>
                         <div class="expense-item"><span class="expense-label">Tags:</span><div class="flex flex-wrap">${tagsContent || '<span class="text-gray-400 text-xs">—</span>'}</div></div>
                         <div class="expense-item"><span class="expense-label">LLC:</span><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></div>
-                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.Receipt && fields.Receipt.length > 0 ? `<button onclick="event.stopPropagation(); viewReceiptFromExpense('${expense.id}');" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
+                        <div class="expense-item"><span class="expense-label">Receipt:</span>${fields.has_receipt ? `<button onclick="event.stopPropagation(); viewReceiptFromExpense('${expense.id}');" class="text-purple-600 hover:text-purple-800" title="View Receipt" style="background: none; border: none; cursor: pointer; padding: 0;"><i class="fas fa-receipt text-xl"></i></button>` : '<span class="text-gray-300"><i class="fas fa-receipt text-xl"></i></span>'}</div>
                         <div class="expense-item"><span class="expense-label">Actions:</span><div class="flex gap-3">
                             <button onclick="event.stopPropagation(); editExpense('${expense.id}')" class="text-blue-500 hover:text-blue-700 text-lg" title="Edit"><i class="fas fa-edit"></i></button>
                             <button onclick="event.stopPropagation(); deleteExpense('${expense.id}')" class="text-red-500 hover:text-red-700 text-lg" title="Delete"><i class="fas fa-trash"></i></button>
@@ -1442,7 +1539,7 @@ function viewExpenseDetails(expenseId) {
                  `;
         }
 
-        if (fields.Receipt && fields.Receipt.length > 0) {
+        if (fields.has_receipt) {
             detailHTML += `
                      <div class="bg-gray-50 p-4 rounded mb-4">
                          <p class="text-xs text-gray-500 mb-2"><i class="fas fa-receipt mr-1"></i>Receipt</p>
@@ -1537,12 +1634,44 @@ function viewReceipt(receiptData) {
 }
 
 // Helper function to view receipt from expense ID (avoids JSON in HTML onclick)
-function viewReceiptFromExpense(expenseId) {
-    const expense = allExpenses.find(exp => exp.id === expenseId);
-    if (expense && expense.fields.Receipt) {
-        viewReceipt(expense.fields.Receipt);
-    } else {
-        showNotification('No receipt found for this expense', 'error');
+async function viewReceiptFromExpense(expenseId) {
+    try {
+        showNotification('Loading receipt...', 'info');
+
+        // Check if we already have the receipt in memory
+        const expense = allExpenses.find(exp => exp.id === expenseId);
+
+        if (expense && expense.fields.Receipt) {
+            // Receipt already loaded
+            viewReceipt(expense.fields.Receipt);
+            return;
+        }
+
+        // Fetch just this expense WITH the receipt field
+        if (DATA_SOURCE === 'supabase') {
+            const expenseData = await supabaseGet(
+                TABLE_NAME,
+                { id: { operator: 'eq', value: expenseId } },
+                1,
+                'id,Receipt' // Only get id and Receipt field
+            );
+
+            if (expenseData && expenseData[0] && expenseData[0].Receipt) {
+                viewReceipt(expenseData[0].Receipt);
+            } else {
+                showNotification('No receipt found for this expense', 'warning');
+            }
+        } else {
+            // Airtable fallback
+            if (expense && expense.fields.Receipt) {
+                viewReceipt(expense.fields.Receipt);
+            } else {
+                showNotification('No receipt found for this expense', 'warning');
+            }
+        }
+    } catch (error) {
+        console.error('Error loading receipt:', error);
+        showNotification('Error loading receipt: ' + error.message, 'error');
     }
 }
 
@@ -1666,6 +1795,12 @@ function renderPayments() {
 function updateStats() {
     const expenses = getFilteredExpenses();
 
+    console.log('📊 updateStats called');
+    console.log('   Total expenses loaded:', allExpenses.length);
+    console.log('   Filtered expenses:', expenses.length);
+    console.log('   Year filter:', document.getElementById('yearSelector').value);
+    console.log('   Month filter:', document.getElementById('monthSelector').value);
+
     // Calculate total budget from category budgets
     let totalBudget = 0;
     const categorySpending = {};
@@ -1677,6 +1812,8 @@ function updateStats() {
             categorySpending[cat] = (categorySpending[cat] || 0) + (exp.fields.Actual || 0);
         }
     });
+
+    console.log('   Category spending:', categorySpending);
 
     // Get filtered month/year for budgets (use selected filter, not current date)
     const yearFilterEl = document.getElementById('yearSelector');
@@ -1694,22 +1831,39 @@ function updateStats() {
         monthKey = `${currentYear}-${currentMonth}`;
     }
 
+    console.log('   Budget monthKey:', monthKey);
+    console.log('   Available budget months:', Object.keys(categoryBudgets));
+    console.log('   Budgets for month:', categoryBudgets[monthKey]);
+
     // Sum up budgets for categories in filtered month (including rollover)
     if (categoryBudgets[monthKey]) {
+        console.log('   📊 Found budgets for', monthKey);
         Object.keys(categoryBudgets[monthKey]).forEach(cat => {
             const budgetInfo = categoryBudgets[monthKey][cat];
+            console.log(`   📊 Category: ${cat}, Budget Info:`, budgetInfo);
             if (budgetInfo && budgetInfo.amount > 0) {
                 const baseBudget = budgetInfo.amount;
                 // Add rollover from previous month
                 const rollover = calculateRollover(cat, parseInt(selectedYear), selectedMonth);
-                totalBudget += (baseBudget + rollover);
+                const categoryTotal = baseBudget + rollover;
+                console.log(`   📊 ${cat}: base=${baseBudget}, rollover=${rollover}, total=${categoryTotal}`);
+                totalBudget += categoryTotal;
             }
         });
+    } else {
+        console.warn('   ⚠️ No budgets found for month:', monthKey);
+        console.warn('   ⚠️ Available months:', Object.keys(categoryBudgets));
     }
 
+    console.log('   ✅ Total budget calculated:', totalBudget);
+
     const totalActual = expenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
-    const llcTotal = expenses.filter(exp => exp.fields.LLC === 'Yes').reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+    const llcTotal = expenses.filter(exp => exp.fields.LLC === 'Yes' || exp.fields.LLC === true).reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
     const remaining = totalBudget - totalActual;
+
+    console.log('   Total actual:', totalActual);
+    console.log('   LLC total:', llcTotal);
+    console.log('   Remaining:', remaining);
 
     // Check for over-budget categories in current month (including rollover)
     const overBudgetCategories = [];
@@ -1740,6 +1894,9 @@ function updateStats() {
     if (selectedMonth !== 'all') {
         filteredPayments = filteredPayments.filter(p => p.fields.Month === selectedMonth);
     }
+
+    console.log('   Total payments loaded:', allPayments.length);
+    console.log('   Filtered payments:', filteredPayments.length);
 
     // Calculate total rental income for the filtered period
     const totalRentalIncome = filteredPayments
@@ -1796,32 +1953,54 @@ function updateStats() {
     const amarContribPercent = amarShare > 0 ? (amarContribTotal / amarShare) * 100 : 0;
     const priyaContribPercent = priyaShare > 0 ? (priyaContribTotal / priyaShare) * 100 : 0;
 
+    console.log('   Amar share:', amarShare);
+    console.log('   Amar contrib total:', amarContribTotal);
+    console.log('   Amar remaining:', amarRemaining);
+    console.log('   Priya share:', priyaShare);
+    console.log('   Priya contrib total:', priyaContribTotal);
+    console.log('   Priya remaining:', priyaRemaining);
+
     // Update budget display with intelligent info
     const budgetEl = document.getElementById('totalBudget');
-    if (totalBudget === 0) {
-        budgetEl.innerHTML = `<span class="text-gray-400">$0.00</span><br><span class="text-xs text-gray-400">Set budgets</span>`;
-    } else {
-        budgetEl.textContent = `$${totalBudget.toFixed(2)}`;
+    if (budgetEl) {
+        if (totalBudget === 0) {
+            budgetEl.innerHTML = `<span class="text-gray-400">$0.00</span><br><span class="text-xs text-gray-400">Set budgets</span>`;
+        } else {
+            budgetEl.textContent = `$${totalBudget.toFixed(2)}`;
+        }
     }
 
-    document.getElementById('totalActual').textContent = `$${totalActual.toFixed(2)}`;
-    document.getElementById('llcTotal').textContent = `$${llcTotal.toFixed(2)}`;
-    document.getElementById('rentalIncomeTotal').textContent = `$${totalRentalIncome.toFixed(2)}`;
+    const totalActualEl = document.getElementById('totalActual');
+    if (totalActualEl) {
+        totalActualEl.textContent = `$${totalActual.toFixed(2)}`;
+    }
+
+    const llcTotalEl = document.getElementById('llcTotal');
+    if (llcTotalEl) {
+        llcTotalEl.textContent = `$${llcTotal.toFixed(2)}`;
+    }
+
+    const rentalIncomeEl = document.getElementById('rentalIncomeTotal');
+    if (rentalIncomeEl) {
+        rentalIncomeEl.textContent = `$${totalRentalIncome.toFixed(2)}`;
+    }
 
     // Update remaining: always show Budget - Spent
     const remainingEl = document.getElementById('remaining');
-    if (totalBudget === 0) {
-        remainingEl.innerHTML = `<span class="text-gray-400">--</span>`;
-    } else {
-        const displayAmount = Math.abs(remaining).toFixed(2);
-        const colorClass = remaining >= 0 ? 'text-green-600' : 'text-red-600';
-        const signPrefix = remaining < 0 ? '-' : '';
-
-        if (overBudgetCategories.length > 0) {
-            // Show negative amount with over-budget note
-            remainingEl.innerHTML = `<span class="${colorClass} font-bold">${signPrefix}$${displayAmount}</span><br><span class="text-xs ${colorClass}">${overBudgetCategories.length} over budget</span>`;
+    if (remainingEl) {
+        if (totalBudget === 0) {
+            remainingEl.innerHTML = `<span class="text-gray-400">--</span>`;
         } else {
-            remainingEl.innerHTML = `<span class="${colorClass}">${signPrefix}$${displayAmount}</span>`;
+            const displayAmount = Math.abs(remaining).toFixed(2);
+            const colorClass = remaining >= 0 ? 'text-green-600' : 'text-red-600';
+            const signPrefix = remaining < 0 ? '-' : '';
+
+            if (overBudgetCategories.length > 0) {
+                // Show negative amount with over-budget note
+                remainingEl.innerHTML = `<span class="${colorClass} font-bold">${signPrefix}$${displayAmount}</span><br><span class="text-xs ${colorClass}">${overBudgetCategories.length} over budget</span>`;
+            } else {
+                remainingEl.innerHTML = `<span class="${colorClass}">${signPrefix}$${displayAmount}</span>`;
+            }
         }
     }
 
@@ -1829,20 +2008,44 @@ function updateStats() {
     updatePredictedTotal();
 
     // Update Amar's stats
-    document.getElementById('amarShare').textContent = `$${amarShare.toFixed(2)}`;
-    document.getElementById('amarContribution').textContent = `$${amarContribTotal.toFixed(2)}`;
-    document.getElementById('amarContributionPercent').textContent = amarContribPercent.toFixed(0);
-    document.getElementById('amarRemaining').textContent = `$${amarRemaining.toFixed(2)}`;
-    document.getElementById('amarContributionProgress').style.width = `${Math.min(amarContribPercent, 100)}%`;
-    document.getElementById('amarRemainingProgress').style.width = `${Math.min(100 - amarContribPercent, 100)}%`;
+    const amarShareEl = document.getElementById('amarShare');
+    if (amarShareEl) amarShareEl.textContent = `$${amarShare.toFixed(2)}`;
+
+    const amarContributionEl = document.getElementById('amarContribution');
+    if (amarContributionEl) amarContributionEl.textContent = `$${amarContribTotal.toFixed(2)}`;
+
+    const amarContributionPercentEl = document.getElementById('amarContributionPercent');
+    if (amarContributionPercentEl) amarContributionPercentEl.textContent = amarContribPercent.toFixed(0);
+
+    const amarRemainingEl = document.getElementById('amarRemaining');
+    if (amarRemainingEl) amarRemainingEl.textContent = `$${amarRemaining.toFixed(2)}`;
+
+    const amarContributionProgressEl = document.getElementById('amarContributionProgress');
+    if (amarContributionProgressEl) amarContributionProgressEl.style.width = `${Math.min(amarContribPercent, 100)}%`;
+
+    const amarRemainingProgressEl = document.getElementById('amarRemainingProgress');
+    if (amarRemainingProgressEl) amarRemainingProgressEl.style.width = `${Math.min(100 - amarContribPercent, 100)}%`;
 
     // Update Priya's stats
-    document.getElementById('priyaShare').textContent = `$${priyaShare.toFixed(2)}`;
-    document.getElementById('priyaContribution').textContent = `$${priyaContribTotal.toFixed(2)}`;
-    document.getElementById('priyaContributionPercent').textContent = priyaContribPercent.toFixed(0);
-    document.getElementById('priyaRemaining').textContent = `$${priyaRemaining.toFixed(2)}`;
-    document.getElementById('priyaContributionProgress').style.width = `${Math.min(priyaContribPercent, 100)}%`;
-    document.getElementById('priyaRemainingProgress').style.width = `${Math.min(100 - priyaContribPercent, 100)}%`;
+    const priyaShareEl = document.getElementById('priyaShare');
+    if (priyaShareEl) priyaShareEl.textContent = `$${priyaShare.toFixed(2)}`;
+
+    const priyaContributionEl = document.getElementById('priyaContribution');
+    if (priyaContributionEl) priyaContributionEl.textContent = `$${priyaContribTotal.toFixed(2)}`;
+
+    const priyaContributionPercentEl = document.getElementById('priyaContributionPercent');
+    if (priyaContributionPercentEl) priyaContributionPercentEl.textContent = priyaContribPercent.toFixed(0);
+
+    const priyaRemainingEl = document.getElementById('priyaRemaining');
+    if (priyaRemainingEl) priyaRemainingEl.textContent = `$${priyaRemaining.toFixed(2)}`;
+
+    const priyaContributionProgressEl = document.getElementById('priyaContributionProgress');
+    if (priyaContributionProgressEl) priyaContributionProgressEl.style.width = `${Math.min(priyaContribPercent, 100)}%`;
+
+    const priyaRemainingProgressEl = document.getElementById('priyaRemainingProgress');
+    if (priyaRemainingProgressEl) priyaRemainingProgressEl.style.width = `${Math.min(100 - priyaContribPercent, 100)}%`;
+
+    console.log('✅ updateStats complete');
 }
 
 function updateCharts() {
@@ -4221,12 +4424,43 @@ async function saveStandaloneContribution(event) {
     const month = document.getElementById('contributionMonth').value;
 
     try {
+        // Check for duplicate payments (only for new payments, not edits)
+        if (!recordId) {
+            const duplicatePayment = allPayments.find(p =>
+                p.fields.Person === person &&
+                p.fields.Amount === amount &&
+                p.fields.Year === year &&
+                p.fields.Month === month &&
+                p.fields.PaymentType === paymentType
+            );
+
+            if (duplicatePayment) {
+                const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const confirmed = confirm(
+                    `⚠️ DUPLICATE PAYMENT DETECTED!\n\n` +
+                    `A payment already exists with:\n` +
+                    `• Person: ${person}\n` +
+                    `• Amount: $${amount.toFixed(2)}\n` +
+                    `• Date: ${monthNames[parseInt(month)]} ${year}\n` +
+                    `• Type: ${paymentType}\n\n` +
+                    `Adding this would create a duplicate record.\n\n` +
+                    `Click OK to add anyway, or Cancel to go back.`
+                );
+
+                if (!confirmed) {
+                    setButtonLoading(submitBtn, false);
+                    return;
+                }
+            }
+        }
+
         if (paymentType === 'RentalIncome' && !recordId) {
-            // Create two separate payment records (50/50 split)
+            // Create two separate payment records (50/50 split) in Supabase
             const splitAmount = amount / 2;
 
             // Create Amar's rental income payment
-            const amarFields = {
+            const amarPayment = {
+                id: 'pay' + Date.now() + Math.random().toString(36).substr(2, 9),
                 Person: 'Amar',
                 Amount: splitAmount,
                 Description: description || 'Rental Income',
@@ -4234,16 +4468,11 @@ async function saveStandaloneContribution(event) {
                 Month: month,
                 PaymentType: 'RentalIncome'
             };
-
-            const amarResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: amarFields })
-            });
-            if (!amarResponse.ok) throw new Error('Failed to save Amar\'s rental income');
+            await supabasePost(PAYMENTS_TABLE, amarPayment);
 
             // Create Priya's rental income payment
-            const priyaFields = {
+            const priyaPayment = {
+                id: 'pay' + Date.now() + Math.random().toString(36).substr(2, 9) + 'p',
                 Person: 'Priya',
                 Amount: splitAmount,
                 Description: description || 'Rental Income',
@@ -4251,13 +4480,7 @@ async function saveStandaloneContribution(event) {
                 Month: month,
                 PaymentType: 'RentalIncome'
             };
-
-            const priyaResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: priyaFields })
-            });
-            if (!priyaResponse.ok) throw new Error('Failed to save Priya\'s rental income');
+            await supabasePost(PAYMENTS_TABLE, priyaPayment);
 
             closeContributionModal();
             await loadData();
@@ -4274,15 +4497,17 @@ async function saveStandaloneContribution(event) {
                 PaymentType: paymentType
             };
 
-            const url = recordId
-                ? `https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}/${recordId}`
-                : `https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`;
-            const response = await fetch(url, {
-                method: recordId ? 'PATCH' : 'POST',
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields })
-            });
-            if (!response.ok) throw new Error('Failed to save payment');
+            if (recordId) {
+                // Update existing payment in Supabase
+                await supabasePatch(PAYMENTS_TABLE, recordId, fields);
+            } else {
+                // Create new payment in Supabase
+                const newPayment = {
+                    id: 'pay' + Date.now() + Math.random().toString(36).substr(2, 9),
+                    ...fields
+                };
+                await supabasePost(PAYMENTS_TABLE, newPayment);
+            }
 
             closeContributionModal();
             await loadData();
@@ -4333,11 +4558,8 @@ function editPayment(id) {
 async function deletePayment(id) {
     if (!confirm('Delete this payment?')) return;
     try {
-        const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}/${id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-        });
-        if (!response.ok) throw new Error('Failed to delete payment');
+        // Delete from Supabase
+        await supabaseDelete(PAYMENTS_TABLE, id);
         await loadData();
         showNotification('Payment deleted!', 'success');
     } catch (error) {
@@ -5057,6 +5279,7 @@ function findDuplicateExpenses(newExpense) {
     allExpenses.forEach(exp => {
         let matchScore = 0;
         let reasons = [];
+        let isExactDuplicate = false;
 
         // Check item name (case-insensitive, fuzzy match)
         const itemMatch = exp.fields.Item && newExpense.Item &&
@@ -5089,13 +5312,23 @@ function findDuplicateExpenses(newExpense) {
             reasons.push('Same category');
         }
 
+        // EXACT DUPLICATE: Same item, same amount, same date (regardless of category)
+        // This is almost certainly a duplicate that should be prevented
+        if (itemMatch && amountMatch && dateMatch) {
+            isExactDuplicate = true;
+            matchScore += 10; // Boost score to ensure it's caught
+            reasons.unshift('⚠️ EXACT DUPLICATE');
+        }
+
         // If match score is high enough, consider it a potential duplicate
         // Score >= 5 means at least: same item + same amount, or same item + same date
+        // Score >= 10 means exact duplicate (same item + amount + date)
         if (matchScore >= 5) {
             duplicates.push({
                 expense: exp,
                 matchScore: matchScore,
-                reasons: reasons
+                reasons: reasons,
+                isExactDuplicate: isExactDuplicate
             });
         }
     });
@@ -5112,20 +5345,26 @@ function showDuplicateConfirmation(duplicates, newExpense) {
 
         const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+        // Check if any are exact duplicates
+        const hasExactDuplicate = duplicates.some(d => d.isExactDuplicate);
+        const warningColor = hasExactDuplicate ? 'red' : 'orange';
+        const warningTitle = hasExactDuplicate ? '🚫 EXACT DUPLICATE DETECTED!' : 'Possible Duplicate Expense';
+
         modal.innerHTML = `
                      <div class="modal-content" style="max-width: 600px;">
                          <div class="flex justify-between items-center mb-6">
-                             <h2 class="text-2xl font-bold text-orange-600 flex items-center gap-2">
-                                 <i class="fas fa-exclamation-triangle"></i>
-                                 Possible Duplicate Expense
+                             <h2 class="text-2xl font-bold text-${warningColor}-600 flex items-center gap-2">
+                                 <i class="fas fa-${hasExactDuplicate ? 'ban' : 'exclamation-triangle'}"></i>
+                                 ${warningTitle}
                              </h2>
                          </div>
                          
-                         <div class="bg-yellow-50 border-l-4 border-yellow-500 p-4 mb-6">
-                             <p class="text-sm text-yellow-800">
-                                 <i class="fas fa-info-circle mr-2"></i>
-                                 We found ${duplicates.length} similar expense${duplicates.length > 1 ? 's' : ''} that might be duplicate${duplicates.length > 1 ? 's' : ''}. 
-                                 Please review before adding.
+                         <div class="bg-${warningColor}-50 border-l-4 border-${warningColor}-500 p-4 mb-6">
+                             <p class="text-sm text-${warningColor}-800 font-semibold">
+                                 <i class="fas fa-${hasExactDuplicate ? 'times-circle' : 'info-circle'} mr-2"></i>
+                                 ${hasExactDuplicate 
+                                     ? 'This appears to be an EXACT duplicate of an existing expense. Adding it would create duplicate data!' 
+                                     : `We found ${duplicates.length} similar expense${duplicates.length > 1 ? 's' : ''} that might be duplicate${duplicates.length > 1 ? 's' : ''}. Please review before adding.`}
                              </p>
                          </div>
                          
@@ -5142,19 +5381,20 @@ function showDuplicateConfirmation(duplicates, newExpense) {
                          </div>
                          
                          <div class="mb-6">
-                             <h3 class="font-bold text-gray-800 mb-3">Similar Existing Expense${duplicates.length > 1 ? 's' : ''}:</h3>
+                             <h3 class="font-bold text-gray-800 mb-3">Existing Expense${duplicates.length > 1 ? 's' : ''}:</h3>
                              <div class="space-y-3">
                                  ${duplicates.map(dup => `
-                                     <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                                     <div class="bg-${dup.isExactDuplicate ? 'red' : 'orange'}-50 border-2 border-${dup.isExactDuplicate ? 'red' : 'orange'}-300 rounded-lg p-4">
+                                         ${dup.isExactDuplicate ? '<div class="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded mb-2 inline-block"><i class="fas fa-exclamation-triangle mr-1"></i>EXACT DUPLICATE</div>' : ''}
                                          <div class="grid grid-cols-2 gap-2 text-sm mb-2">
                                              <div><span class="font-semibold">Item:</span> ${dup.expense.fields.Item}</div>
                                              <div><span class="font-semibold">Amount:</span> $${(dup.expense.fields.Actual || 0).toFixed(2)}</div>
                                              <div><span class="font-semibold">Date:</span> ${monthNames[dup.expense.fields.Month]} ${dup.expense.fields.Day || 1}, ${dup.expense.fields.Year}</div>
                                              <div><span class="font-semibold">Category:</span> ${dup.expense.fields.Category || 'None'}</div>
                                          </div>
-                                         <div class="text-xs text-red-700 font-semibold">
+                                         <div class="text-xs text-${dup.isExactDuplicate ? 'red' : 'orange'}-700 font-semibold">
                                              <i class="fas fa-check-circle mr-1"></i>
-                                             Match: ${dup.reasons.join(', ')}
+                                             ${dup.reasons.join(', ')}
                                          </div>
                                      </div>
                                  `).join('')}
@@ -5162,14 +5402,25 @@ function showDuplicateConfirmation(duplicates, newExpense) {
                          </div>
                          
                          <div class="flex gap-3">
-                             <button id="confirmAddBtn" class="btn-primary flex-1">
-                                 <i class="fas fa-check mr-2"></i>
-                                 Add Anyway (Not a Duplicate)
-                             </button>
-                             <button id="cancelAddBtn" class="btn-secondary flex-1">
-                                 <i class="fas fa-times mr-2"></i>
-                                 Cancel
-                             </button>
+                             ${hasExactDuplicate ? `
+                                 <button id="cancelAddBtn" class="btn-primary flex-1" style="background: #dc2626;">
+                                     <i class="fas fa-times mr-2"></i>
+                                     Don't Add (Recommended)
+                                 </button>
+                                 <button id="confirmAddBtn" class="btn-secondary flex-1" style="background: #6b7280;">
+                                     <i class="fas fa-exclamation-triangle mr-2"></i>
+                                     Add Anyway (Not Recommended)
+                                 </button>
+                             ` : `
+                                 <button id="confirmAddBtn" class="btn-primary flex-1">
+                                     <i class="fas fa-check mr-2"></i>
+                                     Add Anyway (Not a Duplicate)
+                                 </button>
+                                 <button id="cancelAddBtn" class="btn-secondary flex-1">
+                                     <i class="fas fa-times mr-2"></i>
+                                     Cancel
+                                 </button>
+                             `}
                          </div>
                      </div>
                  `;
@@ -5188,34 +5439,102 @@ function showDuplicateConfirmation(duplicates, newExpense) {
     });
 }
 
+// ==================== RECEIPT COMPRESSION ====================
+
+/**
+ * Compress an image file to reduce storage size
+ * Converts to WebP format (best compression) and scales down if needed
+ * @param {File} file - The image file to compress
+ * @param {number} maxWidth - Maximum width (default 1200px)
+ * @param {number} quality - Compression quality 0-1 (default 0.8)
+ * @returns {Promise<{base64: string, filename: string, type: string, size: number, originalSize: number}>}
+ */
+async function compressImage(file, maxWidth = 1200, quality = 0.8) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+            const img = new Image();
+
+            img.onload = () => {
+                // Calculate new dimensions
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = (height * maxWidth) / width;
+                    width = maxWidth;
+                }
+
+                // Create canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Convert to WebP (best compression) or fallback to JPEG
+                let mimeType = 'image/webp';
+                let base64Data = canvas.toDataURL(mimeType, quality);
+
+                // Fallback to JPEG if WebP not supported
+                if (!base64Data || base64Data === 'data:,') {
+                    mimeType = 'image/jpeg';
+                    base64Data = canvas.toDataURL(mimeType, quality);
+                }
+
+                const originalSize = file.size;
+                const compressedSize = Math.round((base64Data.length * 3) / 4); // Approximate size
+
+                const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
+                console.log(`📦 Image compressed: ${(originalSize / 1024).toFixed(0)}KB → ${(compressedSize / 1024).toFixed(0)}KB (${compressionRatio}% reduction)`);
+
+                resolve({
+                    base64: base64Data,
+                    filename: file.name.replace(/\.[^.]+$/, '.webp'), // Change extension to .webp
+                    type: mimeType,
+                    size: compressedSize,
+                    originalSize: originalSize
+                });
+            };
+
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = e.target.result;
+        };
+
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+    });
+}
+
+// ==================== RECEIPT UPLOAD ====================
+
 async function uploadReceiptAndSave(recordId, fields, file) {
     try {
-        showNotification('Uploading receipt...', 'info');
+        showNotification('Compressing and uploading receipt...', 'info');
 
-        // Convert file to base64 for storage in database
-        const reader = new FileReader();
-        
-        const base64Promise = new Promise((resolve, reject) => {
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-        });
+        // Compress the image before saving
+        const compressed = await compressImage(file, 1200, 0.8);
 
-        const base64Data = await base64Promise;
-        
         // Store receipt as base64 in the Receipt field
-        // Format: [{ url: "data:image/...", filename: "..." }]
+        // Format: [{ url: "data:image/...", filename: "...", ... }]
         fields.Receipt = JSON.stringify([{
-            url: base64Data,
-            filename: file.name,
-            type: file.type,
-            size: file.size
+            url: compressed.base64,
+            filename: compressed.filename,
+            type: compressed.type,
+            size: compressed.size,
+            originalSize: compressed.originalSize,
+            compressed: true
         }]);
+
+        // Set has_receipt flag
+        fields.has_receipt = true;
 
         // Save expense with receipt data
         await saveExpenseToSupabase(recordId, fields);
         
-        showNotification('Expense and receipt saved successfully!', 'success');
+        showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB)`, 'success');
     } catch (error) {
         console.error('Error uploading receipt:', error);
         showNotification('Error: ' + error.message, 'error');
@@ -5809,156 +6128,7 @@ function formatParsedReceiptHTML(parsedData) {
     return html;
 }
 
-async function saveExpenseToAirtable(recordId, fields) {
-    try {
-        // Filter out empty optional fields (Tags, Notes) to avoid Airtable errors if fields don't exist
-        const cleanFields = { ...fields };
-        if (!cleanFields.Tags || cleanFields.Tags.trim() === '') {
-            delete cleanFields.Tags;
-        }
-        if (!cleanFields.Notes || cleanFields.Notes.trim() === '') {
-            delete cleanFields.Notes;
-        }
-
-        // DUAL-WRITE: Save to Airtable
-        let airtableError = null;
-        try {
-            const url = recordId ? `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}/${recordId}` : `https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`;
-            const response = await fetch(url, {
-                method: recordId ? 'PATCH' : 'POST',
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fields: cleanFields })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('Airtable error:', errorData);
-                airtableError = new Error(errorData.error?.message || 'Failed to save to Airtable');
-                throw airtableError;
-            }
-
-            const airtableResult = await response.json();
-            const savedRecordId = recordId || airtableResult.id;
-
-            // DUAL-WRITE: Also save to Supabase if configured
-            if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-                try {
-                    const supabaseData = { ...cleanFields };
-                    if (recordId) {
-                        supabaseData.id = recordId;
-                        await supabasePatch(TABLE_NAME, recordId, supabaseData);
-                    } else {
-                        supabaseData.id = savedRecordId; // Use same ID as Airtable for consistency
-                        await supabasePost(TABLE_NAME, supabaseData);
-                    }
-                    console.log('✅ Saved to Supabase successfully');
-                } catch (supabaseError) {
-                    console.error('⚠️ Failed to save to Supabase (continuing with Airtable):', supabaseError);
-                    // Don't throw - Airtable save succeeded, Supabase is secondary
-                }
-            }
-
-            // Use Airtable record ID for subsequent operations
-            recordId = savedRecordId;
-        } catch (error) {
-            // If Airtable fails, try Supabase as fallback
-            if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-                try {
-                    console.log('Airtable failed, trying Supabase fallback...');
-                    const supabaseData = { ...cleanFields };
-                    if (recordId) {
-                        supabaseData.id = recordId;
-                        await supabasePatch(TABLE_NAME, recordId, supabaseData);
-                    } else {
-                        const result = await supabasePost(TABLE_NAME, supabaseData);
-                        recordId = result.id;
-                    }
-                    console.log('✅ Saved to Supabase (fallback) successfully');
-                } catch (supabaseError) {
-                    // Both failed
-                    throw airtableError || supabaseError;
-                }
-            } else {
-                throw error;
-            }
-        }
-
-        // Create payment entries for visibility (but marked to avoid double counting)
-        await createPaymentEntriesFromContributions(fields, recordId);
-
-        // Auto-add category to budget manager for expense month if it doesn't exist
-        if (fields.Category) {
-            const expenseYear = fields.Year;
-            const expenseMonth = fields.Month;
-            const monthKey = `${expenseYear}-${expenseMonth}`;
-
-            // Check if budget exists for this category in this month
-            const budgetExists = categoryBudgets[monthKey] && categoryBudgets[monthKey][fields.Category];
-
-            if (!budgetExists) {
-                try {
-                    const budgetData = {
-                        Category: fields.Category,
-                        Year: expenseYear,
-                        Month: expenseMonth,
-                        Amount: 0,
-                        Recurring: 'No'
-                    };
-
-                    // DUAL-WRITE: Create budget record in both Airtable and Supabase
-                    try {
-                        // Save to Airtable
-                        const airtableResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({ fields: budgetData })
-                        });
-
-                        if (airtableResponse.ok) {
-                            const airtableResult = await airtableResponse.json();
-                            const budgetId = airtableResult.id;
-
-                            // Also save to Supabase if configured
-                            if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-                                try {
-                                    await supabasePost(BUDGETS_TABLE, { ...budgetData, id: budgetId });
-                                    console.log('✅ Budget saved to Supabase');
-                                } catch (supabaseError) {
-                                    console.error('⚠️ Failed to save budget to Supabase:', supabaseError);
-                                }
-                            }
-                        }
-                    } catch (airtableError) {
-                        // Try Supabase as fallback
-                        if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-                            try {
-                                await supabasePost(BUDGETS_TABLE, budgetData);
-                                console.log('✅ Budget saved to Supabase (fallback)');
-                            } catch (supabaseError) {
-                                console.error('Failed to save budget:', supabaseError);
-                            }
-                        }
-                    }
-
-                    console.log(`Auto-added category "${fields.Category}" to budget manager for ${monthKey} with $0 budget`);
-                    // Reload budgets to include the new one
-                    await loadCategoryBudgets();
-                } catch (error) {
-                    console.error('Error auto-adding category to budget:', error);
-                }
-            }
-        }
-
-        closeModal();
-        await loadData();
-        showNotification(recordId ? 'Updated!' : 'Added!', 'success');
-    } catch (error) {
-        showNotification('Error: ' + error.message, 'error');
-    }
-}
+// Function removed - use saveExpenseToSupabase() instead (Supabase-only implementation)
 
 async function saveExpenseToSupabase(recordId, fields) {
     try {
@@ -6148,29 +6318,14 @@ async function loadFixedExpenses() {
     try {
         let data;
 
-        if (DATA_SOURCE === 'supabase') {
-            // Load from Supabase
-            try {
-                const fixedExpenses = await supabaseGet(FIXED_EXPENSES_TABLE);
-                data = { records: fixedExpenses.map(supabaseToAirtable) };
-            } catch (error) {
-                console.log('Fixed expenses table not found in Supabase');
-                allFixedExpenses = [];
-                return;
-            }
-        } else {
-            // Load from Airtable
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-
-            if (!response.ok) {
-                console.log('Fixed expenses table not found');
-                allFixedExpenses = [];
-                return;
-            }
-
-            data = await response.json();
+        // Load from Supabase
+        try {
+            const fixedExpenses = await supabaseGet(FIXED_EXPENSES_TABLE);
+            data = { records: fixedExpenses.map(supabaseToAirtable) };
+        } catch (error) {
+            console.log('Fixed expenses table not found in Supabase');
+            allFixedExpenses = [];
+            return;
         }
 
         allFixedExpenses = data.records;
@@ -6222,40 +6377,35 @@ async function loadCategoryBudgets() {
     try {
         let data;
 
-        if (DATA_SOURCE === 'supabase') {
-            // Load from Supabase
-            try {
-                const budgets = await supabaseGet(BUDGETS_TABLE);
-                data = { records: budgets.map(supabaseToAirtable) };
-            } catch (error) {
-                console.log('Budgets table not found in Supabase - will be created on first budget');
-                allBudgetRecords = [];
-                categoryBudgets = {};
-                return;
-            }
-        } else {
-            // Load from Airtable
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
+        console.log('📋 loadCategoryBudgets: Starting from Supabase');
 
-            if (!response.ok) {
-                console.log('Budgets table not found - will be created on first budget');
-                allBudgetRecords = [];
-                categoryBudgets = {};
-                return;
-            }
+        // Load from Supabase
+        try {
+            console.log('📋 Fetching budgets from Supabase table:', BUDGETS_TABLE);
+            const budgets = await supabaseGet(BUDGETS_TABLE);
+            console.log('📋 Raw budgets from Supabase:', budgets);
+            console.log('📋 Number of budget records:', budgets ? budgets.length : 0);
 
-            data = await response.json();
+            data = { records: budgets.map(supabaseToAirtable) };
+            console.log('📋 Converted budget records:', data.records);
+        } catch (error) {
+            console.log('⚠️ Budgets table not found in Supabase - will be created on first budget');
+            console.error('Error details:', error);
+            allBudgetRecords = [];
+            categoryBudgets = {};
+            return;
         }
 
         allBudgetRecords = data.records;
+        console.log('📋 Total budget records loaded:', allBudgetRecords.length);
 
         // Convert to nested structure for easy lookup
         categoryBudgets = {};
         allBudgetRecords.forEach(record => {
             const { Category, Year, Month, Amount, Recurring } = record.fields;
-            const monthKey = `${Year}-${Month}`;
+            const monthKey = `${Year}-${String(Month).padStart(2, '0')}`;
+
+            console.log(`📋 Processing budget: ${Category} for ${monthKey}, Amount: ${Amount}, Recurring: ${Recurring}`);
 
             if (!categoryBudgets[monthKey]) {
                 categoryBudgets[monthKey] = {};
@@ -6263,18 +6413,21 @@ async function loadCategoryBudgets() {
 
             categoryBudgets[monthKey][Category] = {
                 id: record.id,
-                amount: Amount || 0,
-                recurring: Recurring === 'Yes'
+                amount: parseFloat(Amount) || 0,
+                recurring: Recurring === 'Yes' || Recurring === true
             };
         });
+
+        console.log('📋 categoryBudgets structure:', categoryBudgets);
+        console.log('📋 Available months:', Object.keys(categoryBudgets));
 
         // Check if we need to auto-create budgets for current month from recurring
         await autoCreateRecurringBudgets();
 
-        const sourceName = DATA_SOURCE === 'supabase' ? 'Supabase' : 'Airtable';
-        console.log(`Loaded budgets from ${sourceName}:`, Object.keys(categoryBudgets).length, 'months');
+        console.log(`✅ Loaded budgets from Supabase:`, Object.keys(categoryBudgets).length, 'months');
     } catch (error) {
-        console.error('Could not load category budgets:', error);
+        console.error('❌ Could not load category budgets:', error);
+        console.error('Error stack:', error.stack);
         categoryBudgets = {};
         allBudgetRecords = [];
     }
@@ -6304,29 +6457,21 @@ async function autoCreateRecurringBudgets() {
                 const budgetInfo = categoryBudgets[prevKey][category];
                 if (budgetInfo.recurring) {
                     budgetsToCreate.push({
-                        fields: {
-                            Category: category,
-                            Year: currentYear,
-                            Month: currentMonth,
-                            Amount: budgetInfo.amount,
-                            Recurring: 'Yes'
-                        }
+                        id: 'bud' + Date.now() + Math.random().toString(36).substr(2, 9),
+                        Category: category,
+                        Year: currentYear,
+                        Month: currentMonth,
+                        Amount: budgetInfo.amount,
+                        Recurring: 'Yes'
                     });
                 }
             });
 
             if (budgetsToCreate.length > 0) {
                 try {
-                    // Create all budgets in Airtable
+                    // Create all budgets in Supabase
                     for (const budget of budgetsToCreate) {
-                        await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}`, {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify(budget)
-                        });
+                        await supabasePost(BUDGETS_TABLE, budget);
                     }
                     console.log(`Auto-created ${budgetsToCreate.length} recurring budgets for ${currentKey}`);
                     // Reload budgets to get the new records
@@ -6638,39 +6783,19 @@ async function updateCategoryBudget(category, value) {
         const budgetInfo = categoryBudgets[monthKey] && categoryBudgets[monthKey][category];
 
         if (budgetInfo && budgetInfo.id) {
-            // Update existing budget
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}/${budgetInfo.id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    fields: { Amount: budget }
-                })
-            });
-
-            if (!response.ok) throw new Error('Failed to update budget');
+            // Update existing budget in Supabase
+            await supabasePatch(BUDGETS_TABLE, budgetInfo.id, { Amount: budget });
         } else {
-            // Create new budget
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    fields: {
-                        Category: category,
-                        Year: selectedYear,
-                        Month: selectedMonth,
-                        Amount: budget,
-                        Recurring: 'No'
-                    }
-                })
-            });
-
-            if (!response.ok) throw new Error('Failed to create budget');
+            // Create new budget in Supabase
+            const newBudget = {
+                id: 'bud' + Date.now() + Math.random().toString(36).substr(2, 9),
+                Category: category,
+                Year: selectedYear,
+                Month: selectedMonth,
+                Amount: budget,
+                Recurring: 'No'
+            };
+            await supabasePost(BUDGETS_TABLE, newBudget);
         }
 
         await loadCategoryBudgets();
@@ -6697,19 +6822,10 @@ async function toggleRecurring(category, isRecurring) {
         const budgetInfo = categoryBudgets[monthKey] && categoryBudgets[monthKey][category];
 
         if (budgetInfo && budgetInfo.id) {
-            // Update existing budget
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}/${budgetInfo.id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    fields: { Recurring: isRecurring ? 'Yes' : 'No' }
-                })
+            // Update existing budget in Supabase
+            await supabasePatch(BUDGETS_TABLE, budgetInfo.id, { 
+                Recurring: isRecurring ? 'Yes' : 'No' 
             });
-
-            if (!response.ok) throw new Error('Failed to update recurring status');
 
             await loadCategoryBudgets();
             renderBudgetTable();
@@ -6732,12 +6848,8 @@ async function deleteCategoryBudget(category) {
             const budgetInfo = categoryBudgets[monthKey] && categoryBudgets[monthKey][category];
 
             if (budgetInfo && budgetInfo.id) {
-                const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}/${budgetInfo.id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-                });
-
-                if (!response.ok) throw new Error('Failed to delete budget');
+                // Delete from Supabase
+                await supabaseDelete(BUDGETS_TABLE, budgetInfo.id);
 
                 await loadCategoryBudgets();
                 renderBudgetTable();
@@ -6765,24 +6877,16 @@ async function addNewCategoryBudget() {
         }
 
         try {
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    fields: {
-                        Category: trimmed,
-                        Year: selectedYear,
-                        Month: selectedMonth,
-                        Amount: 0,
-                        Recurring: 'No'
-                    }
-                })
-            });
-
-            if (!response.ok) throw new Error('Failed to create budget');
+            // Create new budget in Supabase
+            const newBudget = {
+                id: 'bud' + Date.now() + Math.random().toString(36).substr(2, 9),
+                Category: trimmed,
+                Year: selectedYear,
+                Month: selectedMonth,
+                Amount: 0,
+                Recurring: 'No'
+            };
+            await supabasePost(BUDGETS_TABLE, newBudget);
 
             await loadCategoryBudgets();
             renderBudgetTable();
@@ -6890,20 +6994,17 @@ async function saveFixedExpense(event) {
     };
 
     try {
-        const url = id
-            ? `https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}/${id}`
-            : `https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}`;
-
-        const response = await fetch(url, {
-            method: id ? 'PATCH' : 'POST',
-            headers: {
-                'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ fields })
-        });
-
-        if (!response.ok) throw new Error('Failed to save fixed expense');
+        if (id) {
+            // Update existing in Supabase
+            await supabasePatch(FIXED_EXPENSES_TABLE, id, fields);
+        } else {
+            // Create new in Supabase
+            const newFixedExpense = {
+                id: 'fix' + Date.now() + Math.random().toString(36).substr(2, 9),
+                ...fields
+            };
+            await supabasePost(FIXED_EXPENSES_TABLE, newFixedExpense);
+        }
 
         closeAddFixedExpenseForm();
         await loadFixedExpenses();
@@ -6945,12 +7046,8 @@ async function deleteFixedExpense(id) {
     if (!confirm('Delete this fixed expense? This will not affect existing expenses.')) return;
 
     try {
-        const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}/${id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-        });
-
-        if (!response.ok) throw new Error('Failed to delete');
+        // Delete from Supabase
+        await supabaseDelete(FIXED_EXPENSES_TABLE, id);
 
         await loadFixedExpenses();
         renderFixedExpenses();
@@ -6966,29 +7063,14 @@ async function loadLLCExpenses() {
     try {
         let data;
 
-        if (DATA_SOURCE === 'supabase') {
-            // Load from Supabase
-            try {
-                const llcExpenses = await supabaseGet(LLC_EXPENSES_TABLE);
-                data = { records: llcExpenses.map(supabaseToAirtable) };
-            } catch (error) {
-                console.log('LLC expenses table not found in Supabase');
-                allLLCExpenses = [];
-                return;
-            }
-        } else {
-            // Load from Airtable
-            const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-
-            if (!response.ok) {
-                console.log('LLC expenses table not found');
-                allLLCExpenses = [];
-                return;
-            }
-
-            data = await response.json();
+        // Load from Supabase
+        try {
+            const llcExpenses = await supabaseGet(LLC_EXPENSES_TABLE);
+            data = { records: llcExpenses.map(supabaseToAirtable) };
+        } catch (error) {
+            console.log('LLC expenses table not found in Supabase');
+            allLLCExpenses = [];
+            return;
         }
 
         allLLCExpenses = data.records;
@@ -7090,20 +7172,17 @@ async function saveLLCExpense(event) {
     };
 
     try {
-        const url = id
-            ? `https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}/${id}`
-            : `https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}`;
-
-        const response = await fetch(url, {
-            method: id ? 'PATCH' : 'POST',
-            headers: {
-                'Authorization': `Bearer ${AIRTABLE_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ fields })
-        });
-
-        if (!response.ok) throw new Error('Failed to save LLC expense');
+        if (id) {
+            // Update existing in Supabase
+            await supabasePatch(LLC_EXPENSES_TABLE, id, fields);
+        } else {
+            // Create new in Supabase
+            const newLLCExpense = {
+                id: 'llc' + Date.now() + Math.random().toString(36).substr(2, 9),
+                ...fields
+            };
+            await supabasePost(LLC_EXPENSES_TABLE, newLLCExpense);
+        }
 
         closeAddLLCExpenseForm();
         await loadLLCExpenses();
@@ -7131,12 +7210,8 @@ async function deleteLLCExpense(id) {
     if (!confirm('Delete this LLC eligible expense?')) return;
 
     try {
-        const response = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}/${id}`, {
-            method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-        });
-
-        if (!response.ok) throw new Error('Failed to delete');
+        // Delete from Supabase
+        await supabaseDelete(LLC_EXPENSES_TABLE, id);
 
         await loadLLCExpenses();
         renderLLCExpenses();
@@ -9728,268 +9803,16 @@ function displaySearchResults(results, description) {
              `;
 }
 
-function toggleDataSource() {
-    const currentSource = DATA_SOURCE === 'supabase' ? 'Supabase' : 'Airtable';
-    const newSource = DATA_SOURCE === 'supabase' ? 'airtable' : 'supabase';
-    const newSourceName = newSource === 'supabase' ? 'Supabase' : 'Airtable';
-
-    if (!confirm(`Switch data source from ${currentSource} to ${newSourceName}?\n\nThis will reload all data from ${newSourceName}.`)) {
-        return;
-    }
-
-    // Check if Supabase is configured when switching to it
-    if (newSource === 'supabase' && (!SUPABASE_URL || !SUPABASE_ANON_KEY)) {
-        alert('⚠️ Supabase credentials not configured!\n\nPlease configure Supabase in Settings first.');
-        openSettings();
-        return;
-    }
-
-    DATA_SOURCE = newSource;
-    localStorage.setItem('data_source', DATA_SOURCE);
-
-    // Update UI label
-    const label = document.getElementById('currentDataSource');
-    if (label) label.textContent = newSourceName;
-
-    showNotification(`✅ Switched to ${newSourceName}`, 'success');
-    loadData();
-}
+// Function removed - 100% Supabase implementation only
 
 function updateDataSourceLabel() {
     const label = document.getElementById('currentDataSource');
     if (label) {
-        label.textContent = DATA_SOURCE === 'supabase' ? 'Supabase' : 'Airtable';
+        label.textContent = 'Supabase';
     }
 }
 
-async function migrateDataFromAirtableToSupabase() {
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        alert('⚠️ Supabase credentials not configured!\n\nPlease configure Supabase in Settings first.');
-        return;
-    }
-
-    if (!confirm('🚀 Migrate all data from Airtable to Supabase?\n\nThis will copy all records to Supabase. This may take a few minutes.')) {
-        return;
-    }
-
-    console.log('🚀 MIGRATION STARTED');
-    console.log('Supabase URL:', SUPABASE_URL);
-    console.log('Airtable Base ID:', BASE_ID);
-    showNotification('🔄 Starting migration...', 'info');
-
-    // Helper function to migrate a single record with duplicate handling
-    async function migrateRecord(tableName, record, recordType) {
-        try {
-            const data = airtableToSupabase(record, tableName);
-            console.log(`Migrating ${recordType}:`, record.id, data);
-
-            try {
-                await supabasePost(tableName, data);
-                console.log(`✅ Inserted ${recordType}:`, record.id);
-                return { success: true, action: 'inserted' };
-            } catch (postError) {
-                console.log(`⚠️ Insert failed for ${recordType} ${record.id}:`, postError.message);
-
-                // If duplicate or PGRST204, try updating
-                if (postError.message.includes('duplicate') || postError.message.includes('PGRST204') || postError.message.includes('already exists')) {
-                    try {
-                        await supabasePatch(tableName, record.id, data);
-                        console.log(`✅ Updated ${recordType}:`, record.id);
-                        return { success: true, action: 'updated' };
-                    } catch (patchError) {
-                        console.error(`❌ Update failed for ${recordType} ${record.id}:`, patchError.message);
-                        return { success: false, error: patchError.message };
-                    }
-                } else {
-                    console.error(`❌ Unexpected error for ${recordType} ${record.id}:`, postError.message);
-                    return { success: false, error: postError.message };
-                }
-            }
-        } catch (e) {
-            console.error(`❌ Error processing ${recordType} ${record.id}:`, e);
-            return { success: false, error: e.message };
-        }
-    }
-
-    try {
-        let migratedCount = 0;
-        let updatedCount = 0;
-        let errorCount = 0;
-        const errors = [];
-
-        // Migrate Expenses (Budget table)
-        console.log('\n📊 Migrating Expenses...');
-        try {
-            const expensesResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_NAME}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-            if (expensesResponse.ok) {
-                const expensesData = await expensesResponse.json();
-                console.log(`Found ${expensesData.records.length} expenses in Airtable`);
-
-                for (const record of expensesData.records) {
-                    const result = await migrateRecord(TABLE_NAME, record, 'Expense');
-                    if (result.success) {
-                        if (result.action === 'inserted') migratedCount++;
-                        else updatedCount++;
-                    } else {
-                        errorCount++;
-                        errors.push(`Expense ${record.id}: ${result.error}`);
-                    }
-                }
-            } else {
-                console.error('Failed to fetch expenses from Airtable:', expensesResponse.status);
-            }
-        } catch (e) {
-            console.error('Error fetching expenses:', e);
-            errors.push(`Expenses fetch: ${e.message}`);
-        }
-
-        // Migrate Payments
-        console.log('\n💰 Migrating Payments...');
-        try {
-            const paymentsResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PAYMENTS_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-            if (paymentsResponse.ok) {
-                const paymentsData = await paymentsResponse.json();
-                console.log(`Found ${paymentsData.records.length} payments in Airtable`);
-
-                for (const record of paymentsData.records) {
-                    const result = await migrateRecord(PAYMENTS_TABLE, record, 'Payment');
-                    if (result.success) {
-                        if (result.action === 'inserted') migratedCount++;
-                        else updatedCount++;
-                    } else {
-                        errorCount++;
-                        errors.push(`Payment ${record.id}: ${result.error}`);
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Error fetching payments:', e);
-            errors.push(`Payments fetch: ${e.message}`);
-        }
-
-        // Migrate Profiles
-        console.log('\n👤 Migrating Profiles...');
-        try {
-            const profilesResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${PROFILES_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-            if (profilesResponse.ok) {
-                const profilesData = await profilesResponse.json();
-                console.log(`Found ${profilesData.records.length} profiles in Airtable`);
-
-                for (const record of profilesData.records) {
-                    const result = await migrateRecord(PROFILES_TABLE, record, 'Profile');
-                    if (result.success) {
-                        if (result.action === 'inserted') migratedCount++;
-                        else updatedCount++;
-                    } else {
-                        errorCount++;
-                        errors.push(`Profile ${record.id}: ${result.error}`);
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Error fetching profiles:', e);
-            errors.push(`Profiles fetch: ${e.message}`);
-        }
-
-        // Migrate Fixed Expenses
-        console.log('\n🔁 Migrating Fixed Expenses...');
-        try {
-            const fixedResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${FIXED_EXPENSES_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-            if (fixedResponse.ok) {
-                const fixedData = await fixedResponse.json();
-                console.log(`Found ${fixedData.records.length} fixed expenses in Airtable`);
-
-                for (const record of fixedData.records) {
-                    const result = await migrateRecord(FIXED_EXPENSES_TABLE, record, 'FixedExpense');
-                    if (result.success) {
-                        if (result.action === 'inserted') migratedCount++;
-                        else updatedCount++;
-                    } else {
-                        errorCount++;
-                        errors.push(`FixedExpense ${record.id}: ${result.error}`);
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Error fetching fixed expenses:', e);
-            errors.push(`FixedExpenses fetch: ${e.message}`);
-        }
-
-        // Migrate LLC Expenses
-        console.log('\n🏢 Migrating LLC Expenses...');
-        try {
-            const llcResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${LLC_EXPENSES_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-            if (llcResponse.ok) {
-                const llcData = await llcResponse.json();
-                console.log(`Found ${llcData.records.length} LLC expenses in Airtable`);
-
-                for (const record of llcData.records) {
-                    const result = await migrateRecord(LLC_EXPENSES_TABLE, record, 'LLCExpense');
-                    if (result.success) {
-                        if (result.action === 'inserted') migratedCount++;
-                        else updatedCount++;
-                    } else {
-                        errorCount++;
-                        errors.push(`LLCExpense ${record.id}: ${result.error}`);
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Error fetching LLC expenses:', e);
-            errors.push(`LLCExpenses fetch: ${e.message}`);
-        }
-
-        // Migrate Budgets
-        console.log('\n💵 Migrating Budgets...');
-        try {
-            const budgetsResponse = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${BUDGETS_TABLE}`, {
-                headers: { 'Authorization': `Bearer ${AIRTABLE_API_KEY}` }
-            });
-            if (budgetsResponse.ok) {
-                const budgetsData = await budgetsResponse.json();
-                console.log(`Found ${budgetsData.records.length} budgets in Airtable`);
-
-                for (const record of budgetsData.records) {
-                    const result = await migrateRecord(BUDGETS_TABLE, record, 'Budget');
-                    if (result.success) {
-                        if (result.action === 'inserted') migratedCount++;
-                        else updatedCount++;
-                    } else {
-                        errorCount++;
-                        errors.push(`Budget ${record.id}: ${result.error}`);
-                    }
-                }
-            }
-        } catch (e) {
-            console.error('Error fetching budgets:', e);
-            errors.push(`Budgets fetch: ${e.message}`);
-        }
-
-        console.log('\n✅ MIGRATION COMPLETE');
-        console.log(`Inserted: ${migratedCount}, Updated: ${updatedCount}, Errors: ${errorCount}`);
-
-        if (errors.length > 0) {
-            console.error('Migration errors:', errors);
-        }
-
-        alert(`✅ Migration Complete!\n\nInserted: ${migratedCount} records\nUpdated: ${updatedCount} records\nErrors: ${errorCount}\n\n${errors.length > 0 ? 'Check console for error details.\n\n' : ''}You can now switch to Supabase using the Data Source toggle.`);
-        showNotification(`✅ Migrated ${migratedCount + updatedCount} records (${migratedCount} new, ${updatedCount} updated)`, 'success');
-    } catch (error) {
-        console.error('❌ MIGRATION FAILED:', error);
-        alert('❌ Migration failed: ' + error.message + '\n\nCheck browser console for details.');
-        showNotification('❌ Migration failed', 'error');
-    }
-}
+// Migration function removed - data already migrated to Supabase
 
 function openSettings() {
     closeAllModalsExcept('settingsModal');
@@ -10002,64 +9825,7 @@ function closeSettingsModal() {
     document.getElementById('settingsModal').classList.remove('active');
 }
 
-async function migrateAirtableReceiptsToSupabase() {
-    if (!confirm('This will migrate all Airtable receipts to Supabase format (base64). Continue?')) {
-        return;
-    }
-
-    try {
-        showNotification('Starting receipt migration...', 'info');
-        
-        // Load all expenses from Supabase
-        const expenses = await supabaseGet(TABLE_NAME);
-        let migratedCount = 0;
-        let skippedCount = 0;
-        
-        for (const expense of expenses) {
-            // Check if receipt exists
-            if (expense.Receipt) {
-                // If it's a string starting with http, it's an Airtable URL
-                if (typeof expense.Receipt === 'string' && expense.Receipt.startsWith('http')) {
-                    console.log(`Expense ${expense.id} has Airtable URL receipt: ${expense.Receipt.substring(0, 50)}...`);
-                    skippedCount++;
-                    continue;
-                }
-                
-                // Try to parse as JSON
-                if (typeof expense.Receipt === 'string') {
-                    try {
-                        const receiptData = JSON.parse(expense.Receipt);
-                        
-                        // Check if it's already in the correct format (base64)
-                        if (Array.isArray(receiptData) && receiptData[0]?.url?.startsWith('data:')) {
-                            skippedCount++;
-                            continue; // Already migrated
-                        }
-                        
-                        // If it's an Airtable format with URL
-                        if (Array.isArray(receiptData) && receiptData[0]?.url?.startsWith('http')) {
-                            console.log(`Expense ${expense.id} has Airtable receipt that needs manual re-upload`);
-                            skippedCount++;
-                            continue;
-                        }
-                    } catch (e) {
-                        // Not JSON, might be a plain URL string
-                        console.log(`Expense ${expense.id} has non-JSON receipt`);
-                        skippedCount++;
-                    }
-                }
-            } else {
-                skippedCount++;
-            }
-        }
-        
-        showNotification(`Migration complete! Migrated: ${migratedCount}, Skipped: ${skippedCount}`, 'success');
-        alert(`Receipt Migration Complete!\n\nMigrated: ${migratedCount}\nSkipped: ${skippedCount}\n\nNote: Airtable-hosted receipts cannot be automatically migrated. Please re-upload them manually.`);
-    } catch (error) {
-        console.error('Receipt migration error:', error);
-        showNotification('Migration failed: ' + error.message, 'error');
-    }
-}
+// Receipt migration function removed - receipts are now stored as base64 in Supabase
 
 // Service Worker Registration
 let swRegistration = null;
@@ -10092,6 +9858,24 @@ if ('serviceWorker' in navigator) {
 // Push Notification Support
 let notificationPermission = 'default';
 
+// 🔑 VAPID PUBLIC KEY - GENERATE THIS AT https://vapidkeys.com/
+const VAPID_PUBLIC_KEY = 'BB-tvqN1nNlFENVRsimsxFg1w82bzjs00d5b04FsCiCCxaw7-ODInW8juWvPKrWjcRzsBdmSbJDy5em-lPblqBk'; 
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
 async function requestNotificationPermission() {
     if (!('Notification' in window)) {
         alert('Push notifications are not supported in this browser');
@@ -10111,10 +9895,41 @@ async function requestNotificationPermission() {
             // Wait for service worker to be ready
             const registration = await navigator.serviceWorker.ready;
             
-            showNotification('✅ Push notifications enabled! You will receive notifications even when the app is closed.', 'success');
+            // Subscribe to Web Push (if VAPID key is configured)
+            if (VAPID_PUBLIC_KEY && !VAPID_PUBLIC_KEY.includes('PASTE_YOUR')) {
+                try {
+                    console.log('📱 Subscribing to Web Push...');
+                    const subscription = await registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+                    });
+                    
+                    console.log('✅ Web Push Subscription:', subscription);
+                    
+                    // Save subscription to Supabase
+                    if (supabaseClient) {
+                        const { error } = await supabaseClient
+                            .from('subscriptions')
+                            .upsert({
+                                endpoint: subscription.endpoint,
+                                keys: subscription.toJSON().keys,
+                                user_agent: navigator.userAgent
+                            }, { onConflict: 'endpoint' });
+                            
+                        if (error) console.error('❌ Failed to save subscription:', error);
+                        else console.log('✅ Subscription saved to Supabase');
+                    }
+                } catch (subError) {
+                    console.warn('⚠️ Web Push subscription failed:', subError);
+                }
+            } else {
+                console.warn('⚠️ VAPID Key not configured - skipping background push setup');
+            }
+            
+            showNotification('✅ Push notifications enabled!', 'success');
             localStorage.setItem('notifications_enabled', 'true');
             
-            // Set up realtime notifications for cross-device alerts
+            // Set up realtime notifications for cross-device alerts (while app is open)
             await initializeRealtimeNotifications();
 
             // Test notification
@@ -10170,16 +9985,27 @@ if ('Notification' in window) {
 }
 
 function saveSettings() {
-    SUPABASE_URL = document.getElementById('supabaseUrl').value;
-    SUPABASE_ANON_KEY = document.getElementById('supabaseAnonKey').value;
-    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    const newSupabaseUrl = document.getElementById('supabaseUrl').value;
+    const newSupabaseKey = document.getElementById('supabaseAnonKey').value;
+    
+    if (newSupabaseUrl && newSupabaseKey) {
+        // Update global variables
+        SUPABASE_URL = newSupabaseUrl;
+        SUPABASE_ANON_KEY = newSupabaseKey;
+        
+        // Save to localStorage
         localStorage.setItem('supabase_url', SUPABASE_URL);
         localStorage.setItem('supabase_anon_key', SUPABASE_ANON_KEY);
+        
+        // Reinitialize Supabase client
+        if (window.supabase && window.supabase.createClient) {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+        
         showNotification('Settings saved!', 'success');
         closeSettingsModal();
+        
         // Reload data with new credentials
-        DATA_SOURCE = 'supabase';
-        localStorage.setItem('data_source', 'supabase');
         loadData();
     } else {
         alert('Please provide both Supabase URL and Key.');
