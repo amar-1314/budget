@@ -9,6 +9,19 @@ const FIXED_EXPENSES_TABLE = 'FixedExpenses';
 const LLC_EXPENSES_TABLE = 'LLCEligibleExpenses';
 const BUDGETS_TABLE = 'Budgets';
 
+const APP_VERSION = '25.48.1'; // Year.Week.Build
+
+function updateAppVersionDisplay() {
+    const versionEl = document.getElementById('appVersionDisplay');
+    if (versionEl) {
+        versionEl.textContent = `v${APP_VERSION}`;
+    }
+    console.log(`📱 App Version: ${APP_VERSION}`);
+}
+
+// Call on load
+document.addEventListener('DOMContentLoaded', updateAppVersionDisplay);
+
 // ==================== FULL-PAGE LOADER FUNCTIONS ====================
 function showLoader(message = 'Processing...') {
     const loader = document.getElementById('fullPageLoader');
