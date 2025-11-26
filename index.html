@@ -1423,6 +1423,14 @@
                     </button>
                     <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Requires Service Worker support in your browser</p>
                 </div>
+                <div class="border-t pt-4">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">App Updates</h3>
+                    <p class="text-sm text-gray-600 mb-3">Force reload the app to get the latest version from GitHub</p>
+                    <button onclick="hardRefreshApp()" class="w-full btn-secondary mb-2">
+                        <i class="fas fa-sync-alt mr-2"></i>Hard Refresh App
+                    </button>
+                    <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Clears cache and reloads the latest code</p>
+                </div>
                 <div class="flex gap-3">
                     <button onclick="saveSettings()" class="btn-primary flex-1"><i class="fas fa-save mr-2"></i>Save Settings</button>
                     <button onclick="closeSettingsModal()" class="btn-secondary">Cancel</button>
