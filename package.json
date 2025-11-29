@@ -4,7 +4,9 @@
   "description": "Budget Tracker PWA with auto-versioning",
   "scripts": {
     "version:update": "node update-version.js",
-    "deploy": "npm run version:update && git add script.js service-worker.js && echo '✅ Version updated! Ready to commit and push.'"
+    "deploy": "bash deploy.sh",
+    "deploy:message": "bash deploy.sh",
+    "hook:install": "bash install-git-hook.sh"
   },
   "keywords": [
     "budget",
