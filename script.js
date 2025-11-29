@@ -719,6 +719,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     populateYearDropdown();
+    
+    // Update notification button state based on current permission
+    updateNotificationButtonState();
     loadData();
     loadProfilePictures();
     loadFixedExpenses();
@@ -10132,6 +10135,35 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
+// Update notification button state based on permission
+function updateNotificationButtonState() {
+    const btn = document.getElementById('notificationEnableBtn');
+    if (!btn) return;
+    
+    if (!('Notification' in window)) {
+        btn.disabled = true;
+        btn.textContent = 'Not Supported';
+        btn.className = 'px-4 py-2 bg-gray-400 text-white rounded-lg text-sm font-semibold cursor-not-allowed';
+        return;
+    }
+    
+    const permission = Notification.permission;
+    
+    if (permission === 'granted') {
+        btn.textContent = 'Enabled ✓';
+        btn.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors';
+        btn.disabled = false;
+    } else if (permission === 'denied') {
+        btn.textContent = 'Blocked';
+        btn.className = 'px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold cursor-not-allowed';
+        btn.disabled = true;
+    } else {
+        btn.textContent = 'Enable';
+        btn.className = 'px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors';
+        btn.disabled = false;
+    }
+}
+
 async function requestNotificationPermission() {
     if (!('Notification' in window)) {
         alert('Push notifications are not supported in this browser');
@@ -10146,6 +10178,9 @@ async function requestNotificationPermission() {
     try {
         // Request notification permission
         notificationPermission = await Notification.requestPermission();
+        
+        // Update button state after permission request
+        updateNotificationButtonState();
         
         if (notificationPermission === 'granted') {
             // Wait for service worker to be ready
@@ -10199,6 +10234,7 @@ async function requestNotificationPermission() {
     } catch (error) {
         console.error('Error requesting notification permission:', error);
         alert('Failed to enable notifications: ' + error.message);
+        updateNotificationButtonState();
     }
 }
 
