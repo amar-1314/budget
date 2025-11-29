@@ -6,6 +6,9 @@ on:
       - main
       - old-design
 
+permissions:
+  contents: write
+
 jobs:
   auto-version:
     runs-on: ubuntu-latest
@@ -16,6 +19,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -40,13 +44,13 @@ jobs:
       - name: Commit version changes
         if: steps.check_version.outputs.version_updated == 'false'
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git add VERSION script.js service-worker.js
           
           # Get new version
           NEW_VERSION=$(cat VERSION)
           
           git commit -m "🤖 Auto-bump version to v${NEW_VERSION} [skip ci]" || echo "No changes to commit"
-          git push origin ${{ github.ref_name }}
+          git push
 
