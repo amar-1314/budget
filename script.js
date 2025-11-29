@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-11-29T15:47:57.319Z'; // Auto-updated on deployment
-const APP_VERSION = '25.48.6'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-11-29T22:08:00.221Z'; // Auto-updated on deployment
+const APP_VERSION = '25.48.7'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -10058,6 +10058,9 @@ function openSettings() {
         statusEl.textContent = SUPABASE_URL ? 'Connected to Supabase' : 'Not configured';
     }
     
+    // Load auto-refresh toggle state
+    loadAutoRefreshState();
+    
     document.getElementById('settingsModal').classList.add('active');
 }
 
@@ -10237,6 +10240,45 @@ if ('Notification' in window) {
     notificationPermission = Notification.permission;
 }
 
+// Automatic hard refresh (no confirmation, silent)
+async function autoHardRefreshApp() {
+    console.log('🔄 Auto hard refresh initiated...');
+    
+    try {
+        // 1. Unregister all service workers
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (const registration of registrations) {
+                await registration.unregister();
+                console.log('✅ Unregistered service worker');
+            }
+        }
+
+        // 2. Clear all caches
+        if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            for (const cacheName of cacheNames) {
+                await caches.delete(cacheName);
+                console.log('✅ Deleted cache:', cacheName);
+            }
+        }
+
+        // 3. Clear session storage (but keep credentials)
+        sessionStorage.clear();
+
+        // 4. Mark as refreshed today
+        localStorage.setItem('last_auto_refresh', new Date().toDateString());
+        
+        // 5. Reload the page (hard refresh)
+        console.log('✅ Auto refresh complete. Reloading...');
+        window.location.reload(true);
+
+    } catch (error) {
+        console.error('Auto hard refresh error:', error);
+    }
+}
+
+// Manual hard refresh (with confirmation)
 async function hardRefreshApp() {
     if (!confirm('This will clear all cached data and reload the app with the latest version. Continue?')) {
         return;
@@ -10297,6 +10339,73 @@ async function hardRefreshApp() {
         hideLoader();
     }
 }
+
+// Toggle auto-refresh setting
+function toggleAutoRefresh(enabled) {
+    localStorage.setItem('auto_refresh_enabled', enabled ? 'true' : 'false');
+    console.log(`⏰ Auto-refresh ${enabled ? 'enabled' : 'disabled'}`);
+    showNotification(
+        enabled ? '✅ Auto-refresh enabled (6am EST)' : '⏸️ Auto-refresh disabled',
+        'success'
+    );
+}
+
+// Load auto-refresh toggle state
+function loadAutoRefreshState() {
+    const toggle = document.getElementById('autoRefreshToggle');
+    if (toggle) {
+        // Default to enabled
+        const isEnabled = localStorage.getItem('auto_refresh_enabled') !== 'false';
+        toggle.checked = isEnabled;
+    }
+}
+
+// Schedule automatic daily refresh at 6am EST
+function scheduleDailyRefresh() {
+    const checkAndRefresh = () => {
+        // Check if auto-refresh is enabled
+        const isEnabled = localStorage.getItem('auto_refresh_enabled') !== 'false';
+        if (!isEnabled) {
+            return; // Skip if disabled
+        }
+        
+        const now = new Date();
+        
+        // Convert to EST (UTC-5 or UTC-4 during DST)
+        const estOffset = -5; // Eastern Standard Time
+        const utcHours = now.getUTCHours();
+        const estHours = (utcHours + estOffset + 24) % 24;
+        
+        // Check if it's 6am EST (within first 5 minutes)
+        const is6amEST = estHours === 6 && now.getUTCMinutes() < 5;
+        
+        // Check if we already refreshed today
+        const lastRefresh = localStorage.getItem('last_auto_refresh');
+        const today = new Date().toDateString();
+        const alreadyRefreshedToday = lastRefresh === today;
+        
+        if (is6amEST && !alreadyRefreshedToday) {
+            console.log('🌅 6am EST detected - triggering automatic refresh...');
+            autoHardRefreshApp();
+        }
+    };
+    
+    // Check every minute
+    setInterval(checkAndRefresh, 60000);
+    
+    // Also check immediately on load
+    checkAndRefresh();
+    
+    console.log('⏰ Daily auto-refresh scheduler started');
+    console.log(`   Status: ${localStorage.getItem('auto_refresh_enabled') !== 'false' ? 'Enabled' : 'Disabled'}`);
+    console.log('   Time: 6:00 AM EST');
+}
+
+// Start the scheduler when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    loadAutoRefreshState();
+    scheduleDailyRefresh();
+});
 
 function saveSettings() {
     const newSupabaseUrl = document.getElementById('supabaseUrl').value;
