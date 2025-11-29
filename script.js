@@ -1,5 +1,10 @@
-console.log('🎬 SCRIPT STARTING TO LOAD... (v3.0.1)');
+// Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
+const BUILD_TIMESTAMP = '2025-11-29T15:23:17.873Z'; // Auto-updated on deployment
+const APP_VERSION = '25.48.3'; // Auto-updated on deployment
+
+console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
+console.log(`🕐 Build: ${BUILD_TIMESTAMP}`);
 
 // Supabase Table Configuration
 const TABLE_NAME = 'Budget';
@@ -9,14 +14,12 @@ const FIXED_EXPENSES_TABLE = 'FixedExpenses';
 const LLC_EXPENSES_TABLE = 'LLCEligibleExpenses';
 const BUDGETS_TABLE = 'Budgets';
 
-const APP_VERSION = '25.48.1'; // Year.Week.Build
-
 function updateAppVersionDisplay() {
     const versionEl = document.getElementById('appVersionDisplay');
     if (versionEl) {
         versionEl.textContent = `v${APP_VERSION}`;
     }
-    console.log(`📱 App Version: ${APP_VERSION}`);
+    console.log(`📱 App Version: v${APP_VERSION}`);
 }
 
 // Call on load
@@ -230,20 +233,20 @@ async function initializeRealtimeNotifications() {
                     console.log('✅ Realtime notifications subscribed!');
                     showNotification('✅ Cross-device notifications active!', 'success');
                 } else if (status === 'CHANNEL_ERROR') {
-                    console.warn('⚠️ Realtime channel error - Cross-device notifications unavailable');
-                    console.warn('💡 To fix: Enable Realtime in Supabase Dashboard → Database → Replication → Budget table');
-                    showNotification('⚠️ Realtime not enabled in Supabase. Cross-device notifications disabled.', 'error');
+                    // console.warn('⚠️ Realtime channel error - Cross-device notifications unavailable');
+                    // console.warn('💡 To fix: Enable Realtime in Supabase Dashboard → Database → Replication → Budget table');
+                    // showNotification('⚠️ Realtime not enabled in Supabase. Cross-device notifications disabled.', 'error');
                 } else if (status === 'TIMED_OUT') {
-                    console.warn('⏱️ Realtime connection timed out - Retrying...');
+                    // console.warn('⏱️ Realtime connection timed out - Retrying...');
                 } else if (status === 'CLOSED') {
-                    console.log('🔌 Realtime connection closed');
+                    // console.log('🔌 Realtime connection closed');
                 }
             });
 
     } catch (error) {
-        console.warn('⚠️ Failed to set up realtime notifications:', error.message);
-        console.warn('💡 Cross-device notifications will not work. Local notifications still available.');
-        console.warn('💡 To fix: Enable Realtime in Supabase Dashboard → Database → Replication');
+        // console.warn('⚠️ Failed to set up realtime notifications:', error.message);
+        // console.warn('💡 Cross-device notifications will not work. Local notifications still available.');
+        // console.warn('💡 To fix: Enable Realtime in Supabase Dashboard → Database → Replication');
         // Don't show error notification to user - gracefully degrade
     }
 }
@@ -4119,6 +4122,106 @@ function closeAllModalsExcept(modalId) {
     });
 }
 
+// Smart Date Picker Functions
+function toggleDatePicker() {
+    const fields = document.getElementById('datePickerFields');
+    const chevron = document.getElementById('datePickerChevron');
+    
+    if (fields.classList.contains('hidden')) {
+        fields.classList.remove('hidden');
+        chevron.classList.add('fa-chevron-up');
+        chevron.classList.remove('fa-chevron-down');
+    } else {
+        fields.classList.add('hidden');
+        chevron.classList.remove('fa-chevron-up');
+        chevron.classList.add('fa-chevron-down');
+    }
+}
+
+// LLC Toggle Function
+function toggleLLC() {
+    const llcSelect = document.getElementById('llc');
+    const llcBtn = document.getElementById('llcToggleBtn');
+    
+    if (llcSelect.value === 'No') {
+        llcSelect.value = 'Yes';
+        llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+        llcBtn.style.color = 'white';
+        llcBtn.style.borderColor = '#3b82f6';
+        llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Business</span>';
+    } else {
+        llcSelect.value = 'No';
+        llcBtn.style.background = 'white';
+        llcBtn.style.color = '#6b7280';
+        llcBtn.style.borderColor = '#e5e7eb';
+        llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
+    }
+}
+
+// More Details Toggle Function
+function toggleMoreDetails() {
+    const panel = document.getElementById('moreDetailsPanel');
+    const btn = document.getElementById('moreDetailsBtn');
+    
+    if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        btn.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
+        btn.style.color = 'white';
+        btn.style.borderColor = '#8b5cf6';
+        btn.innerHTML = '<i class="fas fa-chevron-up"></i><span>Less</span>';
+    } else {
+        panel.classList.add('hidden');
+        btn.style.background = 'white';
+        btn.style.color = '#6b7280';
+        btn.style.borderColor = '#e5e7eb';
+        btn.innerHTML = '<i class="fas fa-ellipsis-h"></i><span>More</span>';
+    }
+}
+
+function updateDisplayDate() {
+    const year = document.getElementById('year').value;
+    const month = document.getElementById('month').value;
+    const day = document.getElementById('day').value;
+    const displayDate = document.getElementById('displayDate');
+    
+    if (!year || !month || !day) return;
+    
+    const now = new Date();
+    const selectedDate = new Date(year, parseInt(month) - 1, parseInt(day));
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (selectedDate.getTime() === today.getTime()) {
+        displayDate.textContent = 'Today';
+        displayDate.className = 'text-sm font-bold text-purple-700';
+    } else if (selectedDate.getTime() === yesterday.getTime()) {
+        displayDate.textContent = 'Yesterday';
+        displayDate.className = 'text-sm font-bold text-orange-600';
+    } else {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        displayDate.textContent = `${monthNames[parseInt(month) - 1]} ${day}, ${year}`;
+        displayDate.className = 'text-sm font-bold text-blue-600';
+    }
+}
+
+function setDateToToday() {
+    const now = new Date();
+    document.getElementById('year').value = now.getFullYear();
+    document.getElementById('month').value = String(now.getMonth() + 1).padStart(2, '0');
+    document.getElementById('day').value = now.getDate();
+    updateDisplayDate();
+}
+
+function setDateToYesterday() {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    document.getElementById('year').value = yesterday.getFullYear();
+    document.getElementById('month').value = String(yesterday.getMonth() + 1).padStart(2, '0');
+    document.getElementById('day').value = yesterday.getDate();
+    updateDisplayDate();
+}
+
 function openAddExpenseModal() {
     closeAllModalsExcept('expenseModal');
     document.getElementById('modalTitle').textContent = 'Add Expense';
@@ -4129,9 +4232,34 @@ function openAddExpenseModal() {
     const currentDay = now.getDate();
     document.getElementById('month').value = currentMonth;
     document.getElementById('day').value = currentDay;
+    
+    // Initialize date picker to today
+    updateDisplayDate();
+    document.getElementById('datePickerFields').classList.add('hidden');
+    document.getElementById('datePickerChevron').classList.remove('fa-chevron-up');
+    document.getElementById('datePickerChevron').classList.add('fa-chevron-down');
+    
+    // Reset LLC toggle to Personal
+    document.getElementById('llc').value = 'No';
+    const llcBtn = document.getElementById('llcToggleBtn');
+    llcBtn.style.background = 'white';
+    llcBtn.style.color = '#6b7280';
+    llcBtn.style.borderColor = '#e5e7eb';
+    llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
+    
+    // Hide more details panel
+    document.getElementById('moreDetailsPanel').classList.add('hidden');
+    const moreBtn = document.getElementById('moreDetailsBtn');
+    moreBtn.style.background = 'white';
+    moreBtn.style.color = '#6b7280';
+    moreBtn.style.borderColor = '#e5e7eb';
+    moreBtn.innerHTML = '<i class="fas fa-ellipsis-h"></i><span>More</span>';
+    
     currentReceiptData = null;
     document.getElementById('receiptFile').value = '';
-    document.getElementById('currentReceipt').style.display = 'none';
+    document.getElementById('currentReceipt').classList.add('hidden');
+    document.getElementById('receiptUploadBtn').classList.remove('hidden');
+    document.getElementById('ocrScanBtn').classList.add('hidden');
     document.getElementById('expenseModal').classList.add('active');
 }
 
@@ -4608,16 +4736,61 @@ async function editExpense(id) {
     document.getElementById('tags').value = expense.fields.Tags || '';
     document.getElementById('notes').value = expense.fields.Notes || '';
 
+    // Update date picker display
+    updateDisplayDate();
+    document.getElementById('datePickerFields').classList.add('hidden');
+    document.getElementById('datePickerChevron').classList.remove('fa-chevron-up');
+    document.getElementById('datePickerChevron').classList.add('fa-chevron-down');
+
+    // Update LLC toggle button
+    const llcBtn = document.getElementById('llcToggleBtn');
+    if (expense.fields.LLC === 'Yes') {
+        llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+        llcBtn.style.color = 'white';
+        llcBtn.style.borderColor = '#3b82f6';
+        llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Business</span>';
+    } else {
+        llcBtn.style.background = 'white';
+        llcBtn.style.color = '#6b7280';
+        llcBtn.style.borderColor = '#e5e7eb';
+        llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
+    }
+
+    // Auto-expand more details if there's additional data
+    const hasMoreDetails = expense.fields.Tags || expense.fields.Notes || 
+                          expense.fields.AmarContribution || expense.fields.PriyaContribution;
+    
+    const moreDetailsPanel = document.getElementById('moreDetailsPanel');
+    const moreBtn = document.getElementById('moreDetailsBtn');
+    
+    if (hasMoreDetails) {
+        moreDetailsPanel.classList.remove('hidden');
+        moreBtn.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
+        moreBtn.style.color = 'white';
+        moreBtn.style.borderColor = '#8b5cf6';
+        moreBtn.innerHTML = '<i class="fas fa-chevron-up"></i><span>Less</span>';
+    } else {
+        moreDetailsPanel.classList.add('hidden');
+        moreBtn.style.background = 'white';
+        moreBtn.style.color = '#6b7280';
+        moreBtn.style.borderColor = '#e5e7eb';
+        moreBtn.innerHTML = '<i class="fas fa-ellipsis-h"></i><span>More</span>';
+    }
+
     // Handle receipt
     document.getElementById('receiptFile').value = '';
     if (expense.fields.Receipt && expense.fields.Receipt.length > 0) {
         currentReceiptData = expense.fields.Receipt[0];
         document.getElementById('receiptFileName').textContent = currentReceiptData.filename;
         document.getElementById('receiptViewLink').href = currentReceiptData.url;
-        document.getElementById('currentReceipt').style.display = 'block';
+        document.getElementById('currentReceipt').classList.remove('hidden');
+        document.getElementById('receiptUploadBtn').classList.add('hidden');
+        document.getElementById('ocrScanBtn').classList.add('hidden');
     } else {
         currentReceiptData = null;
-        document.getElementById('currentReceipt').style.display = 'none';
+        document.getElementById('currentReceipt').classList.add('hidden');
+        document.getElementById('receiptUploadBtn').classList.remove('hidden');
+        document.getElementById('ocrScanBtn').classList.add('hidden');
     }
 
     console.log('Opening expense modal...');
@@ -5561,8 +5734,9 @@ async function uploadReceiptAndSave(recordId, fields, file) {
 function removeReceipt() {
     currentReceiptData = null;
     document.getElementById('receiptFile').value = '';
-    document.getElementById('currentReceipt').style.display = 'none';
-    document.getElementById('ocrScanSection').style.display = 'none';
+    document.getElementById('currentReceipt').classList.add('hidden');
+    document.getElementById('receiptUploadBtn').classList.remove('hidden');
+    document.getElementById('ocrScanBtn').classList.add('hidden');
 }
 
 // OCR Configuration
@@ -5572,14 +5746,37 @@ const OCR_API_URL = 'https://api.ocr.space/parse/image';
 // Handle receipt file selection
 function handleReceiptFileChange() {
     const fileInput = document.getElementById('receiptFile');
-    const ocrScanSection = document.getElementById('ocrScanSection');
+    const currentReceipt = document.getElementById('currentReceipt');
+    const receiptUploadBtn = document.getElementById('receiptUploadBtn');
+    const receiptFileName = document.getElementById('receiptFileName');
+    const ocrScanBtn = document.getElementById('ocrScanBtn');
 
     if (fileInput.files && fileInput.files.length > 0) {
-        // Show OCR scan button when file is selected
-        ocrScanSection.style.display = 'block';
+        const file = fileInput.files[0];
+        
+        // Show receipt preview, hide upload button
+        currentReceipt.classList.remove('hidden');
+        receiptUploadBtn.classList.add('hidden');
+        
+        // Update filename
+        receiptFileName.textContent = file.name;
+        
+        // Show OCR scan button if it's an image
+        const validImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+        if (validImageTypes.includes(file.type)) {
+            ocrScanBtn.classList.remove('hidden');
+        } else {
+            ocrScanBtn.classList.add('hidden');
+        }
+        
+        // Create preview URL
+        const previewUrl = URL.createObjectURL(file);
+        document.getElementById('receiptViewLink').href = previewUrl;
     } else {
-        // Hide OCR scan button when no file
-        ocrScanSection.style.display = 'none';
+        // Hide receipt preview, show upload button
+        currentReceipt.classList.add('hidden');
+        receiptUploadBtn.classList.remove('hidden');
+        ocrScanBtn.classList.add('hidden');
     }
 }
 

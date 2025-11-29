@@ -1,7 +1,13 @@
 // Service Worker for Budget Tracker
 // Enables background push notifications and offline support
 
-const CACHE_NAME = 'budget-tracker-v3'; // Updated to force cache refresh
+// Auto-generated cache version based on build timestamp
+const BUILD_TIMESTAMP = '2025-11-29T15:23:17.873Z'; // Auto-updated on deployment
+const CACHE_VERSION = BUILD_TIMESTAMP.replace(/[-:]/g, '').replace(/T/g, '-').replace(/Z/g, '');
+const CACHE_NAME = `budget-tracker-${CACHE_VERSION}`;
+
+console.log(`🔧 Service Worker Cache: ${CACHE_NAME}`);
+
 const urlsToCache = [
   './',
   './index.html',

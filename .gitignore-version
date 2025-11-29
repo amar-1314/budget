@@ -1,0 +1,12 @@
+# Important: The VERSION file should be TRACKED in git
+# Do NOT add VERSION to .gitignore
+# This file exists as a reminder
+
+# Common patterns that should be ignored:
+node_modules/
+.DS_Store
+*.log
+.env
+.env.local
+*.bak
+
