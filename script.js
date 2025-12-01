@@ -722,6 +722,10 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Update notification button state based on current permission
     updateNotificationButtonState();
+    
+    // Update last refresh time display
+    updateLastRefreshTime();
+    
     loadData();
     loadProfilePictures();
     loadFixedExpenses();
@@ -1130,10 +1134,37 @@ function populateFilters() {
         option.textContent = monthNames[monthNum - 1] || month;
         monthSelector.appendChild(option);
     });
+    
+    // ALWAYS default to current month and year
     const currentYear = new Date().getFullYear();
     const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
-    if (years.includes(currentYear)) yearSelector.value = currentYear;
-    if (months.includes(currentMonth)) monthSelector.value = currentMonth;
+    
+    // Set year selector to current year (add option if it doesn't exist in data)
+    if (years.includes(currentYear)) {
+        yearSelector.value = currentYear;
+    } else {
+        // If current year not in data, add it and select it
+        const option = document.createElement('option');
+        option.value = currentYear;
+        option.textContent = currentYear;
+        yearSelector.insertBefore(option, yearSelector.children[1]); // Insert after "All Years"
+        yearSelector.value = currentYear;
+    }
+    
+    // Set month selector to current month (add option if it doesn't exist in data)
+    if (months.includes(currentMonth)) {
+        monthSelector.value = currentMonth;
+    } else {
+        // If current month not in data, add it and select it
+        const monthNum = parseInt(currentMonth);
+        const option = document.createElement('option');
+        option.value = currentMonth;
+        option.textContent = monthNames[monthNum - 1];
+        monthSelector.appendChild(option);
+        monthSelector.value = currentMonth;
+    }
+    
+    console.log(`📅 Filter defaulted to: ${monthNames[parseInt(currentMonth) - 1]} ${currentYear}`);
 }
 
 function filterByPeriod() {
@@ -10050,6 +10081,51 @@ function updateDataSourceLabel() {
 
 // Migration function removed - data already migrated to Supabase
 
+// Update last refresh time display
+function updateLastRefreshTime() {
+    const lastRefreshEl = document.getElementById('lastRefreshTime');
+    if (!lastRefreshEl) return;
+    
+    const lastRefresh = localStorage.getItem('last_app_refresh');
+    if (!lastRefresh) {
+        lastRefreshEl.textContent = 'Never';
+        return;
+    }
+    
+    try {
+        const refreshDate = new Date(lastRefresh);
+        const now = new Date();
+        const diffMs = now - refreshDate;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        
+        let timeAgo;
+        if (diffMins < 1) {
+            timeAgo = 'Just now';
+        } else if (diffMins < 60) {
+            timeAgo = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+        } else if (diffHours < 24) {
+            timeAgo = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+        } else {
+            timeAgo = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+        }
+        
+        const dateStr = refreshDate.toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        });
+        
+        lastRefreshEl.textContent = `${timeAgo} (${dateStr})`;
+    } catch (e) {
+        lastRefreshEl.textContent = 'Invalid date';
+        console.error('Error parsing last refresh time:', e);
+    }
+}
+
 function openSettings() {
     closeAllModalsExcept('settingsModal');
     document.getElementById('supabaseUrl').value = SUPABASE_URL || '';
@@ -10063,6 +10139,9 @@ function openSettings() {
     
     // Load auto-refresh toggle state
     loadAutoRefreshState();
+    
+    // Update last refresh time display
+    updateLastRefreshTime();
     
     document.getElementById('settingsModal').classList.add('active');
 }
@@ -10319,6 +10398,11 @@ async function hardRefreshApp() {
     if (!confirm('This will clear all cached data and reload the app with the latest version. Continue?')) {
         return;
     }
+
+    // Store refresh timestamp
+    const refreshTime = new Date().toISOString();
+    localStorage.setItem('last_app_refresh', refreshTime);
+    console.log('✅ Stored manual refresh timestamp:', refreshTime);
 
     // Close settings modal first
     closeSettingsModal();
