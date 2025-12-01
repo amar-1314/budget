@@ -13,10 +13,32 @@
 .btn-secondary { background: white; color: #667eea; padding: 12px 24px; border-radius: 8px; border: 2px solid #667eea; cursor: pointer; font-weight: 600; transition: all 0.3s ease; }
 .btn-secondary:hover { background: #667eea; color: white; }
 .flex-2 { flex: 2; }
-.input-field { width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; transition: all 0.3s ease; line-height: 1.5; box-sizing: border-box; }
+.input-field { 
+    width: 100%; 
+    padding: 12px 16px; 
+    border: 2px solid #e5e7eb; 
+    border-radius: 8px; 
+    font-size: 14px; 
+    transition: all 0.3s ease; 
+    box-sizing: border-box; 
+}
 .input-field:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
-input.input-field { vertical-align: middle; }
-input.input-field::placeholder { vertical-align: middle; opacity: 0.6; }
+
+/* Specific styling for input elements */
+input.input-field { 
+    line-height: 1.2;
+}
+
+/* Div elements with input-field class (like the date picker) need flex */
+div.input-field {
+    display: flex;
+    align-items: center;
+}
+
+input.input-field::placeholder { 
+    opacity: 0.6;
+    line-height: 1.2;
+}
 .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; overflow-y: auto; }
 .modal.active { display: flex; }
 .modal-content { background: white; border-radius: 16px; padding: 32px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease; position: relative; }
