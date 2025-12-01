@@ -753,13 +753,14 @@
                 <div class="space-y-3">
                     <!-- Item Name with Icon -->
                     <div class="relative">
-                        <div class="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-500">
+                        <div class="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-500 pointer-events-none z-10">
                             <i class="fas fa-shopping-bag"></i>
                         </div>
                         <input type="text" id="itemName" class="input-field pl-10 text-base font-medium" 
                             list="itemList" autocomplete="off" required
                             placeholder="What did you buy?" 
-                            oninput="suggestCategoryFromItem()">
+                            oninput="suggestCategoryFromItem()"
+                            style="height: 48px;">
                         <datalist id="itemList"></datalist>
                     </div>
 
@@ -776,24 +777,25 @@
                     <!-- Category, Date & Receipt in One Row -->
                     <div class="grid grid-cols-2 gap-2">
                         <div class="relative">
-                            <div class="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500">
+                            <div class="absolute left-3 top-1/2 transform -translate-y-1/2 text-blue-500 pointer-events-none z-10">
                                 <i class="fas fa-tag"></i>
                             </div>
                             <input type="text" id="category" 
-                                class="input-field pl-9 text-sm" 
+                                class="input-field pl-10 text-sm" 
                                 list="categoryList" 
                                 autocomplete="off" 
                                 required
                                 placeholder="Category" 
-                                onblur="this.value = formatCategory(this.value)">
+                                onblur="this.value = formatCategory(this.value)"
+                                style="height: 48px;">
                             <datalist id="categoryList"></datalist>
                         </div>
                         
                         <div class="relative cursor-pointer" onclick="toggleDatePicker()">
-                            <div class="absolute left-3 top-1/2 transform -translate-y-1/2 text-green-500">
+                            <div class="absolute left-3 top-1/2 transform -translate-y-1/2 text-green-500 pointer-events-none z-10">
                                 <i class="fas fa-calendar"></i>
                             </div>
-                            <div class="input-field pl-9 text-sm font-medium flex items-center justify-between" style="cursor: pointer;">
+                            <div class="input-field pl-10 text-sm font-medium flex items-center justify-between" style="cursor: pointer; height: 48px;">
                                 <span id="displayDate">Today</span>
                                 <i class="fas fa-chevron-down text-xs text-gray-400" id="datePickerChevron"></i>
                             </div>
