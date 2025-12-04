@@ -1508,16 +1508,35 @@
                 </button>
             </div>
             
+            <!-- Month/Year Filters -->
             <div class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl p-4 mb-6 border border-purple-200">
-                <div class="flex items-center gap-2 mb-2">
-                    <i class="fas fa-info-circle text-purple-600"></i>
-                    <span class="text-sm font-semibold text-gray-800">Tracking Period</span>
+                <div class="flex items-center gap-2 mb-3">
+                    <i class="fas fa-filter text-purple-600"></i>
+                    <span class="text-sm font-semibold text-gray-800">Select Month to View</span>
                 </div>
-                <p class="text-sm text-gray-700" id="rolloverPeriod">Nov 2025 - Present</p>
-                <p class="text-xs text-gray-600 mt-1">Cumulative balances from all previous months</p>
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label class="text-xs text-gray-600 mb-1 block">Year</label>
+                        <select id="rolloverYearFilter" onchange="updateRolloverDisplay()" class="input-field text-sm">
+                            <option value="2025">2025</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-600 mb-1 block">Month</label>
+                        <select id="rolloverMonthFilter" onchange="updateRolloverDisplay()" class="input-field text-sm">
+                            <option value="11">November</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 pt-2 border-t border-purple-200">
+                    <i class="fas fa-arrow-right text-purple-600 text-xs"></i>
+                    <p class="text-sm font-semibold text-gray-700" id="rolloverPeriod">Nov 2025 → Dec 2025</p>
+                </div>
             </div>
 
-            <!-- Amar's Rollover -->
+            <!-- Data Content -->
+            <div id="rolloverDataContent">
+                <!-- Amar's Rollover -->
             <div class="bg-white border-2 border-blue-200 rounded-xl p-5 mb-4">
                 <div class="flex items-center gap-3 mb-4">
                     <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -1577,19 +1596,27 @@
                 </div>
             </div>
 
-            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                <div class="flex gap-2">
-                    <i class="fas fa-lightbulb text-yellow-600 mt-1"></i>
-                    <div class="text-xs text-gray-700">
-                        <p class="font-semibold mb-1">How Rollovers Work:</p>
-                        <ul class="list-disc list-inside space-y-1">
-                            <li>Balances from Nov 2025 onwards are tracked</li>
-                            <li>Amounts owed carry forward to next month</li>
-                            <li>Overpayments create credits for future months</li>
-                            <li>Net balance shows total owed or credit</li>
-                        </ul>
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                    <div class="flex gap-2">
+                        <i class="fas fa-lightbulb text-yellow-600 mt-1"></i>
+                        <div class="text-xs text-gray-700">
+                            <p class="font-semibold mb-1">How Rollovers Work:</p>
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Select a month to see what rolled over to the next month</li>
+                                <li>Amounts owed carry forward as debts</li>
+                                <li>Overpayments carry forward as credits</li>
+                                <li>Net balance shows what goes to next month</li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
+            </div>
+
+            <!-- No Data Message -->
+            <div id="rolloverNoData" style="display: none;" class="bg-gray-50 border-2 border-gray-200 rounded-xl p-8 text-center mb-4">
+                <i class="fas fa-inbox text-gray-400 text-4xl mb-3"></i>
+                <p class="text-gray-600 font-semibold mb-2">No Rollover Data for This Month</p>
+                <p class="text-sm text-gray-500">Rollover tracking started in November 2025. Select a month with data to view balances.</p>
             </div>
 
             <div class="mt-6">

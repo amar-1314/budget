@@ -1998,12 +1998,47 @@ function updateStats() {
     const priyaRentalIncome = totalRentalIncome / 2;
     const amarBaseRemaining = amarShare - amarContribTotal;
     const priyaBaseRemaining = priyaShare - priyaContribTotal;
-    const amarRemaining = amarBaseRemaining >= 0
+    let amarRemaining = amarBaseRemaining >= 0
         ? amarBaseRemaining - amarRentalIncome
         : amarBaseRemaining + amarRentalIncome;
-    const priyaRemaining = priyaBaseRemaining >= 0
+    let priyaRemaining = priyaBaseRemaining >= 0
         ? priyaBaseRemaining - priyaRentalIncome
         : priyaBaseRemaining + priyaRentalIncome;
+    
+    // Apply rollover from previous month (starting Nov 2025)
+    if (selectedYear !== 'all' && selectedMonth !== 'all') {
+        const year = parseInt(selectedYear);
+        const month = parseInt(selectedMonth);
+        
+        // Only apply rollovers from Dec 2025 onwards (rolling over from Nov 2025)
+        if (year > 2025 || (year === 2025 && month >= 12)) {
+            // Get previous month's rollover
+            let prevYear = year;
+            let prevMonth = month - 1;
+            if (prevMonth === 0) {
+                prevMonth = 12;
+                prevYear--;
+            }
+            
+            const prevRolloverKey = `rollover_${prevYear}_${String(prevMonth).padStart(2, '0')}`;
+            const prevRolloverData = localStorage.getItem(prevRolloverKey);
+            
+            if (prevRolloverData) {
+                const prevData = JSON.parse(prevRolloverData);
+                console.log('📥 Applying previous month rollover:', prevRolloverKey, prevData);
+                
+                // Add previous month's dues to current month
+                // If they owed last month, add to what they owe this month
+                // If they overpaid last month, subtract from what they owe this month (credit)
+                amarRemaining += (prevData.amarOwes - prevData.amarOverpaid);
+                priyaRemaining += (prevData.priyaOwes - prevData.priyaOverpaid);
+                
+                console.log('   After rollover - Amar remaining:', amarRemaining);
+                console.log('   After rollover - Priya remaining:', priyaRemaining);
+            }
+        }
+    }
+    
     const amarContribPercent = amarShare > 0 ? (amarContribTotal / amarShare) * 100 : 0;
     const priyaContribPercent = priyaShare > 0 ? (priyaContribTotal / priyaShare) * 100 : 0;
 
@@ -6651,37 +6686,106 @@ function openRolloverDues() {
     const modal = document.getElementById('rolloverDuesModal');
     if (!modal) return;
     
+    // Populate year and month dropdowns
+    populateRolloverFilters();
+    
     // Get current filter
     const yearFilterEl = document.getElementById('yearSelector');
     const monthFilterEl = document.getElementById('monthSelector');
-    const selectedYear = yearFilterEl ? parseInt(yearFilterEl.value) : new Date().getFullYear();
-    const selectedMonth = monthFilterEl ? parseInt(monthFilterEl.value) : new Date().getMonth() + 1;
+    const defaultYear = yearFilterEl ? parseInt(yearFilterEl.value) : new Date().getFullYear();
+    const defaultMonth = monthFilterEl ? parseInt(monthFilterEl.value) : new Date().getMonth() + 1;
     
-    // Calculate rollovers up to current month
-    const rollover = calculateCumulativeRollover(selectedYear, selectedMonth);
+    // Set default values (default to previous month to show what was rolled over)
+    let prevYear = defaultYear;
+    let prevMonth = defaultMonth - 1;
+    if (prevMonth === 0) {
+        prevMonth = 12;
+        prevYear--;
+    }
     
-    // Update modal content
-    document.getElementById('rolloverAmarOwes').textContent = rollover.amarOwes > 0 ? `$${rollover.amarOwes.toFixed(2)}` : '$0.00';
-    document.getElementById('rolloverPriyaOwes').textContent = rollover.priyaOwes > 0 ? `$${rollover.priyaOwes.toFixed(2)}` : '$0.00';
-    document.getElementById('rolloverAmarOverpaid').textContent = rollover.amarOverpaid > 0 ? `$${rollover.amarOverpaid.toFixed(2)}` : '$0.00';
-    document.getElementById('rolloverPriyaOverpaid').textContent = rollover.priyaOverpaid > 0 ? `$${rollover.priyaOverpaid.toFixed(2)}` : '$0.00';
+    document.getElementById('rolloverYearFilter').value = prevYear;
+    document.getElementById('rolloverMonthFilter').value = String(prevMonth).padStart(2, '0');
     
-    // Show net balance
-    const amarNet = rollover.amarOverpaid - rollover.amarOwes;
-    const priyaNet = rollover.priyaOverpaid - rollover.priyaOwes;
-    
-    document.getElementById('rolloverAmarNet').textContent = amarNet !== 0 ? `$${Math.abs(amarNet).toFixed(2)}` : '$0.00';
-    document.getElementById('rolloverAmarNetLabel').textContent = amarNet > 0 ? 'Overpaid (Credit)' : amarNet < 0 ? 'Still Owes' : 'Settled';
-    document.getElementById('rolloverAmarNet').className = amarNet > 0 ? 'text-green-600 font-bold' : amarNet < 0 ? 'text-red-600 font-bold' : 'text-gray-600 font-bold';
-    
-    document.getElementById('rolloverPriyaNet').textContent = priyaNet !== 0 ? `$${Math.abs(priyaNet).toFixed(2)}` : '$0.00';
-    document.getElementById('rolloverPriyaNetLabel').textContent = priyaNet > 0 ? 'Overpaid (Credit)' : priyaNet < 0 ? 'Still Owes' : 'Settled';
-    document.getElementById('rolloverPriyaNet').className = priyaNet > 0 ? 'text-green-600 font-bold' : priyaNet < 0 ? 'text-red-600 font-bold' : 'text-gray-600 font-bold';
-    
-    const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    document.getElementById('rolloverPeriod').textContent = `Nov 2025 - ${monthNames[selectedMonth]} ${selectedYear}`;
+    // Load the data for that month
+    updateRolloverDisplay();
     
     modal.classList.add('active');
+}
+
+// Update rollover display based on selected filters
+function updateRolloverDisplay() {
+    const year = parseInt(document.getElementById('rolloverYearFilter').value);
+    const month = parseInt(document.getElementById('rolloverMonthFilter').value);
+    
+    const rolloverKey = `rollover_${year}_${String(month).padStart(2, '0')}`;
+    const rolloverData = localStorage.getItem(rolloverKey);
+    
+    const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    if (rolloverData) {
+        const data = JSON.parse(rolloverData);
+        
+        // Update Amar's data
+        document.getElementById('rolloverAmarOwes').textContent = data.amarOwes > 0 ? `$${data.amarOwes.toFixed(2)}` : '$0.00';
+        document.getElementById('rolloverAmarOverpaid').textContent = data.amarOverpaid > 0 ? `$${data.amarOverpaid.toFixed(2)}` : '$0.00';
+        
+        const amarNet = data.amarOverpaid - data.amarOwes;
+        document.getElementById('rolloverAmarNet').textContent = amarNet !== 0 ? `$${Math.abs(amarNet).toFixed(2)}` : '$0.00';
+        document.getElementById('rolloverAmarNetLabel').textContent = amarNet > 0 ? 'Credit to Next Month' : amarNet < 0 ? 'Owed to Next Month' : 'Settled';
+        document.getElementById('rolloverAmarNet').className = amarNet > 0 ? 'text-green-600 font-bold text-xl' : amarNet < 0 ? 'text-red-600 font-bold text-xl' : 'text-gray-600 font-bold text-xl';
+        
+        // Update Priya's data
+        document.getElementById('rolloverPriyaOwes').textContent = data.priyaOwes > 0 ? `$${data.priyaOwes.toFixed(2)}` : '$0.00';
+        document.getElementById('rolloverPriyaOverpaid').textContent = data.priyaOverpaid > 0 ? `$${data.priyaOverpaid.toFixed(2)}` : '$0.00';
+        
+        const priyaNet = data.priyaOverpaid - data.priyaOwes;
+        document.getElementById('rolloverPriyaNet').textContent = priyaNet !== 0 ? `$${Math.abs(priyaNet).toFixed(2)}` : '$0.00';
+        document.getElementById('rolloverPriyaNetLabel').textContent = priyaNet > 0 ? 'Credit to Next Month' : priyaNet < 0 ? 'Owed to Next Month' : 'Settled';
+        document.getElementById('rolloverPriyaNet').className = priyaNet > 0 ? 'text-green-600 font-bold text-xl' : priyaNet < 0 ? 'text-red-600 font-bold text-xl' : 'text-gray-600 font-bold text-xl';
+        
+        // Determine next month
+        let nextMonth = month + 1;
+        let nextYear = year;
+        if (nextMonth > 12) {
+            nextMonth = 1;
+            nextYear++;
+        }
+        
+        document.getElementById('rolloverPeriod').textContent = `${monthNames[month]} ${year} → ${monthNames[nextMonth]} ${nextYear}`;
+        document.getElementById('rolloverNoData').style.display = 'none';
+        document.getElementById('rolloverDataContent').style.display = 'block';
+    } else {
+        // No data for this month
+        document.getElementById('rolloverPeriod').textContent = `${monthNames[month]} ${year}`;
+        document.getElementById('rolloverNoData').style.display = 'block';
+        document.getElementById('rolloverDataContent').style.display = 'none';
+    }
+}
+
+// Populate rollover filter dropdowns
+function populateRolloverFilters() {
+    const yearSelect = document.getElementById('rolloverYearFilter');
+    const monthSelect = document.getElementById('rolloverMonthFilter');
+    
+    // Populate years from 2025 to current year + 1
+    const currentYear = new Date().getFullYear();
+    yearSelect.innerHTML = '';
+    for (let year = 2025; year <= currentYear + 1; year++) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        yearSelect.appendChild(option);
+    }
+    
+    // Populate months
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    monthSelect.innerHTML = '';
+    for (let month = 1; month <= 12; month++) {
+        const option = document.createElement('option');
+        option.value = String(month).padStart(2, '0');
+        option.textContent = monthNames[month - 1];
+        monthSelect.appendChild(option);
+    }
 }
 
 function closeRolloverDuesModal() {
