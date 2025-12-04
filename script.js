@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-04T20:50:49Z'; // Auto-updated on deployment
-const APP_VERSION = '25.49.6'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-04T20:55:23Z'; // Auto-updated on deployment
+const APP_VERSION = '25.49.7'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -1532,11 +1532,32 @@ function switchExpenseTab(tabName, expenseId) {
     } else if (tabName === 'analytics') {
         console.log('📊 Loading Analytics tab');
         const analyticsTab = document.getElementById('analyticsTab');
+        
+        // Debug info BEFORE setting display
+        console.log('BEFORE - Display style:', analyticsTab.style.display);
+        console.log('BEFORE - Computed display:', window.getComputedStyle(analyticsTab).display);
+        console.log('BEFORE - offsetHeight:', analyticsTab.offsetHeight);
+        console.log('BEFORE - clientHeight:', analyticsTab.clientHeight);
+        
         analyticsTab.style.display = 'block';
+        
+        // Debug info AFTER setting display
+        console.log('AFTER - Display style:', analyticsTab.style.display);
+        console.log('AFTER - Computed display:', window.getComputedStyle(analyticsTab).display);
         console.log('Current innerHTML length:', analyticsTab.innerHTML.length);
-        console.log('Current innerHTML:', analyticsTab.innerHTML.substring(0, 100));
+        console.log('Current innerHTML preview:', analyticsTab.innerHTML.substring(0, 100));
+        
         // Always reload analytics to get fresh data
         loadExpenseAnalyticsTab(expenseId);
+        
+        // Debug AFTER content loaded
+        setTimeout(() => {
+            console.log('FINAL - offsetHeight:', analyticsTab.offsetHeight);
+            console.log('FINAL - clientHeight:', analyticsTab.clientHeight);
+            console.log('FINAL - scrollHeight:', analyticsTab.scrollHeight);
+            console.log('FINAL - innerHTML length:', analyticsTab.innerHTML.length);
+            console.log('Tab element:', analyticsTab);
+        }, 100);
     }
 }
 
