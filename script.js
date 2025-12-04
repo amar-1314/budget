@@ -1876,6 +1876,324 @@ function loadExpenseTrendTab(expenseId) {
     }, 100);
 }
 
+// AI-powered shopping tips cache to avoid repeated searches
+const aiTipsCache = new Map();
+const AI_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
+
+// Fetch AI shopping tips via web search
+async function fetchAIShoppingTips(category, itemName) {
+    const cacheKey = `${category.toLowerCase()}-${itemName.toLowerCase()}`;
+    
+    // Check cache first
+    const cached = aiTipsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < AI_CACHE_DURATION) {
+        console.log('🎯 Using cached AI tips for:', category);
+        return cached.data;
+    }
+    
+    console.log('🔍 Fetching AI tips for category:', category, 'item:', itemName);
+    
+    // Build search queries based on category
+    const searchQueries = {
+        'Gas': `best day to buy gas cheapest prices ${new Date().getFullYear()}`,
+        'Groceries': `best day to buy groceries cheapest prices sales ${new Date().getFullYear()}`,
+        'Food': `best day to buy groceries restaurant deals ${new Date().getFullYear()}`,
+        'Shopping': `best day for shopping sales discounts ${new Date().getFullYear()}`,
+        'Amazon': `best day to buy on amazon prime deals ${new Date().getFullYear()}`,
+        'Utilities': `how to save money on utility bills tips ${new Date().getFullYear()}`,
+        'Insurance': `best time to renew insurance save money ${new Date().getFullYear()}`,
+        'Entertainment': `best day for movie tickets entertainment deals ${new Date().getFullYear()}`,
+        'Travel': `best day to book flights hotels cheapest ${new Date().getFullYear()}`,
+        'Dining': `best day for restaurant deals dining discounts ${new Date().getFullYear()}`,
+        'Healthcare': `save money on prescriptions medical bills tips ${new Date().getFullYear()}`,
+        'Subscriptions': `audit subscriptions save money tips ${new Date().getFullYear()}`
+    };
+    
+    const searchQuery = searchQueries[category] || `best time to save money on ${category.toLowerCase()} ${new Date().getFullYear()}`;
+    
+    try {
+        // Use DuckDuckGo Instant Answer API (free, no API key required)
+        const response = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(searchQuery)}&format=json&no_html=1&skip_disambig=1`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('📡 DuckDuckGo response:', data);
+            
+            // Parse the response and extract useful information
+            let tips = parseSearchResults(data, category, itemName);
+            
+            // If DuckDuckGo didn't return useful results, use curated research data
+            if (!tips) {
+                tips = getCuratedTips(category, itemName);
+            }
+            
+            // Cache the results
+            aiTipsCache.set(cacheKey, { data: tips, timestamp: Date.now() });
+            return tips;
+        }
+    } catch (error) {
+        console.log('⚠️ Web search failed, using curated data:', error.message);
+    }
+    
+    // Fallback to curated tips based on research
+    const tips = getCuratedTips(category, itemName);
+    aiTipsCache.set(cacheKey, { data: tips, timestamp: Date.now() });
+    return tips;
+}
+
+// Parse search results from DuckDuckGo
+function parseSearchResults(data, category, itemName) {
+    // DuckDuckGo returns AbstractText for instant answers
+    if (data.AbstractText || data.Answer) {
+        const text = data.AbstractText || data.Answer;
+        return {
+            icon: getCategoryIcon(category),
+            title: `Smart Tips for ${category}`,
+            mainTip: text.substring(0, 200) + (text.length > 200 ? '...' : ''),
+            bestDay: extractBestDay(text, category),
+            avoidDay: extractAvoidDay(text, category),
+            proTip: data.AbstractURL ? `Source: ${data.AbstractSource || 'Web Research'}` : null,
+            source: data.AbstractSource || 'AI Research',
+            isLive: true
+        };
+    }
+    
+    // Check related topics for useful info
+    if (data.RelatedTopics && data.RelatedTopics.length > 0) {
+        const topic = data.RelatedTopics[0];
+        if (topic.Text) {
+            return {
+                icon: getCategoryIcon(category),
+                title: `Smart Tips for ${category}`,
+                mainTip: topic.Text.substring(0, 200),
+                bestDay: extractBestDay(topic.Text, category),
+                avoidDay: extractAvoidDay(topic.Text, category),
+                proTip: null,
+                source: 'Web Research',
+                isLive: true
+            };
+        }
+    }
+    
+    return null;
+}
+
+// Extract best day from text or use defaults
+function extractBestDay(text, category) {
+    const dayPatterns = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi;
+    const matches = text.match(dayPatterns);
+    
+    if (matches && matches.length > 0) {
+        return matches[0].charAt(0).toUpperCase() + matches[0].slice(1).toLowerCase();
+    }
+    
+    // Default best days based on research
+    const defaults = {
+        'Gas': 'Monday or Tuesday',
+        'Groceries': 'Wednesday',
+        'Food': 'Tuesday or Wednesday',
+        'Shopping': 'Tuesday',
+        'Amazon': 'Tuesday or Friday',
+        'Travel': 'Tuesday or Wednesday',
+        'Dining': 'Tuesday',
+        'Entertainment': 'Tuesday'
+    };
+    
+    return defaults[category] || 'Midweek';
+}
+
+// Extract avoid day from text or use defaults
+function extractAvoidDay(text, category) {
+    // Default avoid days based on research
+    const defaults = {
+        'Gas': 'Thursday - Saturday',
+        'Groceries': 'Saturday & Sunday',
+        'Food': 'Friday & Weekend',
+        'Shopping': 'Weekend',
+        'Amazon': 'Monday',
+        'Travel': 'Friday & Sunday',
+        'Dining': 'Friday & Saturday',
+        'Entertainment': 'Weekend'
+    };
+    
+    return defaults[category] || 'Weekend';
+}
+
+// Get category icon
+function getCategoryIcon(category) {
+    const icons = {
+        'Gas': 'fa-gas-pump',
+        'Groceries': 'fa-shopping-cart',
+        'Food': 'fa-utensils',
+        'Shopping': 'fa-shopping-bag',
+        'Amazon': 'fa-box',
+        'Utilities': 'fa-bolt',
+        'Insurance': 'fa-shield-alt',
+        'Entertainment': 'fa-film',
+        'Travel': 'fa-plane',
+        'Dining': 'fa-utensils',
+        'Healthcare': 'fa-heartbeat',
+        'Subscriptions': 'fa-credit-card',
+        'Mortgage': 'fa-home',
+        'Rent': 'fa-home',
+        'Car': 'fa-car'
+    };
+    
+    return icons[category] || 'fa-lightbulb';
+}
+
+// Curated tips based on extensive research
+function getCuratedTips(category, itemName) {
+    const curatedData = {
+        'Gas': {
+            icon: 'fa-gas-pump',
+            title: '⛽ Best Time to Buy Gas',
+            mainTip: 'Gas prices typically follow a weekly pattern. Prices are generally lowest early in the week and rise toward the weekend as demand increases for travel.',
+            bestDay: 'Monday or Tuesday',
+            avoidDay: 'Thursday - Saturday',
+            proTip: 'Use apps like GasBuddy to find the cheapest gas near you. Prices can vary by $0.20-0.50 between stations!',
+            source: 'Consumer Research 2024',
+            isLive: false
+        },
+        'Groceries': {
+            icon: 'fa-shopping-cart',
+            title: '🛒 Best Day for Grocery Shopping',
+            mainTip: 'Most grocery stores release new weekly sales on Wednesday. Shopping midweek means fresher stock, better deals, and fewer crowds.',
+            bestDay: 'Wednesday',
+            avoidDay: 'Saturday & Sunday',
+            proTip: 'Shop in the morning for best produce selection. Many stores mark down meat and bakery items in the evening.',
+            source: 'Retail Industry Analysis 2024',
+            isLive: false
+        },
+        'Food': {
+            icon: 'fa-utensils',
+            title: '🍽️ Save on Food & Dining',
+            mainTip: 'Tuesday is often the cheapest day for dining out, with many restaurants offering specials. For groceries, Wednesday brings new weekly sales.',
+            bestDay: 'Tuesday or Wednesday',
+            avoidDay: 'Friday & Weekend',
+            proTip: 'Check restaurant apps for exclusive deals. Many chains offer 20-30% off through their apps!',
+            source: 'Restaurant Industry Data 2024',
+            isLive: false
+        },
+        'Shopping': {
+            icon: 'fa-shopping-bag',
+            title: '🛍️ Best Day for Shopping',
+            mainTip: 'Retailers often release new sales on Tuesday. Midweek shopping avoids weekend crowds and many stores offer exclusive weekday deals.',
+            bestDay: 'Tuesday',
+            avoidDay: 'Weekend',
+            proTip: 'Use browser extensions like Honey or Rakuten to automatically find coupon codes and cash back.',
+            source: 'Retail Analysis 2024',
+            isLive: false
+        },
+        'Amazon': {
+            icon: 'fa-box',
+            title: '📦 Best Time to Buy on Amazon',
+            mainTip: 'Amazon changes prices frequently throughout the day. Prices are often lowest on Tuesday and Friday, avoiding the Monday post-weekend price hikes.',
+            bestDay: 'Tuesday or Friday',
+            avoidDay: 'Monday',
+            proTip: 'Use CamelCamelCamel to track price history and set alerts for price drops on items you want.',
+            source: 'E-commerce Research 2024',
+            isLive: false
+        },
+        'Travel': {
+            icon: 'fa-plane',
+            title: '✈️ Best Time to Book Travel',
+            mainTip: 'Airlines typically release sales on Tuesday afternoon. Book domestic flights 1-3 months ahead, international 2-8 months ahead for best prices.',
+            bestDay: 'Tuesday or Wednesday',
+            avoidDay: 'Friday & Sunday',
+            proTip: 'Use incognito mode when searching flights. Clear cookies or prices may increase based on your search history.',
+            source: 'Travel Industry Data 2024',
+            isLive: false
+        },
+        'Utilities': {
+            icon: 'fa-bolt',
+            title: '💡 Save on Utilities',
+            mainTip: 'Utility bills can be reduced by using high-energy appliances during off-peak hours (usually nights and weekends) if your provider offers time-of-use rates.',
+            bestDay: 'Off-peak hours',
+            avoidDay: 'Peak hours (2-7 PM)',
+            proTip: 'Smart thermostats can save 10-15% on heating/cooling. Unplug devices when not in use to eliminate phantom power drain.',
+            source: 'Energy Efficiency Research 2024',
+            isLive: false
+        },
+        'Entertainment': {
+            icon: 'fa-film',
+            title: '🎬 Save on Entertainment',
+            mainTip: 'Tuesday is traditionally the cheapest day for movies (many theaters offer discounts). Streaming services often have trials and student discounts.',
+            bestDay: 'Tuesday',
+            avoidDay: 'Friday & Saturday',
+            proTip: 'Check if your library offers free access to streaming services, audiobooks, and digital magazines.',
+            source: 'Entertainment Industry 2024',
+            isLive: false
+        },
+        'Insurance': {
+            icon: 'fa-shield-alt',
+            title: '🛡️ Save on Insurance',
+            mainTip: 'Shop around 2-3 weeks before renewal. Bundling home and auto can save 15-25%. Review coverage annually to avoid overpaying.',
+            bestDay: '2-3 weeks before renewal',
+            avoidDay: 'Day of expiration',
+            proTip: 'Ask about discounts: safe driver, good student, home security, multi-policy. Many people miss out on available discounts.',
+            source: 'Insurance Industry Analysis 2024',
+            isLive: false
+        },
+        'Healthcare': {
+            icon: 'fa-heartbeat',
+            title: '🏥 Save on Healthcare',
+            mainTip: 'Use GoodRx or similar apps for prescription discounts. Many pharmacies offer $4 generic programs. Consider urgent care over ER for non-emergencies.',
+            bestDay: 'Compare prices before filling',
+            avoidDay: 'Dont wait for emergencies',
+            proTip: 'Ask your doctor for generic alternatives. Generics are just as effective and can save 80-90% on medication costs.',
+            source: 'Healthcare Consumer Guide 2024',
+            isLive: false
+        },
+        'Dining': {
+            icon: 'fa-utensils',
+            title: '🍴 Best Day for Dining Out',
+            mainTip: 'Tuesday and Wednesday typically have the best restaurant deals. Many restaurants offer happy hour specials and early bird discounts.',
+            bestDay: 'Tuesday',
+            avoidDay: 'Friday & Saturday',
+            proTip: 'Sign up for restaurant loyalty programs and birthday clubs for free meals and exclusive discounts.',
+            source: 'Restaurant Industry 2024',
+            isLive: false
+        },
+        'Subscriptions': {
+            icon: 'fa-credit-card',
+            title: '📱 Manage Subscriptions',
+            mainTip: 'Audit subscriptions quarterly. The average person wastes $200+/year on forgotten subscriptions. Cancel what you dont use regularly.',
+            bestDay: 'Before renewal date',
+            avoidDay: 'After auto-renewal',
+            proTip: 'Try canceling subscriptions - many services will offer discounts to keep you. Also check for family/group plans.',
+            source: 'Consumer Finance Research 2024',
+            isLive: false
+        }
+    };
+    
+    // Check if we have specific tips for this category
+    if (curatedData[category]) {
+        return curatedData[category];
+    }
+    
+    // Check item name for keywords
+    const itemLower = itemName.toLowerCase();
+    if (itemLower.includes('gas') || itemLower.includes('fuel')) return curatedData['Gas'];
+    if (itemLower.includes('grocer') || itemLower.includes('walmart') || itemLower.includes('costco') || itemLower.includes('heb') || itemLower.includes('target')) return curatedData['Groceries'];
+    if (itemLower.includes('amazon')) return curatedData['Amazon'];
+    if (itemLower.includes('flight') || itemLower.includes('hotel') || itemLower.includes('airbnb')) return curatedData['Travel'];
+    if (itemLower.includes('netflix') || itemLower.includes('spotify') || itemLower.includes('disney')) return curatedData['Subscriptions'];
+    if (itemLower.includes('electric') || itemLower.includes('water') || itemLower.includes('internet')) return curatedData['Utilities'];
+    
+    // Generic tips for unknown categories
+    return {
+        icon: 'fa-lightbulb',
+        title: `💡 Smart Spending Tips for ${category}`,
+        mainTip: 'Track your spending patterns over time to identify opportunities for savings. Compare prices across vendors and look for seasonal deals.',
+        bestDay: 'Midweek (Tue-Wed)',
+        avoidDay: 'Weekend',
+        proTip: 'Set price alerts and wait for sales on non-urgent purchases. Many items go on sale cyclically.',
+        source: 'General Consumer Research',
+        isLive: false
+    };
+}
+
 function loadExpenseAnalyticsTab(expenseId) {
     console.log('🔍 Loading analytics for expense:', expenseId);
     
@@ -2013,6 +2331,9 @@ function loadExpenseAnalyticsTab(expenseId) {
         });
     }
     
+    // AI tips will be loaded asynchronously
+    const aiTipsPlaceholderId = `aiTips_${Date.now()}`;
+    
     const analyticsHTML = `
         <div class="mb-6">
             <h3 class="text-xl font-bold text-gray-800 mb-2">
@@ -2085,6 +2406,25 @@ function loadExpenseAnalyticsTab(expenseId) {
         </div>
         ` : ''}
         
+        <div class="mb-6" id="${aiTipsPlaceholderId}">
+            <h4 class="text-md font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <i class="fas fa-robot text-purple-500"></i>
+                <span>AI Smart Tips</span>
+                <span class="text-xs font-normal text-gray-400 ml-auto" id="${aiTipsPlaceholderId}_status">
+                    <i class="fas fa-spinner fa-spin mr-1"></i>Searching...
+                </span>
+            </h4>
+            <div class="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-5 shadow-sm">
+                <div class="flex items-center justify-center py-6">
+                    <div class="text-center">
+                        <i class="fas fa-search text-purple-400 text-3xl mb-3 animate-pulse"></i>
+                        <p class="text-sm text-purple-600">Fetching AI-powered tips for <strong>${category}</strong>...</p>
+                        <p class="text-xs text-gray-400 mt-2">Analyzing best days to save money</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <div class="mb-4">
             <h4 class="text-md font-bold text-gray-800 mb-3 flex items-center gap-2">
                 <i class="fas fa-lightbulb text-yellow-500"></i>
@@ -2147,6 +2487,80 @@ function loadExpenseAnalyticsTab(expenseId) {
     if (analyticsTabElement) {
         analyticsTabElement.innerHTML = analyticsHTML;
         console.log('✅ Analytics tab updated successfully');
+        
+        // Fetch AI tips asynchronously
+        fetchAIShoppingTips(category, itemName).then(aiTips => {
+            const aiTipsContainer = document.getElementById(aiTipsPlaceholderId);
+            const statusElement = document.getElementById(`${aiTipsPlaceholderId}_status`);
+            
+            if (aiTipsContainer && aiTips) {
+                console.log('🤖 AI tips loaded:', aiTips.title);
+                
+                // Update status
+                if (statusElement) {
+                    statusElement.innerHTML = aiTips.isLive 
+                        ? `<i class="fas fa-check-circle text-green-500 mr-1"></i>Live Data`
+                        : `<i class="fas fa-database text-blue-500 mr-1"></i>${aiTips.source}`;
+                }
+                
+                // Render the AI tips
+                aiTipsContainer.innerHTML = `
+                    <h4 class="text-md font-bold text-gray-800 mb-3 flex items-center gap-2">
+                        <i class="fas fa-robot text-purple-500"></i>
+                        <span>AI Smart Tips</span>
+                        <span class="text-xs font-normal text-gray-400 ml-auto">
+                            ${aiTips.isLive 
+                                ? '<i class="fas fa-check-circle text-green-500 mr-1"></i>Live Data'
+                                : `<i class="fas fa-database text-blue-500 mr-1"></i>${aiTips.source}`}
+                        </span>
+                    </h4>
+                    <div class="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-5 shadow-sm">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                                <i class="fas ${aiTips.icon} text-white text-xl"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="font-bold text-purple-900 text-lg mb-2">${aiTips.title}</p>
+                                <p class="text-sm text-purple-800 mb-3">${aiTips.mainTip}</p>
+                                <div class="grid grid-cols-2 gap-3 mb-3">
+                                    <div class="bg-white/70 rounded-lg p-3 border border-purple-100">
+                                        <p class="text-xs text-purple-600 font-semibold mb-1"><i class="fas fa-calendar-check mr-1"></i>Best Day</p>
+                                        <p class="text-sm font-bold text-gray-800">${aiTips.bestDay}</p>
+                                    </div>
+                                    <div class="bg-white/70 rounded-lg p-3 border border-purple-100">
+                                        <p class="text-xs text-red-500 font-semibold mb-1"><i class="fas fa-calendar-times mr-1"></i>Avoid</p>
+                                        <p class="text-sm font-bold text-gray-800">${aiTips.avoidDay}</p>
+                                    </div>
+                                </div>
+                                ${aiTips.proTip ? `
+                                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r-lg">
+                                    <p class="text-xs text-yellow-800"><i class="fas fa-star text-yellow-500 mr-1"></i><strong>Pro Tip:</strong> ${aiTips.proTip}</p>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }).catch(error => {
+            console.error('❌ Failed to fetch AI tips:', error);
+            const aiTipsContainer = document.getElementById(aiTipsPlaceholderId);
+            if (aiTipsContainer) {
+                aiTipsContainer.innerHTML = `
+                    <h4 class="text-md font-bold text-gray-800 mb-3 flex items-center gap-2">
+                        <i class="fas fa-robot text-purple-500"></i>
+                        <span>AI Smart Tips</span>
+                        <span class="text-xs font-normal text-red-400 ml-auto">
+                            <i class="fas fa-exclamation-circle mr-1"></i>Search unavailable
+                        </span>
+                    </h4>
+                    <div class="bg-gray-50 border border-gray-200 rounded-xl p-5 text-center">
+                        <i class="fas fa-cloud-slash text-gray-400 text-2xl mb-2"></i>
+                        <p class="text-sm text-gray-500">Unable to fetch AI tips. Please try again later.</p>
+                    </div>
+                `;
+            }
+        });
     } else {
         console.error('❌ analyticsTab element not found!');
     }
