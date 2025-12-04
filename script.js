@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-04T20:48:42Z'; // Auto-updated on deployment
-const APP_VERSION = '25.49.5'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-04T20:50:49Z'; // Auto-updated on deployment
+const APP_VERSION = '25.49.6'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -1513,22 +1513,30 @@ function switchExpenseTab(tabName, expenseId) {
     // Show selected tab
     if (tabName === 'details') {
         console.log('📄 Loading Details tab');
-        document.getElementById('detailsTab').style.display = 'block';
-        if (!document.getElementById('detailsTab').innerHTML) {
+        const detailsTab = document.getElementById('detailsTab');
+        detailsTab.style.display = 'block';
+        if (!detailsTab.innerHTML.trim()) {
             loadExpenseDetailsTab(expenseId);
+        } else {
+            console.log('ℹ️ Details tab already loaded');
         }
     } else if (tabName === 'trend') {
         console.log('📈 Loading Trend tab');
-        document.getElementById('trendTab').style.display = 'block';
-        if (!document.getElementById('trendTab').innerHTML) {
+        const trendTab = document.getElementById('trendTab');
+        trendTab.style.display = 'block';
+        if (!trendTab.innerHTML.trim()) {
             loadExpenseTrendTab(expenseId);
+        } else {
+            console.log('ℹ️ Trend tab already loaded');
         }
     } else if (tabName === 'analytics') {
         console.log('📊 Loading Analytics tab');
-        document.getElementById('analyticsTab').style.display = 'block';
-        if (!document.getElementById('analyticsTab').innerHTML) {
-            loadExpenseAnalyticsTab(expenseId);
-        }
+        const analyticsTab = document.getElementById('analyticsTab');
+        analyticsTab.style.display = 'block';
+        console.log('Current innerHTML length:', analyticsTab.innerHTML.length);
+        console.log('Current innerHTML:', analyticsTab.innerHTML.substring(0, 100));
+        // Always reload analytics to get fresh data
+        loadExpenseAnalyticsTab(expenseId);
     }
 }
 
