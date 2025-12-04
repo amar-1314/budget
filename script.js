@@ -6689,22 +6689,15 @@ function openRolloverDues() {
     // Populate year and month dropdowns
     populateRolloverFilters();
     
-    // Get current filter
+    // Get current filter from main page
     const yearFilterEl = document.getElementById('yearSelector');
     const monthFilterEl = document.getElementById('monthSelector');
     const defaultYear = yearFilterEl ? parseInt(yearFilterEl.value) : new Date().getFullYear();
     const defaultMonth = monthFilterEl ? parseInt(monthFilterEl.value) : new Date().getMonth() + 1;
     
-    // Set default values (default to previous month to show what was rolled over)
-    let prevYear = defaultYear;
-    let prevMonth = defaultMonth - 1;
-    if (prevMonth === 0) {
-        prevMonth = 12;
-        prevYear--;
-    }
-    
-    document.getElementById('rolloverYearFilter').value = prevYear;
-    document.getElementById('rolloverMonthFilter').value = String(prevMonth).padStart(2, '0');
+    // Set to current month being viewed (to show what rolled INTO this month)
+    document.getElementById('rolloverYearFilter').value = defaultYear;
+    document.getElementById('rolloverMonthFilter').value = String(defaultMonth).padStart(2, '0');
     
     // Load the data for that month
     updateRolloverDisplay();
@@ -6713,11 +6706,20 @@ function openRolloverDues() {
 }
 
 // Update rollover display based on selected filters
+// Shows what rolled INTO the selected month FROM the previous month
 function updateRolloverDisplay() {
     const year = parseInt(document.getElementById('rolloverYearFilter').value);
     const month = parseInt(document.getElementById('rolloverMonthFilter').value);
     
-    const rolloverKey = `rollover_${year}_${String(month).padStart(2, '0')}`;
+    // Get PREVIOUS month's rollover data (what rolls INTO this month)
+    let prevYear = year;
+    let prevMonth = month - 1;
+    if (prevMonth === 0) {
+        prevMonth = 12;
+        prevYear--;
+    }
+    
+    const rolloverKey = `rollover_${prevYear}_${String(prevMonth).padStart(2, '0')}`;
     const rolloverData = localStorage.getItem(rolloverKey);
     
     const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -6725,38 +6727,30 @@ function updateRolloverDisplay() {
     if (rolloverData) {
         const data = JSON.parse(rolloverData);
         
-        // Update Amar's data
-        document.getElementById('rolloverAmarOwes').textContent = data.amarOwes > 0 ? `$${data.amarOwes.toFixed(2)}` : '$0.00';
-        document.getElementById('rolloverAmarOverpaid').textContent = data.amarOverpaid > 0 ? `$${data.amarOverpaid.toFixed(2)}` : '$0.00';
+        // Calculate net amounts that rolled into this month
+        const amarNet = data.amarOverpaid - data.amarOwes;  // Negative if owed, positive if credit
+        const priyaNet = data.priyaOverpaid - data.priyaOwes;
         
-        const amarNet = data.amarOverpaid - data.amarOwes;
-        document.getElementById('rolloverAmarNet').textContent = amarNet !== 0 ? `$${Math.abs(amarNet).toFixed(2)}` : '$0.00';
-        document.getElementById('rolloverAmarNetLabel').textContent = amarNet > 0 ? 'Credit to Next Month' : amarNet < 0 ? 'Owed to Next Month' : 'Settled';
+        // Update Amar's data - show net that came into this month
+        document.getElementById('rolloverAmarOwes').textContent = amarNet < 0 ? `$${Math.abs(amarNet).toFixed(2)}` : '$0.00';
+        document.getElementById('rolloverAmarOverpaid').textContent = amarNet > 0 ? `$${amarNet.toFixed(2)}` : '$0.00';
+        document.getElementById('rolloverAmarNet').textContent = `$${amarNet.toFixed(2)}`;
+        document.getElementById('rolloverAmarNetLabel').textContent = 'Rolled into this month:';
         document.getElementById('rolloverAmarNet').className = amarNet > 0 ? 'text-green-600 font-bold text-xl' : amarNet < 0 ? 'text-red-600 font-bold text-xl' : 'text-gray-600 font-bold text-xl';
         
-        // Update Priya's data
-        document.getElementById('rolloverPriyaOwes').textContent = data.priyaOwes > 0 ? `$${data.priyaOwes.toFixed(2)}` : '$0.00';
-        document.getElementById('rolloverPriyaOverpaid').textContent = data.priyaOverpaid > 0 ? `$${data.priyaOverpaid.toFixed(2)}` : '$0.00';
-        
-        const priyaNet = data.priyaOverpaid - data.priyaOwes;
-        document.getElementById('rolloverPriyaNet').textContent = priyaNet !== 0 ? `$${Math.abs(priyaNet).toFixed(2)}` : '$0.00';
-        document.getElementById('rolloverPriyaNetLabel').textContent = priyaNet > 0 ? 'Credit to Next Month' : priyaNet < 0 ? 'Owed to Next Month' : 'Settled';
+        // Update Priya's data - show net that came into this month
+        document.getElementById('rolloverPriyaOwes').textContent = priyaNet < 0 ? `$${Math.abs(priyaNet).toFixed(2)}` : '$0.00';
+        document.getElementById('rolloverPriyaOverpaid').textContent = priyaNet > 0 ? `$${priyaNet.toFixed(2)}` : '$0.00';
+        document.getElementById('rolloverPriyaNet').textContent = `$${priyaNet.toFixed(2)}`;
+        document.getElementById('rolloverPriyaNetLabel').textContent = 'Rolled into this month:';
         document.getElementById('rolloverPriyaNet').className = priyaNet > 0 ? 'text-green-600 font-bold text-xl' : priyaNet < 0 ? 'text-red-600 font-bold text-xl' : 'text-gray-600 font-bold text-xl';
         
-        // Determine next month
-        let nextMonth = month + 1;
-        let nextYear = year;
-        if (nextMonth > 12) {
-            nextMonth = 1;
-            nextYear++;
-        }
-        
-        document.getElementById('rolloverPeriod').textContent = `${monthNames[month]} ${year} → ${monthNames[nextMonth]} ${nextYear}`;
+        document.getElementById('rolloverPeriod').textContent = `${monthNames[prevMonth]} ${prevYear} → ${monthNames[month]} ${year}`;
         document.getElementById('rolloverNoData').style.display = 'none';
         document.getElementById('rolloverDataContent').style.display = 'block';
     } else {
-        // No data for this month
-        document.getElementById('rolloverPeriod').textContent = `${monthNames[month]} ${year}`;
+        // No data for previous month
+        document.getElementById('rolloverPeriod').textContent = `No rollover into ${monthNames[month]} ${year}`;
         document.getElementById('rolloverNoData').style.display = 'block';
         document.getElementById('rolloverDataContent').style.display = 'none';
     }

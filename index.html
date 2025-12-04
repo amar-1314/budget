@@ -53,15 +53,15 @@
                 id="notificationText"></span></div>
     </div>
     <div id="slideMenu"
-        class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50">
+        class="fixed top-0 right-0 h-full w-80 bg-white shadow-2xl transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
         <div class="p-6">
-            <div class="flex justify-between items-center mb-6">
+            <div class="flex justify-between items-center mb-6 sticky top-0 bg-white z-10 pb-4">
                 <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-bars mr-2"></i>Menu</h2>
                 <button onclick="toggleMenu()" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-2xl"></i>
                 </button>
             </div>
-            <div class="space-y-3">
+            <div class="space-y-3 pb-6">
                 <button onclick="openBudgetManager(); toggleMenu();"
                     class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
                     <i class="fas fa-wallet text-purple-600 text-xl"></i>
@@ -70,20 +70,12 @@
                         <div class="text-xs text-gray-500">Set budgets per category</div>
                     </div>
                 </button>
-                <button onclick="openFixedExpensesModal(); toggleMenu();"
+                <button onclick="openRolloverDues(); toggleMenu();"
                     class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
-                    <i class="fas fa-repeat text-purple-600 text-xl"></i>
+                    <i class="fas fa-calendar-check text-purple-600 text-xl"></i>
                     <div>
-                        <div class="font-semibold text-gray-800">Fixed Expenses</div>
-                        <div class="text-xs text-gray-500">Manage recurring expenses</div>
-                    </div>
-                </button>
-                <button onclick="openLLCExpensesModal(); toggleMenu();"
-                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
-                    <i class="fas fa-building text-purple-600 text-xl"></i>
-                    <div>
-                        <div class="font-semibold text-gray-800">LLC Eligible Expenses</div>
-                        <div class="text-xs text-gray-500">Define business-eligible items</div>
+                        <div class="font-semibold text-gray-800">Rollover Dues</div>
+                        <div class="text-xs text-gray-500">Track carried-over balances</div>
                     </div>
                 </button>
                 <button onclick="openMonthlySummary(); toggleMenu();"
@@ -126,12 +118,20 @@
                         <div class="text-xs text-gray-500">Advanced search & filters</div>
                     </div>
                 </button>
-                <button onclick="openRolloverDues(); toggleMenu();"
+                <button onclick="openFixedExpensesModal(); toggleMenu();"
                     class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
-                    <i class="fas fa-calendar-check text-purple-600 text-xl"></i>
+                    <i class="fas fa-repeat text-purple-600 text-xl"></i>
                     <div>
-                        <div class="font-semibold text-gray-800">Rollover Dues</div>
-                        <div class="text-xs text-gray-500">Track carried-over balances</div>
+                        <div class="font-semibold text-gray-800">Fixed Expenses</div>
+                        <div class="text-xs text-gray-500">Manage recurring expenses</div>
+                    </div>
+                </button>
+                <button onclick="openLLCExpensesModal(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-building text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">LLC Eligible Expenses</div>
+                        <div class="text-xs text-gray-500">Define business-eligible items</div>
                     </div>
                 </button>
                 <button onclick="openSettings(); toggleMenu();"
@@ -1602,10 +1602,10 @@
                         <div class="text-xs text-gray-700">
                             <p class="font-semibold mb-1">How Rollovers Work:</p>
                             <ul class="list-disc list-inside space-y-1">
-                                <li>Select a month to see what rolled over to the next month</li>
-                                <li>Amounts owed carry forward as debts</li>
-                                <li>Overpayments carry forward as credits</li>
-                                <li>Net balance shows what goes to next month</li>
+                                <li>Select a month to see what rolled INTO it from previous month</li>
+                                <li>Negative amounts = credit carried forward</li>
+                                <li>Positive amounts = debt carried forward</li>
+                                <li>These amounts are applied to the selected month's dues</li>
                             </ul>
                         </div>
                     </div>
