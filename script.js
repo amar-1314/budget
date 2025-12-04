@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-01T17:57:14.288Z'; // Auto-updated on deployment
-const APP_VERSION = '25.49.2'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-04T20:33:26Z'; // Auto-updated on deployment
+const APP_VERSION = '25.49.3'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -1524,143 +1524,143 @@ function loadExpenseDetailsTab(expenseId) {
     if (!expense) return;
     
     const fields = expense.fields;
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-    const actual = fields.Actual || 0;
-    const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
-    const day = fields.Day || 1;
-    const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
+        const actual = fields.Actual || 0;
+        const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
+        const day = fields.Day || 1;
+        const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
 
-    let detailHTML = `
-             <div class="bg-purple-50 border-l-4 border-purple-500 p-4 mb-4">
-                 <h3 class="text-xl font-bold text-gray-800 mb-2">${fields.Item || 'Unnamed'}</h3>
-                 <p class="text-sm text-gray-600"><i class="fas fa-calendar mr-2"></i>${dateDisplay}</p>
-             </div>
-             
-             <div class="grid grid-cols-2 gap-4 mb-4">
-                 <div class="bg-gray-50 p-4 rounded">
-                     <p class="text-xs text-gray-500 mb-1">Category</p>
-                     <p class="font-semibold text-gray-800"><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">${fields.Category || 'N/A'}</span></p>
+        let detailHTML = `
+                 <div class="bg-purple-50 border-l-4 border-purple-500 p-4 mb-4">
+                     <h3 class="text-xl font-bold text-gray-800 mb-2">${fields.Item || 'Unnamed'}</h3>
+                     <p class="text-sm text-gray-600"><i class="fas fa-calendar mr-2"></i>${dateDisplay}</p>
                  </div>
-                 <div class="bg-gray-50 p-4 rounded">
-                     <p class="text-xs text-gray-500 mb-1">LLC Account</p>
-                     <p class="font-semibold"><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></p>
+                 
+                 <div class="grid grid-cols-2 gap-4 mb-4">
+                     <div class="bg-gray-50 p-4 rounded">
+                         <p class="text-xs text-gray-500 mb-1">Category</p>
+                         <p class="font-semibold text-gray-800"><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">${fields.Category || 'N/A'}</span></p>
+                     </div>
+                     <div class="bg-gray-50 p-4 rounded">
+                         <p class="text-xs text-gray-500 mb-1">LLC Account</p>
+                         <p class="font-semibold"><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></p>
+                     </div>
                  </div>
-             </div>
-             
-             <div class="bg-purple-50 p-4 rounded mb-4">
-                 <p class="text-xs text-gray-500 mb-1">Amount</p>
-                 <p class="text-3xl font-bold text-purple-600">$${actual.toFixed(2)}</p>
-             </div>
-         `;
+                 
+                 <div class="bg-purple-50 p-4 rounded mb-4">
+                     <p class="text-xs text-gray-500 mb-1">Amount</p>
+                     <p class="text-3xl font-bold text-purple-600">$${actual.toFixed(2)}</p>
+                 </div>
+             `;
 
-    // Show contributor details - only show those who contributed
-    let amarContrib = fields.AmarContribution || 0;
-    let priyaContrib = fields.PriyaContribution || 0;
-    let adjustmentNote = '';
+        // Show contributor details - only show those who contributed
+        let amarContrib = fields.AmarContribution || 0;
+        let priyaContrib = fields.PriyaContribution || 0;
+        let adjustmentNote = '';
 
-    // For mortgage expenses, calculate adjusted contributions based on Priya's mortgage payments
-    if (fields.Category === 'Mortgage' && amarContrib > 0) {
-        // Get Priya's mortgage contributions for the same month/year
-        const expenseYear = String(fields.Year);
-        const expenseMonth = fields.Month;
+        // For mortgage expenses, calculate adjusted contributions based on Priya's mortgage payments
+        if (fields.Category === 'Mortgage' && amarContrib > 0) {
+            // Get Priya's mortgage contributions for the same month/year
+            const expenseYear = String(fields.Year);
+            const expenseMonth = fields.Month;
 
-        const priyaMortgagePayments = allPayments
-            .filter(p =>
-                p.fields.Person === 'Priya' &&
-                p.fields.PaymentType === 'PriyaMortgageContribution' &&
-                String(p.fields.Year) === expenseYear &&
-                p.fields.Month === expenseMonth
-            )
-            .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
-
-        if (priyaMortgagePayments > 0) {
-            // Distribute Priya's mortgage payment proportionally across all mortgage expenses
-            const totalMortgageExpenses = allExpenses
-                .filter(exp =>
-                    exp.fields.Category === 'Mortgage' &&
-                    String(exp.fields.Year) === expenseYear &&
-                    exp.fields.Month === expenseMonth
+            const priyaMortgagePayments = allPayments
+                .filter(p =>
+                    p.fields.Person === 'Priya' &&
+                    p.fields.PaymentType === 'PriyaMortgageContribution' &&
+                    String(p.fields.Year) === expenseYear &&
+                    p.fields.Month === expenseMonth
                 )
-                .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+                .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
 
-            // Calculate this expense's share of the adjustment
-            const adjustmentRatio = totalMortgageExpenses > 0 ? amarContrib / totalMortgageExpenses : 0;
-            const thisExpenseAdjustment = priyaMortgagePayments * adjustmentRatio;
+            if (priyaMortgagePayments > 0) {
+                // Distribute Priya's mortgage payment proportionally across all mortgage expenses
+                const totalMortgageExpenses = allExpenses
+                    .filter(exp =>
+                        exp.fields.Category === 'Mortgage' &&
+                        String(exp.fields.Year) === expenseYear &&
+                        exp.fields.Month === expenseMonth
+                    )
+                    .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
 
-            amarContrib = Math.max(0, amarContrib - thisExpenseAdjustment);
-            priyaContrib = priyaContrib + thisExpenseAdjustment;
-            adjustmentNote = `<p class="text-xs text-blue-600 mt-1"><i class="fas fa-info-circle mr-1"></i>Adjusted for Priya's mortgage contribution</p>`;
-        }
-    }
+                // Calculate this expense's share of the adjustment
+                const adjustmentRatio = totalMortgageExpenses > 0 ? amarContrib / totalMortgageExpenses : 0;
+                const thisExpenseAdjustment = priyaMortgagePayments * adjustmentRatio;
 
-    const hasAmarContrib = amarContrib > 0;
-    const hasPriyaContrib = priyaContrib > 0;
-
-    if (hasAmarContrib || hasPriyaContrib) {
-        const gridCols = (hasAmarContrib && hasPriyaContrib) ? 'grid-cols-2' : 'grid-cols-1';
-        detailHTML += `<div class="grid ${gridCols} gap-4 mb-4">`;
-
-        if (hasAmarContrib) {
-            detailHTML += `
-                    <div class="bg-blue-50 p-4 rounded border-l-4 border-blue-500">
-                        <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Amar's Contribution</p>
-                        <p class="text-2xl font-bold text-blue-600">$${amarContrib.toFixed(2)}</p>
-                        ${adjustmentNote}
-                    </div>
-                `;
+                amarContrib = Math.max(0, amarContrib - thisExpenseAdjustment);
+                priyaContrib = priyaContrib + thisExpenseAdjustment;
+                adjustmentNote = `<p class="text-xs text-blue-600 mt-1"><i class="fas fa-info-circle mr-1"></i>Adjusted for Priya's mortgage contribution</p>`;
+            }
         }
 
-        if (hasPriyaContrib) {
-            detailHTML += `
-                    <div class="bg-pink-50 p-4 rounded border-l-4 border-pink-500">
-                        <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Priya's Contribution</p>
-                        <p class="text-2xl font-bold text-pink-600">$${priyaContrib.toFixed(2)}</p>
-                        ${adjustmentNote}
-                    </div>
-                `;
-        }
+        const hasAmarContrib = amarContrib > 0;
+        const hasPriyaContrib = priyaContrib > 0;
 
-        detailHTML += `</div>`;
-    }
+        if (hasAmarContrib || hasPriyaContrib) {
+            const gridCols = (hasAmarContrib && hasPriyaContrib) ? 'grid-cols-2' : 'grid-cols-1';
+            detailHTML += `<div class="grid ${gridCols} gap-4 mb-4">`;
 
-    if (fields.Tags && fields.Tags.trim()) {
-        const tagsArray = fields.Tags.split(',').map(t => t.trim()).filter(t => t);
-        if (tagsArray.length > 0) {
-            detailHTML += `
-                    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
-                        <p class="text-xs text-gray-500 mb-2"><i class="fas fa-tags mr-1"></i>Tags</p>
-                        <div class="flex flex-wrap gap-2">
-                            ${tagsArray.map(tag => `
-                                <span class="inline-block px-3 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full text-xs font-medium">
-                                    <i class="fas fa-tag mr-1"></i>${tag}
-                                </span>
-                            `).join('')}
+            if (hasAmarContrib) {
+                detailHTML += `
+                        <div class="bg-blue-50 p-4 rounded border-l-4 border-blue-500">
+                            <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Amar's Contribution</p>
+                            <p class="text-2xl font-bold text-blue-600">$${amarContrib.toFixed(2)}</p>
+                            ${adjustmentNote}
                         </div>
-                    </div>
-                `;
+                    `;
+            }
+
+            if (hasPriyaContrib) {
+                detailHTML += `
+                        <div class="bg-pink-50 p-4 rounded border-l-4 border-pink-500">
+                            <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Priya's Contribution</p>
+                            <p class="text-2xl font-bold text-pink-600">$${priyaContrib.toFixed(2)}</p>
+                            ${adjustmentNote}
+                        </div>
+                    `;
+            }
+
+            detailHTML += `</div>`;
         }
-    }
 
-    if (fields.Notes && fields.Notes.trim()) {
-        detailHTML += `
-                 <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-                     <p class="text-xs text-gray-500 mb-1"><i class="fas fa-sticky-note mr-1"></i>Notes</p>
-                     <p class="text-gray-700">${fields.Notes}</p>
-                 </div>
-             `;
-    }
+        if (fields.Tags && fields.Tags.trim()) {
+            const tagsArray = fields.Tags.split(',').map(t => t.trim()).filter(t => t);
+            if (tagsArray.length > 0) {
+                detailHTML += `
+                        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+                            <p class="text-xs text-gray-500 mb-2"><i class="fas fa-tags mr-1"></i>Tags</p>
+                            <div class="flex flex-wrap gap-2">
+                                ${tagsArray.map(tag => `
+                                    <span class="inline-block px-3 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full text-xs font-medium">
+                                        <i class="fas fa-tag mr-1"></i>${tag}
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+            }
+        }
 
-    if (fields.has_receipt) {
-        detailHTML += `
-                 <div class="bg-gray-50 p-4 rounded mb-4">
-                     <p class="text-xs text-gray-500 mb-2"><i class="fas fa-receipt mr-1"></i>Receipt</p>
-                     <button onclick="viewReceiptFromExpense('${currentExpenseIdForDetail}');" class="btn-primary">
-                         <i class="fas fa-image mr-2"></i>View Receipt
-                     </button>
-                 </div>
-             `;
-    }
+        if (fields.Notes && fields.Notes.trim()) {
+            detailHTML += `
+                     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                         <p class="text-xs text-gray-500 mb-1"><i class="fas fa-sticky-note mr-1"></i>Notes</p>
+                         <p class="text-gray-700">${fields.Notes}</p>
+                     </div>
+                 `;
+        }
+
+        if (fields.has_receipt) {
+            detailHTML += `
+                     <div class="bg-gray-50 p-4 rounded mb-4">
+                         <p class="text-xs text-gray-500 mb-2"><i class="fas fa-receipt mr-1"></i>Receipt</p>
+                         <button onclick="viewReceiptFromExpense('${currentExpenseIdForDetail}');" class="btn-primary">
+                             <i class="fas fa-image mr-2"></i>View Receipt
+                         </button>
+                     </div>
+                 `;
+        }
 
     document.getElementById('detailsTab').innerHTML = detailHTML;
 }
@@ -1865,7 +1865,7 @@ function loadExpenseAnalyticsTab(expenseId) {
     const sortedExpenses = [...sameItemExpenses].sort((a, b) => {
         const dateA = new Date(a.fields.Year, a.fields.Month - 1);
         const dateB = new Date(b.fields.Year, b.fields.Month - 1);
-        return dateB - dateB;
+        return dateB - dateA;
     });
     
     // Frequency analysis
