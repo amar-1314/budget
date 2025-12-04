@@ -1472,7 +1472,7 @@ function viewExpenseDetails(expenseId) {
         const fields = expense.fields;
         const itemName = fields.Item || 'Unnamed';
         
-        // Create tabbed interface
+        // Create tabbed interface - use unique IDs to avoid conflict with main page tabs
         const tabHTML = `
             <div class="expense-detail-tabs" style="border-bottom: 2px solid #e5e7eb; margin-bottom: 24px;">
                 <button class="tab-button active" onclick="switchExpenseTab('details', '${expenseId}')">
@@ -1485,9 +1485,9 @@ function viewExpenseDetails(expenseId) {
                     <i class="fas fa-chart-bar mr-2"></i>Analytics
                 </button>
             </div>
-            <div id="detailsTab" class="tab-content"></div>
-            <div id="trendTab" class="tab-content" style="display: none;"></div>
-            <div id="analyticsTab" class="tab-content" style="display: none;"></div>
+            <div id="expenseDetailDetailsTab" class="tab-content"></div>
+            <div id="expenseDetailTrendTab" class="tab-content" style="display: none;"></div>
+            <div id="expenseDetailAnalyticsTab" class="tab-content" style="display: none;"></div>
         `;
         
         document.getElementById('expenseDetailContent').innerHTML = tabHTML;
@@ -1505,10 +1505,10 @@ function switchExpenseTab(tabName, expenseId) {
     buttons.forEach(btn => btn.classList.remove('active'));
     event.target.closest('.tab-button').classList.add('active');
     
-    // Get tab elements
-    const detailsTab = document.getElementById('detailsTab');
-    const trendTab = document.getElementById('trendTab');
-    const analyticsTab = document.getElementById('analyticsTab');
+    // Get tab elements - use unique IDs to avoid conflict with main page tabs
+    const detailsTab = document.getElementById('expenseDetailDetailsTab');
+    const trendTab = document.getElementById('expenseDetailTrendTab');
+    const analyticsTab = document.getElementById('expenseDetailAnalyticsTab');
     
     // Hide all tabs - use setAttribute to force style change
     detailsTab.style.display = 'none';
@@ -1706,7 +1706,7 @@ function loadExpenseDetailsTab(expenseId) {
                  `;
         }
 
-    document.getElementById('detailsTab').innerHTML = detailHTML;
+    document.getElementById('expenseDetailDetailsTab').innerHTML = detailHTML;
 }
 
 function loadExpenseTrendTab(expenseId) {
@@ -1721,7 +1721,7 @@ function loadExpenseTrendTab(expenseId) {
     );
     
     if (sameItemExpenses.length === 0) {
-        document.getElementById('trendTab').innerHTML = `
+        document.getElementById('expenseDetailTrendTab').innerHTML = `
             <div class="text-center py-12 text-gray-400">
                 <i class="fas fa-chart-line text-4xl mb-3"></i>
                 <p>No trend data available for this expense</p>
@@ -1816,7 +1816,7 @@ function loadExpenseTrendTab(expenseId) {
         </div>
     `;
     
-    document.getElementById('trendTab').innerHTML = trendHTML;
+    document.getElementById('expenseDetailTrendTab').innerHTML = trendHTML;
     
     // Create chart
     setTimeout(() => {
@@ -1898,7 +1898,7 @@ function loadExpenseAnalyticsTab(expenseId) {
     console.log('📈 Found', sameItemExpenses.length, 'matching expenses');
     
     if (sameItemExpenses.length === 0) {
-        document.getElementById('analyticsTab').innerHTML = `
+        document.getElementById('expenseDetailAnalyticsTab').innerHTML = `
             <div class="text-center py-12 text-gray-400">
                 <i class="fas fa-chart-bar text-4xl mb-3"></i>
                 <p>No analytics data available for this expense</p>
@@ -2143,7 +2143,7 @@ function loadExpenseAnalyticsTab(expenseId) {
     `;
     
     console.log('✅ Setting analytics HTML, length:', analyticsHTML.length);
-    const analyticsTabElement = document.getElementById('analyticsTab');
+    const analyticsTabElement = document.getElementById('expenseDetailAnalyticsTab');
     if (analyticsTabElement) {
         analyticsTabElement.innerHTML = analyticsHTML;
         console.log('✅ Analytics tab updated successfully');
