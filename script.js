@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-04T20:43:49Z'; // Auto-updated on deployment
-const APP_VERSION = '25.49.4'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-04T20:48:42Z'; // Auto-updated on deployment
+const APP_VERSION = '25.49.5'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -1446,8 +1446,15 @@ function changePage(direction) {
 }
 
 function viewExpenseDetails(expenseId) {
+    console.log('🔍 viewExpenseDetails CALLED with ID:', expenseId);
+    
     const expense = allExpenses.find(exp => exp.id === expenseId);
-    if (!expense) return;
+    if (!expense) {
+        console.error('❌ Expense not found for ID:', expenseId);
+        return;
+    }
+    
+    console.log('✅ Expense found:', expense.fields.Item);
 
     // Show loading spinner briefly
     document.getElementById('expenseDetailContent').innerHTML = `
@@ -1457,6 +1464,7 @@ function viewExpenseDetails(expenseId) {
                 </div>
             `;
     document.getElementById('expenseDetailModal').classList.add('active');
+    console.log('✅ Modal opened');
 
     // Use setTimeout to allow modal animation to start
     setTimeout(() => {
@@ -1490,6 +1498,8 @@ function viewExpenseDetails(expenseId) {
 }
 
 function switchExpenseTab(tabName, expenseId) {
+    console.log('🔄 switchExpenseTab CALLED - Tab:', tabName, 'ID:', expenseId);
+    
     // Update tab buttons
     const buttons = document.querySelectorAll('#expenseDetailModal .tab-button');
     buttons.forEach(btn => btn.classList.remove('active'));
@@ -1502,16 +1512,19 @@ function switchExpenseTab(tabName, expenseId) {
     
     // Show selected tab
     if (tabName === 'details') {
+        console.log('📄 Loading Details tab');
         document.getElementById('detailsTab').style.display = 'block';
         if (!document.getElementById('detailsTab').innerHTML) {
             loadExpenseDetailsTab(expenseId);
         }
     } else if (tabName === 'trend') {
+        console.log('📈 Loading Trend tab');
         document.getElementById('trendTab').style.display = 'block';
         if (!document.getElementById('trendTab').innerHTML) {
             loadExpenseTrendTab(expenseId);
         }
     } else if (tabName === 'analytics') {
+        console.log('📊 Loading Analytics tab');
         document.getElementById('analyticsTab').style.display = 'block';
         if (!document.getElementById('analyticsTab').innerHTML) {
             loadExpenseAnalyticsTab(expenseId);
@@ -1523,7 +1536,7 @@ function loadExpenseDetailsTab(expenseId) {
     const expense = allExpenses.find(exp => exp.id === expenseId);
     if (!expense) return;
     
-    const fields = expense.fields;
+        const fields = expense.fields;
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
         const actual = fields.Actual || 0;

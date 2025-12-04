@@ -59,6 +59,12 @@ sed -i.bak "s/const BUILD_TIMESTAMP = '[^']*';/const BUILD_TIMESTAMP = '$TIMESTA
 rm service-worker.js.bak 2>/dev/null && \
 echo "✅ Updated service-worker.js"
 
+# Update index.html - cache-busting query parameters
+sed -i.bak "s/script\.js?v=[0-9.]\+/script.js?v=$VERSION/" index.html && \
+sed -i.bak "s/style\.css?v=[0-9.]\+/style.css?v=$VERSION/" index.html && \
+rm index.html.bak 2>/dev/null && \
+echo "✅ Updated index.html cache-busting parameters"
+
 echo ""
 echo "=================================================="
 echo "🎉 Version updated to: v$VERSION"
