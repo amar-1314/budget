@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-04T20:58:22Z'; // Auto-updated on deployment
-const APP_VERSION = '25.49.8'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-04T21:05:31Z'; // Auto-updated on deployment
+const APP_VERSION = '25.49.9'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -1505,10 +1505,18 @@ function switchExpenseTab(tabName, expenseId) {
     buttons.forEach(btn => btn.classList.remove('active'));
     event.target.closest('.tab-button').classList.add('active');
     
-    // Hide all tabs
-    document.getElementById('detailsTab').style.display = 'none';
-    document.getElementById('trendTab').style.display = 'none';
-    document.getElementById('analyticsTab').style.display = 'none';
+    // Get tab elements
+    const detailsTab = document.getElementById('detailsTab');
+    const trendTab = document.getElementById('trendTab');
+    const analyticsTab = document.getElementById('analyticsTab');
+    
+    // Hide all tabs - use setAttribute to force style change
+    detailsTab.style.display = 'none';
+    detailsTab.setAttribute('style', 'display: none;');
+    trendTab.style.display = 'none';
+    trendTab.setAttribute('style', 'display: none;');
+    analyticsTab.style.display = 'none';
+    analyticsTab.setAttribute('style', 'display: none;');
     
     // Reset modal scroll to top when switching tabs
     const modalContent = document.querySelector('#expenseDetailModal .modal-content');
@@ -1519,8 +1527,9 @@ function switchExpenseTab(tabName, expenseId) {
     // Show selected tab
     if (tabName === 'details') {
         console.log('📄 Loading Details tab');
-        const detailsTab = document.getElementById('detailsTab');
         detailsTab.style.display = 'block';
+        detailsTab.setAttribute('style', 'display: block;');
+        console.log('Details tab display:', detailsTab.style.display);
         if (!detailsTab.innerHTML.trim()) {
             loadExpenseDetailsTab(expenseId);
         } else {
@@ -1528,8 +1537,9 @@ function switchExpenseTab(tabName, expenseId) {
         }
     } else if (tabName === 'trend') {
         console.log('📈 Loading Trend tab');
-        const trendTab = document.getElementById('trendTab');
         trendTab.style.display = 'block';
+        trendTab.setAttribute('style', 'display: block;');
+        console.log('Trend tab display:', trendTab.style.display);
         if (!trendTab.innerHTML.trim()) {
             loadExpenseTrendTab(expenseId);
         } else {
@@ -1537,11 +1547,19 @@ function switchExpenseTab(tabName, expenseId) {
         }
     } else if (tabName === 'analytics') {
         console.log('📊 Loading Analytics tab');
-        const analyticsTab = document.getElementById('analyticsTab');
         analyticsTab.style.display = 'block';
+        analyticsTab.setAttribute('style', 'display: block;');
+        console.log('Analytics tab display BEFORE content:', analyticsTab.style.display);
         
         // Always reload analytics to get fresh data
         loadExpenseAnalyticsTab(expenseId);
+        
+        // Verify after content loads
+        setTimeout(() => {
+            console.log('Analytics tab display AFTER content:', analyticsTab.style.display);
+            console.log('Analytics tab computed style:', window.getComputedStyle(analyticsTab).display);
+            console.log('Analytics tab visible?', analyticsTab.offsetHeight > 0);
+        }, 100);
     }
 }
 
