@@ -1462,146 +1462,632 @@ function viewExpenseDetails(expenseId) {
     setTimeout(() => {
         currentExpenseIdForDetail = expenseId;
         const fields = expense.fields;
-        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const itemName = fields.Item || 'Unnamed';
+        
+        // Create tabbed interface
+        const tabHTML = `
+            <div class="expense-detail-tabs" style="border-bottom: 2px solid #e5e7eb; margin-bottom: 24px;">
+                <button class="tab-button active" onclick="switchExpenseTab('details', '${expenseId}')">
+                    <i class="fas fa-info-circle mr-2"></i>Details
+                </button>
+                <button class="tab-button" onclick="switchExpenseTab('trend', '${expenseId}')">
+                    <i class="fas fa-chart-line mr-2"></i>Trend
+                </button>
+                <button class="tab-button" onclick="switchExpenseTab('analytics', '${expenseId}')">
+                    <i class="fas fa-chart-bar mr-2"></i>Analytics
+                </button>
+            </div>
+            <div id="detailsTab" class="tab-content"></div>
+            <div id="trendTab" class="tab-content" style="display: none;"></div>
+            <div id="analyticsTab" class="tab-content" style="display: none;"></div>
+        `;
+        
+        document.getElementById('expenseDetailContent').innerHTML = tabHTML;
+        
+        // Load details tab content
+        loadExpenseDetailsTab(expenseId);
+    }, 50); // Small delay for visual feedback
+}
 
-        const actual = fields.Actual || 0;
-        const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
-        const day = fields.Day || 1;
-        const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
+function switchExpenseTab(tabName, expenseId) {
+    // Update tab buttons
+    const buttons = document.querySelectorAll('#expenseDetailModal .tab-button');
+    buttons.forEach(btn => btn.classList.remove('active'));
+    event.target.closest('.tab-button').classList.add('active');
+    
+    // Hide all tabs
+    document.getElementById('detailsTab').style.display = 'none';
+    document.getElementById('trendTab').style.display = 'none';
+    document.getElementById('analyticsTab').style.display = 'none';
+    
+    // Show selected tab
+    if (tabName === 'details') {
+        document.getElementById('detailsTab').style.display = 'block';
+        if (!document.getElementById('detailsTab').innerHTML) {
+            loadExpenseDetailsTab(expenseId);
+        }
+    } else if (tabName === 'trend') {
+        document.getElementById('trendTab').style.display = 'block';
+        if (!document.getElementById('trendTab').innerHTML) {
+            loadExpenseTrendTab(expenseId);
+        }
+    } else if (tabName === 'analytics') {
+        document.getElementById('analyticsTab').style.display = 'block';
+        if (!document.getElementById('analyticsTab').innerHTML) {
+            loadExpenseAnalyticsTab(expenseId);
+        }
+    }
+}
 
-        let detailHTML = `
-                 <div class="bg-purple-50 border-l-4 border-purple-500 p-4 mb-4">
-                     <h3 class="text-xl font-bold text-gray-800 mb-2">${fields.Item || 'Unnamed'}</h3>
-                     <p class="text-sm text-gray-600"><i class="fas fa-calendar mr-2"></i>${dateDisplay}</p>
+function loadExpenseDetailsTab(expenseId) {
+    const expense = allExpenses.find(exp => exp.id === expenseId);
+    if (!expense) return;
+    
+    const fields = expense.fields;
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const actual = fields.Actual || 0;
+    const monthDisplay = fields.Month ? monthNames[parseInt(fields.Month) - 1] : 'N/A';
+    const day = fields.Day || 1;
+    const dateDisplay = `${monthDisplay} ${day}, ${fields.Year || 'N/A'}`;
+
+    let detailHTML = `
+             <div class="bg-purple-50 border-l-4 border-purple-500 p-4 mb-4">
+                 <h3 class="text-xl font-bold text-gray-800 mb-2">${fields.Item || 'Unnamed'}</h3>
+                 <p class="text-sm text-gray-600"><i class="fas fa-calendar mr-2"></i>${dateDisplay}</p>
+             </div>
+             
+             <div class="grid grid-cols-2 gap-4 mb-4">
+                 <div class="bg-gray-50 p-4 rounded">
+                     <p class="text-xs text-gray-500 mb-1">Category</p>
+                     <p class="font-semibold text-gray-800"><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">${fields.Category || 'N/A'}</span></p>
                  </div>
-                 
-                 <div class="grid grid-cols-2 gap-4 mb-4">
-                     <div class="bg-gray-50 p-4 rounded">
-                         <p class="text-xs text-gray-500 mb-1">Category</p>
-                         <p class="font-semibold text-gray-800"><span class="inline-block px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">${fields.Category || 'N/A'}</span></p>
-                     </div>
-                     <div class="bg-gray-50 p-4 rounded">
-                         <p class="text-xs text-gray-500 mb-1">LLC Account</p>
-                         <p class="font-semibold"><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></p>
-                     </div>
+                 <div class="bg-gray-50 p-4 rounded">
+                     <p class="text-xs text-gray-500 mb-1">LLC Account</p>
+                     <p class="font-semibold"><span class="badge ${fields.LLC === 'Yes' ? 'badge-llc' : 'badge-personal'}">${fields.LLC || 'No'}</span></p>
                  </div>
-                 
-                 <div class="bg-purple-50 p-4 rounded mb-4">
-                     <p class="text-xs text-gray-500 mb-1">Amount</p>
-                     <p class="text-3xl font-bold text-purple-600">$${actual.toFixed(2)}</p>
+             </div>
+             
+             <div class="bg-purple-50 p-4 rounded mb-4">
+                 <p class="text-xs text-gray-500 mb-1">Amount</p>
+                 <p class="text-3xl font-bold text-purple-600">$${actual.toFixed(2)}</p>
+             </div>
+         `;
+
+    // Show contributor details - only show those who contributed
+    let amarContrib = fields.AmarContribution || 0;
+    let priyaContrib = fields.PriyaContribution || 0;
+    let adjustmentNote = '';
+
+    // For mortgage expenses, calculate adjusted contributions based on Priya's mortgage payments
+    if (fields.Category === 'Mortgage' && amarContrib > 0) {
+        // Get Priya's mortgage contributions for the same month/year
+        const expenseYear = String(fields.Year);
+        const expenseMonth = fields.Month;
+
+        const priyaMortgagePayments = allPayments
+            .filter(p =>
+                p.fields.Person === 'Priya' &&
+                p.fields.PaymentType === 'PriyaMortgageContribution' &&
+                String(p.fields.Year) === expenseYear &&
+                p.fields.Month === expenseMonth
+            )
+            .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+
+        if (priyaMortgagePayments > 0) {
+            // Distribute Priya's mortgage payment proportionally across all mortgage expenses
+            const totalMortgageExpenses = allExpenses
+                .filter(exp =>
+                    exp.fields.Category === 'Mortgage' &&
+                    String(exp.fields.Year) === expenseYear &&
+                    exp.fields.Month === expenseMonth
+                )
+                .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
+
+            // Calculate this expense's share of the adjustment
+            const adjustmentRatio = totalMortgageExpenses > 0 ? amarContrib / totalMortgageExpenses : 0;
+            const thisExpenseAdjustment = priyaMortgagePayments * adjustmentRatio;
+
+            amarContrib = Math.max(0, amarContrib - thisExpenseAdjustment);
+            priyaContrib = priyaContrib + thisExpenseAdjustment;
+            adjustmentNote = `<p class="text-xs text-blue-600 mt-1"><i class="fas fa-info-circle mr-1"></i>Adjusted for Priya's mortgage contribution</p>`;
+        }
+    }
+
+    const hasAmarContrib = amarContrib > 0;
+    const hasPriyaContrib = priyaContrib > 0;
+
+    if (hasAmarContrib || hasPriyaContrib) {
+        const gridCols = (hasAmarContrib && hasPriyaContrib) ? 'grid-cols-2' : 'grid-cols-1';
+        detailHTML += `<div class="grid ${gridCols} gap-4 mb-4">`;
+
+        if (hasAmarContrib) {
+            detailHTML += `
+                    <div class="bg-blue-50 p-4 rounded border-l-4 border-blue-500">
+                        <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Amar's Contribution</p>
+                        <p class="text-2xl font-bold text-blue-600">$${amarContrib.toFixed(2)}</p>
+                        ${adjustmentNote}
+                    </div>
+                `;
+        }
+
+        if (hasPriyaContrib) {
+            detailHTML += `
+                    <div class="bg-pink-50 p-4 rounded border-l-4 border-pink-500">
+                        <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Priya's Contribution</p>
+                        <p class="text-2xl font-bold text-pink-600">$${priyaContrib.toFixed(2)}</p>
+                        ${adjustmentNote}
+                    </div>
+                `;
+        }
+
+        detailHTML += `</div>`;
+    }
+
+    if (fields.Tags && fields.Tags.trim()) {
+        const tagsArray = fields.Tags.split(',').map(t => t.trim()).filter(t => t);
+        if (tagsArray.length > 0) {
+            detailHTML += `
+                    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
+                        <p class="text-xs text-gray-500 mb-2"><i class="fas fa-tags mr-1"></i>Tags</p>
+                        <div class="flex flex-wrap gap-2">
+                            ${tagsArray.map(tag => `
+                                <span class="inline-block px-3 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full text-xs font-medium">
+                                    <i class="fas fa-tag mr-1"></i>${tag}
+                                </span>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+        }
+    }
+
+    if (fields.Notes && fields.Notes.trim()) {
+        detailHTML += `
+                 <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                     <p class="text-xs text-gray-500 mb-1"><i class="fas fa-sticky-note mr-1"></i>Notes</p>
+                     <p class="text-gray-700">${fields.Notes}</p>
                  </div>
              `;
+    }
 
-        // Show contributor details - only show those who contributed
-        let amarContrib = fields.AmarContribution || 0;
-        let priyaContrib = fields.PriyaContribution || 0;
-        let adjustmentNote = '';
+    if (fields.has_receipt) {
+        detailHTML += `
+                 <div class="bg-gray-50 p-4 rounded mb-4">
+                     <p class="text-xs text-gray-500 mb-2"><i class="fas fa-receipt mr-1"></i>Receipt</p>
+                     <button onclick="viewReceiptFromExpense('${currentExpenseIdForDetail}');" class="btn-primary">
+                         <i class="fas fa-image mr-2"></i>View Receipt
+                     </button>
+                 </div>
+             `;
+    }
 
-        // For mortgage expenses, calculate adjusted contributions based on Priya's mortgage payments
-        if (fields.Category === 'Mortgage' && amarContrib > 0) {
-            // Get Priya's mortgage contributions for the same month/year
-            const expenseYear = String(fields.Year);
-            const expenseMonth = fields.Month;
+    document.getElementById('detailsTab').innerHTML = detailHTML;
+}
 
-            const priyaMortgagePayments = allPayments
-                .filter(p =>
-                    p.fields.Person === 'Priya' &&
-                    p.fields.PaymentType === 'PriyaMortgageContribution' &&
-                    String(p.fields.Year) === expenseYear &&
-                    p.fields.Month === expenseMonth
-                )
-                .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
-
-            if (priyaMortgagePayments > 0) {
-                // Distribute Priya's mortgage payment proportionally across all mortgage expenses
-                const totalMortgageExpenses = allExpenses
-                    .filter(exp =>
-                        exp.fields.Category === 'Mortgage' &&
-                        String(exp.fields.Year) === expenseYear &&
-                        exp.fields.Month === expenseMonth
-                    )
-                    .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
-
-                // Calculate this expense's share of the adjustment
-                const adjustmentRatio = totalMortgageExpenses > 0 ? amarContrib / totalMortgageExpenses : 0;
-                const thisExpenseAdjustment = priyaMortgagePayments * adjustmentRatio;
-
-                amarContrib = Math.max(0, amarContrib - thisExpenseAdjustment);
-                priyaContrib = priyaContrib + thisExpenseAdjustment;
-                adjustmentNote = `<p class="text-xs text-blue-600 mt-1"><i class="fas fa-info-circle mr-1"></i>Adjusted for Priya's mortgage contribution</p>`;
-            }
+function loadExpenseTrendTab(expenseId) {
+    const expense = allExpenses.find(exp => exp.id === expenseId);
+    if (!expense) return;
+    
+    const itemName = expense.fields.Item || 'Unnamed';
+    
+    // Get all expenses with the same item name
+    const sameItemExpenses = allExpenses.filter(exp => 
+        (exp.fields.Item || 'Unnamed').toLowerCase() === itemName.toLowerCase()
+    );
+    
+    if (sameItemExpenses.length === 0) {
+        document.getElementById('trendTab').innerHTML = `
+            <div class="text-center py-12 text-gray-400">
+                <i class="fas fa-chart-line text-4xl mb-3"></i>
+                <p>No trend data available for this expense</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Group by month/year and sum amounts
+    const monthlyData = {};
+    sameItemExpenses.forEach(exp => {
+        const monthKey = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+        if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = {
+                total: 0,
+                count: 0,
+                year: exp.fields.Year,
+                month: exp.fields.Month
+            };
         }
-
-        const hasAmarContrib = amarContrib > 0;
-        const hasPriyaContrib = priyaContrib > 0;
-
-        if (hasAmarContrib || hasPriyaContrib) {
-            const gridCols = (hasAmarContrib && hasPriyaContrib) ? 'grid-cols-2' : 'grid-cols-1';
-            detailHTML += `<div class="grid ${gridCols} gap-4 mb-4">`;
-
-            if (hasAmarContrib) {
-                detailHTML += `
-                        <div class="bg-blue-50 p-4 rounded border-l-4 border-blue-500">
-                            <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Amar's Contribution</p>
-                            <p class="text-2xl font-bold text-blue-600">$${amarContrib.toFixed(2)}</p>
-                            ${adjustmentNote}
-                        </div>
-                    `;
-            }
-
-            if (hasPriyaContrib) {
-                detailHTML += `
-                        <div class="bg-pink-50 p-4 rounded border-l-4 border-pink-500">
-                            <p class="text-xs text-gray-500 mb-1"><i class="fas fa-user mr-1"></i>Priya's Contribution</p>
-                            <p class="text-2xl font-bold text-pink-600">$${priyaContrib.toFixed(2)}</p>
-                            ${adjustmentNote}
-                        </div>
-                    `;
-            }
-
-            detailHTML += `</div>`;
-        }
-
-        if (fields.Tags && fields.Tags.trim()) {
-            const tagsArray = fields.Tags.split(',').map(t => t.trim()).filter(t => t);
-            if (tagsArray.length > 0) {
-                detailHTML += `
-                        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4">
-                            <p class="text-xs text-gray-500 mb-2"><i class="fas fa-tags mr-1"></i>Tags</p>
-                            <div class="flex flex-wrap gap-2">
-                                ${tagsArray.map(tag => `
-                                    <span class="inline-block px-3 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full text-xs font-medium">
-                                        <i class="fas fa-tag mr-1"></i>${tag}
-                                    </span>
-                                `).join('')}
+        monthlyData[monthKey].total += (exp.fields.Actual || 0);
+        monthlyData[monthKey].count += 1;
+    });
+    
+    // Sort by date
+    const sortedMonths = Object.keys(monthlyData).sort();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Calculate stats
+    const amounts = sortedMonths.map(key => monthlyData[key].total);
+    const avgAmount = amounts.reduce((sum, val) => sum + val, 0) / amounts.length;
+    const maxAmount = Math.max(...amounts);
+    const minAmount = Math.min(...amounts);
+    const totalSpent = amounts.reduce((sum, val) => sum + val, 0);
+    
+    let trendHTML = `
+        <div class="mb-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-chart-line mr-2 text-purple-600"></i>Trend for "${itemName}"
+            </h3>
+            <p class="text-sm text-gray-600">Showing combined expenses over ${sortedMonths.length} month(s)</p>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200">
+                <p class="text-xs text-blue-600 font-semibold mb-1">AVERAGE</p>
+                <p class="text-2xl font-bold text-blue-700">$${avgAmount.toFixed(2)}</p>
+            </div>
+            <div class="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg border border-green-200">
+                <p class="text-xs text-green-600 font-semibold mb-1">TOTAL</p>
+                <p class="text-2xl font-bold text-green-700">$${totalSpent.toFixed(2)}</p>
+            </div>
+            <div class="bg-gradient-to-br from-red-50 to-red-100 p-4 rounded-lg border border-red-200">
+                <p class="text-xs text-red-600 font-semibold mb-1">HIGHEST</p>
+                <p class="text-2xl font-bold text-red-700">$${maxAmount.toFixed(2)}</p>
+            </div>
+            <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg border border-purple-200">
+                <p class="text-xs text-purple-600 font-semibold mb-1">LOWEST</p>
+                <p class="text-2xl font-bold text-purple-700">$${minAmount.toFixed(2)}</p>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <canvas id="expenseTrendChart" style="max-height: 300px;"></canvas>
+        </div>
+        
+        <div class="mt-6">
+            <h4 class="text-md font-bold text-gray-800 mb-3">Monthly Breakdown</h4>
+            <div class="space-y-2">
+                ${sortedMonths.map(key => {
+                    const data = monthlyData[key];
+                    const monthLabel = `${monthNames[parseInt(data.month) - 1]} ${data.year}`;
+                    const percentage = ((data.total / maxAmount) * 100).toFixed(0);
+                    return `
+                        <div class="bg-gray-50 p-3 rounded">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="font-semibold text-gray-700">${monthLabel}</span>
+                                <span class="text-purple-600 font-bold">$${data.total.toFixed(2)}</span>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs text-gray-500">
+                                <span>${data.count} expense${data.count > 1 ? 's' : ''}</span>
+                                <span>•</span>
+                                <span>Avg: $${(data.total / data.count).toFixed(2)}</span>
+                            </div>
+                            <div class="progress-bar mt-2">
+                                <div class="progress-fill" style="width: ${percentage}%"></div>
                             </div>
                         </div>
                     `;
-            }
+                }).join('')}
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('trendTab').innerHTML = trendHTML;
+    
+    // Create chart
+    setTimeout(() => {
+        const ctx = document.getElementById('expenseTrendChart');
+        if (ctx && typeof Chart !== 'undefined') {
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: sortedMonths.map(key => {
+                        const data = monthlyData[key];
+                        return `${monthNames[parseInt(data.month) - 1]} ${data.year}`;
+                    }),
+                    datasets: [{
+                        label: 'Amount Spent',
+                        data: amounts,
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#667eea',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            padding: 12,
+                            titleFont: { size: 14 },
+                            bodyFont: { size: 13 },
+                            callbacks: {
+                                label: function(context) {
+                                    return `Amount: $${context.parsed.y.toFixed(2)}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(0);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
+    }, 100);
+}
 
-        if (fields.Notes && fields.Notes.trim()) {
-            detailHTML += `
-                     <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-                         <p class="text-xs text-gray-500 mb-1"><i class="fas fa-sticky-note mr-1"></i>Notes</p>
-                         <p class="text-gray-700">${fields.Notes}</p>
-                     </div>
-                 `;
+function loadExpenseAnalyticsTab(expenseId) {
+    const expense = allExpenses.find(exp => exp.id === expenseId);
+    if (!expense) return;
+    
+    const itemName = expense.fields.Item || 'Unnamed';
+    const category = expense.fields.Category || 'Uncategorized';
+    
+    // Get all expenses with the same item name
+    const sameItemExpenses = allExpenses.filter(exp => 
+        (exp.fields.Item || 'Unnamed').toLowerCase() === itemName.toLowerCase()
+    );
+    
+    if (sameItemExpenses.length === 0) {
+        document.getElementById('analyticsTab').innerHTML = `
+            <div class="text-center py-12 text-gray-400">
+                <i class="fas fa-chart-bar text-4xl mb-3"></i>
+                <p>No analytics data available for this expense</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Calculate analytics
+    const amounts = sameItemExpenses.map(exp => exp.fields.Actual || 0);
+    const totalSpent = amounts.reduce((sum, val) => sum + val, 0);
+    const avgAmount = totalSpent / amounts.length;
+    const maxAmount = Math.max(...amounts);
+    const minAmount = Math.min(...amounts);
+    
+    // Calculate trend (comparing last 3 months vs previous 3 months if applicable)
+    const sortedExpenses = [...sameItemExpenses].sort((a, b) => {
+        const dateA = new Date(a.fields.Year, a.fields.Month - 1);
+        const dateB = new Date(b.fields.Year, b.fields.Month - 1);
+        return dateB - dateB;
+    });
+    
+    // Frequency analysis
+    const monthlyFrequency = {};
+    sameItemExpenses.forEach(exp => {
+        const monthKey = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+        monthlyFrequency[monthKey] = (monthlyFrequency[monthKey] || 0) + 1;
+    });
+    const avgFrequency = Object.values(monthlyFrequency).reduce((sum, val) => sum + val, 0) / Object.keys(monthlyFrequency).length;
+    
+    // Category spending analysis
+    const categoryExpenses = allExpenses.filter(exp => exp.fields.Category === category);
+    const categoryTotal = categoryExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+    const percentageOfCategory = categoryTotal > 0 ? (totalSpent / categoryTotal) * 100 : 0;
+    
+    // LLC analysis
+    const llcExpenses = sameItemExpenses.filter(exp => exp.fields.LLC === 'Yes');
+    const llcTotal = llcExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+    const llcPercentage = totalSpent > 0 ? (llcTotal / totalSpent) * 100 : 0;
+    
+    // Volatility (standard deviation)
+    const variance = amounts.reduce((sum, val) => sum + Math.pow(val - avgAmount, 2), 0) / amounts.length;
+    const stdDev = Math.sqrt(variance);
+    const volatility = (stdDev / avgAmount) * 100;
+    
+    // Generate insights
+    const insights = [];
+    
+    if (volatility > 30) {
+        insights.push({
+            type: 'warning',
+            icon: 'exclamation-triangle',
+            text: `High spending variability (${volatility.toFixed(0)}% volatility). Amounts vary significantly month-to-month.`
+        });
+    } else if (volatility < 15) {
+        insights.push({
+            type: 'success',
+            icon: 'check-circle',
+            text: `Consistent spending pattern (${volatility.toFixed(0)}% volatility). Amounts are relatively stable.`
+        });
+    }
+    
+    if (avgFrequency > 3) {
+        insights.push({
+            type: 'info',
+            icon: 'info-circle',
+            text: `Frequent expense: Averages ${avgFrequency.toFixed(1)} occurrences per month. Consider budgeting this as a recurring expense.`
+        });
+    }
+    
+    if (llcPercentage > 50) {
+        insights.push({
+            type: 'success',
+            icon: 'building',
+            text: `${llcPercentage.toFixed(0)}% of this expense is LLC-related. Good for tax deductions.`
+        });
+    }
+    
+    if (percentageOfCategory > 30) {
+        insights.push({
+            type: 'warning',
+            icon: 'chart-pie',
+            text: `This expense represents ${percentageOfCategory.toFixed(1)}% of your total "${category}" spending.`
+        });
+    }
+    
+    // Recent trend analysis
+    if (sortedExpenses.length >= 3) {
+        const recentThree = sortedExpenses.slice(0, 3);
+        const recentAvg = recentThree.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0) / 3;
+        const trendDiff = ((recentAvg - avgAmount) / avgAmount) * 100;
+        
+        if (Math.abs(trendDiff) > 15) {
+            const trendWord = trendDiff > 0 ? 'increasing' : 'decreasing';
+            const trendIcon = trendDiff > 0 ? 'arrow-up' : 'arrow-down';
+            const trendColor = trendDiff > 0 ? 'warning' : 'success';
+            insights.push({
+                type: trendColor,
+                icon: trendIcon,
+                text: `Recent trend ${trendWord}: Last 3 months average $${recentAvg.toFixed(2)} vs overall average $${avgAmount.toFixed(2)} (${Math.abs(trendDiff).toFixed(0)}% ${trendWord})`
+            });
         }
-
-        if (fields.has_receipt) {
-            detailHTML += `
-                     <div class="bg-gray-50 p-4 rounded mb-4">
-                         <p class="text-xs text-gray-500 mb-2"><i class="fas fa-receipt mr-1"></i>Receipt</p>
-                         <button onclick="viewReceiptFromExpense('${currentExpenseIdForDetail}');" class="btn-primary">
-                             <i class="fas fa-image mr-2"></i>View Receipt
-                         </button>
-                     </div>
-                 `;
-        }
-
-        document.getElementById('expenseDetailContent').innerHTML = detailHTML;
-    }, 50); // Small delay for visual feedback
+    }
+    
+    if (insights.length === 0) {
+        insights.push({
+            type: 'info',
+            icon: 'info-circle',
+            text: 'No significant patterns detected. Your spending on this item appears normal.'
+        });
+    }
+    
+    const analyticsHTML = `
+        <div class="mb-6">
+            <h3 class="text-xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-chart-bar mr-2 text-purple-600"></i>Analytics for "${itemName}"
+            </h3>
+            <p class="text-sm text-gray-600">Insights based on ${sameItemExpenses.length} expense(s)</p>
+        </div>
+        
+        <div class="space-y-4 mb-6">
+            <div class="bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-6 rounded-lg shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm opacity-90 mb-1">Total Spent on "${itemName}"</p>
+                        <p class="text-4xl font-bold">$${totalSpent.toFixed(2)}</p>
+                    </div>
+                    <div class="text-5xl opacity-30">
+                        <i class="fas fa-dollar-sign"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-white border-2 border-blue-200 p-4 rounded-lg">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fas fa-chart-line text-blue-600"></i>
+                    <p class="text-xs text-blue-600 font-semibold">AVERAGE</p>
+                </div>
+                <p class="text-xl font-bold text-gray-800">$${avgAmount.toFixed(2)}</p>
+                <p class="text-xs text-gray-500 mt-1">per occurrence</p>
+            </div>
+            
+            <div class="bg-white border-2 border-green-200 p-4 rounded-lg">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fas fa-calendar-check text-green-600"></i>
+                    <p class="text-xs text-green-600 font-semibold">FREQUENCY</p>
+                </div>
+                <p class="text-xl font-bold text-gray-800">${avgFrequency.toFixed(1)}x</p>
+                <p class="text-xs text-gray-500 mt-1">per month (avg)</p>
+            </div>
+            
+            <div class="bg-white border-2 border-orange-200 p-4 rounded-lg">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fas fa-chart-area text-orange-600"></i>
+                    <p class="text-xs text-orange-600 font-semibold">VOLATILITY</p>
+                </div>
+                <p class="text-xl font-bold text-gray-800">${volatility.toFixed(0)}%</p>
+                <p class="text-xs text-gray-500 mt-1">±$${stdDev.toFixed(2)}</p>
+            </div>
+            
+            <div class="bg-white border-2 border-purple-200 p-4 rounded-lg">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fas fa-percentage text-purple-600"></i>
+                    <p class="text-xs text-purple-600 font-semibold">CATEGORY %</p>
+                </div>
+                <p class="text-xl font-bold text-gray-800">${percentageOfCategory.toFixed(1)}%</p>
+                <p class="text-xs text-gray-500 mt-1">of ${category}</p>
+            </div>
+        </div>
+        
+        ${llcPercentage > 0 ? `
+        <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded mb-6">
+            <div class="flex items-start gap-3">
+                <i class="fas fa-building text-green-600 text-xl mt-1"></i>
+                <div>
+                    <p class="font-semibold text-green-800 mb-1">LLC Expense Analysis</p>
+                    <p class="text-sm text-green-700">${llcPercentage.toFixed(0)}% ($${llcTotal.toFixed(2)}) of this expense is LLC-related</p>
+                </div>
+            </div>
+        </div>
+        ` : ''}
+        
+        <div class="mb-4">
+            <h4 class="text-md font-bold text-gray-800 mb-3 flex items-center gap-2">
+                <i class="fas fa-lightbulb text-yellow-500"></i>
+                Key Insights
+            </h4>
+            <div class="space-y-3">
+                ${insights.map(insight => {
+                    const colorClasses = {
+                        'success': 'bg-green-50 border-green-200 text-green-700',
+                        'warning': 'bg-yellow-50 border-yellow-200 text-yellow-700',
+                        'info': 'bg-blue-50 border-blue-200 text-blue-700',
+                        'error': 'bg-red-50 border-red-200 text-red-700'
+                    };
+                    const iconColors = {
+                        'success': 'text-green-600',
+                        'warning': 'text-yellow-600',
+                        'info': 'text-blue-600',
+                        'error': 'text-red-600'
+                    };
+                    return `
+                        <div class="border-l-4 p-4 rounded ${colorClasses[insight.type]}">
+                            <div class="flex items-start gap-3">
+                                <i class="fas fa-${insight.icon} ${iconColors[insight.type]} text-lg mt-0.5"></i>
+                                <p class="text-sm flex-1">${insight.text}</p>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+        
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h4 class="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                <i class="fas fa-info-circle"></i>
+                Spending Summary
+            </h4>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Total Occurrences:</span>
+                    <span class="font-semibold text-gray-800">${sameItemExpenses.length}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Time Period:</span>
+                    <span class="font-semibold text-gray-800">${Object.keys(monthlyFrequency).length} month(s)</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Highest:</span>
+                    <span class="font-semibold text-red-600">$${maxAmount.toFixed(2)}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Lowest:</span>
+                    <span class="font-semibold text-green-600">$${minAmount.toFixed(2)}</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.getElementById('analyticsTab').innerHTML = analyticsHTML;
 }
 
 function closeExpenseDetailModal() {

@@ -134,6 +134,9 @@ input.input-field::placeholder {
 .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); transition: width 0.3s ease; }
 .tab-button { padding: 12px 24px; border: none; background: transparent; color: #6b7280; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.3s ease; }
 .tab-button.active { color: #667eea; border-bottom-color: #667eea; }
+.expense-detail-tabs { display: flex; gap: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tab-content { animation: fadeIn 0.3s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .notification { position: fixed; top: 20px; right: 20px; left: 20px; background: white; padding: 16px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2); z-index: 2000; display: none; animation: slideIn 0.3s ease; font-size: 14px; }
 @keyframes slideIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
 .notification.success { border-left: 4px solid #10b981; }
