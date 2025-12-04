@@ -2014,6 +2014,30 @@ function updateStats() {
     console.log('   Priya contrib total:', priyaContribTotal);
     console.log('   Priya remaining:', priyaRemaining);
 
+    // Store rollover dues for next month (starting Nov 2025)
+    if (selectedYear !== 'all' && selectedMonth !== 'all') {
+        const year = parseInt(selectedYear);
+        const month = parseInt(selectedMonth);
+        
+        // Only track rollovers from Nov 2025 onwards
+        if (year > 2025 || (year === 2025 && month >= 11)) {
+            const rolloverData = {
+                year: year,
+                month: month,
+                amarOwes: amarRemaining > 0 ? amarRemaining : 0,
+                priyaOwes: priyaRemaining > 0 ? priyaRemaining : 0,
+                amarOverpaid: amarRemaining < 0 ? Math.abs(amarRemaining) : 0,
+                priyaOverpaid: priyaRemaining < 0 ? Math.abs(priyaRemaining) : 0,
+                timestamp: new Date().toISOString()
+            };
+            
+            // Store in localStorage with year-month key
+            const rolloverKey = `rollover_${year}_${String(month).padStart(2, '0')}`;
+            localStorage.setItem(rolloverKey, JSON.stringify(rolloverData));
+            console.log('💰 Stored rollover data:', rolloverKey, rolloverData);
+        }
+    }
+
     // Update budget display with intelligent info
     const budgetEl = document.getElementById('totalBudget');
     if (budgetEl) {
@@ -5500,7 +5524,14 @@ function showSimilarItemWarning(newItem, similarItems) {
 function findDuplicateExpenses(newExpense) {
     const duplicates = [];
 
-    allExpenses.forEach(exp => {
+    // Only check expenses from the same month and year to avoid false positives
+    // (e.g., recurring expenses like mortgage)
+    const currentMonthExpenses = allExpenses.filter(exp => 
+        exp.fields.Year === newExpense.Year && 
+        exp.fields.Month === newExpense.Month
+    );
+
+    currentMonthExpenses.forEach(exp => {
         let matchScore = 0;
         let reasons = [];
         let isExactDuplicate = false;
@@ -6576,6 +6607,87 @@ function toggleMenu() {
     } else {
         menu.style.transform = 'translateX(0px)';
         overlay.style.display = 'block';
+    }
+}
+
+// Calculate cumulative rollover dues up to a given month
+function calculateCumulativeRollover(upToYear, upToMonth) {
+    let amarTotalOwed = 0;
+    let priyaTotalOwed = 0;
+    
+    // Start from Nov 2025
+    const startYear = 2025;
+    const startMonth = 11;
+    
+    // Loop through all months from Nov 2025 to the specified month
+    for (let year = startYear; year <= upToYear; year++) {
+        const monthStart = (year === startYear) ? startMonth : 1;
+        const monthEnd = (year === upToYear) ? upToMonth : 12;
+        
+        for (let month = monthStart; month <= monthEnd; month++) {
+            const rolloverKey = `rollover_${year}_${String(month).padStart(2, '0')}`;
+            const rolloverData = localStorage.getItem(rolloverKey);
+            
+            if (rolloverData) {
+                const data = JSON.parse(rolloverData);
+                // Net owed = what they owe minus what they overpaid
+                amarTotalOwed += (data.amarOwes - data.amarOverpaid);
+                priyaTotalOwed += (data.priyaOwes - data.priyaOverpaid);
+            }
+        }
+    }
+    
+    return {
+        amarOwes: amarTotalOwed > 0 ? amarTotalOwed : 0,
+        priyaOwes: priyaTotalOwed > 0 ? priyaTotalOwed : 0,
+        amarOverpaid: amarTotalOwed < 0 ? Math.abs(amarTotalOwed) : 0,
+        priyaOverpaid: priyaTotalOwed < 0 ? Math.abs(priyaTotalOwed) : 0
+    };
+}
+
+// Open rollover dues modal
+function openRolloverDues() {
+    closeAllModalsExcept('rolloverDuesModal');
+    const modal = document.getElementById('rolloverDuesModal');
+    if (!modal) return;
+    
+    // Get current filter
+    const yearFilterEl = document.getElementById('yearSelector');
+    const monthFilterEl = document.getElementById('monthSelector');
+    const selectedYear = yearFilterEl ? parseInt(yearFilterEl.value) : new Date().getFullYear();
+    const selectedMonth = monthFilterEl ? parseInt(monthFilterEl.value) : new Date().getMonth() + 1;
+    
+    // Calculate rollovers up to current month
+    const rollover = calculateCumulativeRollover(selectedYear, selectedMonth);
+    
+    // Update modal content
+    document.getElementById('rolloverAmarOwes').textContent = rollover.amarOwes > 0 ? `$${rollover.amarOwes.toFixed(2)}` : '$0.00';
+    document.getElementById('rolloverPriyaOwes').textContent = rollover.priyaOwes > 0 ? `$${rollover.priyaOwes.toFixed(2)}` : '$0.00';
+    document.getElementById('rolloverAmarOverpaid').textContent = rollover.amarOverpaid > 0 ? `$${rollover.amarOverpaid.toFixed(2)}` : '$0.00';
+    document.getElementById('rolloverPriyaOverpaid').textContent = rollover.priyaOverpaid > 0 ? `$${rollover.priyaOverpaid.toFixed(2)}` : '$0.00';
+    
+    // Show net balance
+    const amarNet = rollover.amarOverpaid - rollover.amarOwes;
+    const priyaNet = rollover.priyaOverpaid - rollover.priyaOwes;
+    
+    document.getElementById('rolloverAmarNet').textContent = amarNet !== 0 ? `$${Math.abs(amarNet).toFixed(2)}` : '$0.00';
+    document.getElementById('rolloverAmarNetLabel').textContent = amarNet > 0 ? 'Overpaid (Credit)' : amarNet < 0 ? 'Still Owes' : 'Settled';
+    document.getElementById('rolloverAmarNet').className = amarNet > 0 ? 'text-green-600 font-bold' : amarNet < 0 ? 'text-red-600 font-bold' : 'text-gray-600 font-bold';
+    
+    document.getElementById('rolloverPriyaNet').textContent = priyaNet !== 0 ? `$${Math.abs(priyaNet).toFixed(2)}` : '$0.00';
+    document.getElementById('rolloverPriyaNetLabel').textContent = priyaNet > 0 ? 'Overpaid (Credit)' : priyaNet < 0 ? 'Still Owes' : 'Settled';
+    document.getElementById('rolloverPriyaNet').className = priyaNet > 0 ? 'text-green-600 font-bold' : priyaNet < 0 ? 'text-red-600 font-bold' : 'text-gray-600 font-bold';
+    
+    const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    document.getElementById('rolloverPeriod').textContent = `Nov 2025 - ${monthNames[selectedMonth]} ${selectedYear}`;
+    
+    modal.classList.add('active');
+}
+
+function closeRolloverDuesModal() {
+    const modal = document.getElementById('rolloverDuesModal');
+    if (modal) {
+        modal.classList.remove('active');
     }
 }
 
@@ -10360,6 +10472,12 @@ async function autoHardRefreshApp() {
     console.log('🔄 Auto hard refresh initiated...');
     
     try {
+        // Store refresh timestamps FIRST before clearing anything
+        const refreshTime = new Date().toISOString();
+        localStorage.setItem('last_app_refresh', refreshTime);
+        localStorage.setItem('last_auto_refresh', new Date().toDateString());
+        console.log('✅ Stored auto-refresh timestamp:', refreshTime);
+        
         // 1. Unregister all service workers
         if ('serviceWorker' in navigator) {
             const registrations = await navigator.serviceWorker.getRegistrations();
@@ -10380,11 +10498,8 @@ async function autoHardRefreshApp() {
 
         // 3. Clear session storage (but keep credentials)
         sessionStorage.clear();
-
-        // 4. Mark as refreshed today
-        localStorage.setItem('last_auto_refresh', new Date().toDateString());
         
-        // 5. Reload the page (hard refresh)
+        // 4. Reload the page (hard refresh)
         console.log('✅ Auto refresh complete. Reloading...');
         window.location.reload(true);
 
