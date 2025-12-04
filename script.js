@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-04T20:33:26Z'; // Auto-updated on deployment
-const APP_VERSION = '25.49.3'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-04T20:43:49Z'; // Auto-updated on deployment
+const APP_VERSION = '25.49.4'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -1833,16 +1833,25 @@ function loadExpenseTrendTab(expenseId) {
 }
 
 function loadExpenseAnalyticsTab(expenseId) {
+    console.log('🔍 Loading analytics for expense:', expenseId);
+    
     const expense = allExpenses.find(exp => exp.id === expenseId);
-    if (!expense) return;
+    if (!expense) {
+        console.error('❌ Expense not found:', expenseId);
+        return;
+    }
     
     const itemName = expense.fields.Item || 'Unnamed';
     const category = expense.fields.Category || 'Uncategorized';
+    
+    console.log('📊 Analytics for:', itemName, 'Category:', category);
     
     // Get all expenses with the same item name
     const sameItemExpenses = allExpenses.filter(exp => 
         (exp.fields.Item || 'Unnamed').toLowerCase() === itemName.toLowerCase()
     );
+    
+    console.log('📈 Found', sameItemExpenses.length, 'matching expenses');
     
     if (sameItemExpenses.length === 0) {
         document.getElementById('analyticsTab').innerHTML = `
@@ -1860,6 +1869,8 @@ function loadExpenseAnalyticsTab(expenseId) {
     const avgAmount = totalSpent / amounts.length;
     const maxAmount = Math.max(...amounts);
     const minAmount = Math.min(...amounts);
+    
+    console.log('💰 Total:', totalSpent, 'Avg:', avgAmount, 'Max:', maxAmount, 'Min:', minAmount);
     
     // Calculate trend (comparing last 3 months vs previous 3 months if applicable)
     const sortedExpenses = [...sameItemExpenses].sort((a, b) => {
@@ -1889,7 +1900,7 @@ function loadExpenseAnalyticsTab(expenseId) {
     // Volatility (standard deviation)
     const variance = amounts.reduce((sum, val) => sum + Math.pow(val - avgAmount, 2), 0) / amounts.length;
     const stdDev = Math.sqrt(variance);
-    const volatility = (stdDev / avgAmount) * 100;
+    const volatility = avgAmount > 0 ? (stdDev / avgAmount) * 100 : 0;
     
     // Generate insights
     const insights = [];
@@ -2087,7 +2098,14 @@ function loadExpenseAnalyticsTab(expenseId) {
         </div>
     `;
     
-    document.getElementById('analyticsTab').innerHTML = analyticsHTML;
+    console.log('✅ Setting analytics HTML, length:', analyticsHTML.length);
+    const analyticsTabElement = document.getElementById('analyticsTab');
+    if (analyticsTabElement) {
+        analyticsTabElement.innerHTML = analyticsHTML;
+        console.log('✅ Analytics tab updated successfully');
+    } else {
+        console.error('❌ analyticsTab element not found!');
+    }
 }
 
 function closeExpenseDetailModal() {
