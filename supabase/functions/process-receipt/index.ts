@@ -17,10 +17,11 @@ const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 // Retry configuration for exponential backoff
-const INITIAL_RETRY_DELAY_MS = 1000; // Start with 1 second
-const MAX_RETRY_DELAY_MS = 120000; // Cap at 2 minutes
-const RETRY_MULTIPLIER = 2; // Double the delay each time (1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s...)
-const MAX_RETRIES = 15; // Maximum retry attempts (with exponential backoff this gives plenty of time)
+// Note: Supabase Edge Functions have ~60-150s timeout, so keep delays short
+const INITIAL_RETRY_DELAY_MS = 2000; // Start with 2 seconds
+const MAX_RETRY_DELAY_MS = 15000; // Cap at 15 seconds (edge function timeout constraint)
+const RETRY_MULTIPLIER = 2; // Double the delay each time (2s, 4s, 8s, 15s...)
+const MAX_RETRIES = 5; // Limited retries due to edge function timeout
 
 interface ReceiptItem {
   description: string;
@@ -65,6 +66,16 @@ function parseRetryDelay(errorText: string): number | null {
     // Failed to parse, return null
   }
   return null;
+}
+
+// Check if error is a daily quota exceeded (not worth retrying within this request)
+function isDailyQuotaError(errorText: string): boolean {
+  try {
+    // Check for "PerDay" in quota ID which indicates daily limit
+    return errorText.includes("PerDay") || errorText.includes("per_day");
+  } catch {
+    return false;
+  }
 }
 
 // Call Gemini API to extract receipt data with exponential backoff retry
@@ -151,18 +162,15 @@ Important:
         const errorText = await response.text();
         console.warn(`Rate limited (429) on attempt ${attempt}. Error:`, errorText);
         
-        // Try to get suggested retry delay from API response
-        const suggestedDelay = parseRetryDelay(errorText);
-        
-        // Use suggested delay if available and reasonable, otherwise use exponential backoff
-        let delayToUse: number;
-        if (suggestedDelay && suggestedDelay > 0 && suggestedDelay <= MAX_RETRY_DELAY_MS) {
-          delayToUse = suggestedDelay + 1000; // Add 1 second buffer
-          console.log(`Using API suggested retry delay: ${delayToUse}ms`);
-        } else {
-          delayToUse = Math.min(currentDelay, MAX_RETRY_DELAY_MS);
-          console.log(`Using exponential backoff delay: ${delayToUse}ms`);
+        // Check if this is a DAILY quota error - don't retry, just fail immediately
+        if (isDailyQuotaError(errorText)) {
+          console.error("Daily quota exceeded - not retrying (will reset tomorrow)");
+          throw new Error("Gemini API daily quota exceeded. Please try again tomorrow or upgrade your plan.");
         }
+        
+        // For per-minute rate limits, use exponential backoff (capped for edge function timeout)
+        const delayToUse = Math.min(currentDelay, MAX_RETRY_DELAY_MS);
+        console.log(`Using exponential backoff delay: ${delayToUse}ms`);
         
         if (attempt < MAX_RETRIES) {
           console.log(`Waiting ${delayToUse}ms before retry ${attempt + 1}...`);
