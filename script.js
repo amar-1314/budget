@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-11T03:54:13Z'; // Auto-updated on deployment
-const APP_VERSION = '25.50.12'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-11T04:00:00Z'; // Auto-updated on deployment
+const APP_VERSION = '25.50.13'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -7609,6 +7609,7 @@ async function searchReceiptItems(query) {
 
 // Process all unscanned receipts from the database
 // Tries Edge Function first (backend processing), falls back to client-side if unavailable
+// Handles rate limits gracefully - stops on rate limit, resumes next time
 async function processUnscannedReceipts() {
     try {
         showNotification('Scanning receipts in database...', 'info');
@@ -7624,8 +7625,11 @@ async function processUnscannedReceipts() {
             return;
         }
         
+        showNotification(`Found ${expenses.length} unscanned receipts...`, 'info');
+        
         let processedCount = 0;
         let errorCount = 0;
+        let rateLimited = false;
         
         // Try to use Edge Function first (preferred - runs on backend)
         const useEdgeFunction = await tryProcessWithEdgeFunction(expenses);
@@ -7642,19 +7646,40 @@ async function processUnscannedReceipts() {
         
         // Fallback: Process client-side if Edge Function unavailable
         console.log('Edge Function unavailable, processing client-side...');
-        showNotification('Processing receipts locally...', 'info');
         
-        for (const expense of expenses) {
+        for (let i = 0; i < expenses.length; i++) {
+            const expense = expenses[i];
+            
+            // Stop if we hit rate limit - remaining receipts will be processed next time
+            if (rateLimited) {
+                console.log(`Stopping due to rate limit. ${expenses.length - i} receipts remaining for next run.`);
+                break;
+            }
+            
             try {
+                // Update status to 'processing'
+                await supabasePatch(TABLE_NAME, expense.id, { receipt_processing_status: 'processing' });
+                
+                showNotification(`Processing receipt ${i + 1}/${expenses.length}...`, 'info');
+                
                 // Get full expense with receipt data
                 const fullExpense = await supabaseGet(TABLE_NAME, {
                     'id': `eq.${expense.id}`
                 }, 1, '*');
                 
-                if (!fullExpense || !fullExpense[0]) continue;
+                if (!fullExpense || !fullExpense[0]) {
+                    await supabasePatch(TABLE_NAME, expense.id, { receipt_processing_status: 'failed' });
+                    continue;
+                }
                 
                 let receiptData = fullExpense[0].Receipt;
-                if (!receiptData) continue;
+                if (!receiptData) {
+                    await supabasePatch(TABLE_NAME, expense.id, { 
+                        receipt_scanned: true, 
+                        receipt_processing_status: 'failed' 
+                    });
+                    continue;
+                }
                 
                 // Parse if it's a JSON string
                 if (typeof receiptData === 'string' && receiptData.startsWith('[')) {
@@ -7664,7 +7689,6 @@ async function processUnscannedReceipts() {
                 // Get the base64 data
                 let base64Data, mimeType;
                 if (Array.isArray(receiptData) && receiptData[0] && receiptData[0].url) {
-                    // New format: array with url containing base64 data
                     const dataUrl = receiptData[0].url;
                     if (dataUrl.startsWith('data:')) {
                         const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -7673,21 +7697,32 @@ async function processUnscannedReceipts() {
                             base64Data = matches[2];
                         }
                     } else {
-                        continue; // External URL - can't process
+                        await supabasePatch(TABLE_NAME, expense.id, { 
+                            receipt_scanned: true, 
+                            receipt_processing_status: 'failed' 
+                        });
+                        continue;
                     }
                 } else if (typeof receiptData === 'string' && receiptData.startsWith('data:')) {
-                    // Direct data URL format
                     const matches = receiptData.match(/^data:([^;]+);base64,(.+)$/);
                     if (matches) {
                         mimeType = matches[1];
                         base64Data = matches[2];
                     }
                 } else {
-                    continue; // Unknown format
+                    await supabasePatch(TABLE_NAME, expense.id, { 
+                        receipt_scanned: true, 
+                        receipt_processing_status: 'failed' 
+                    });
+                    continue;
                 }
                 
                 if (!base64Data || !mimeType.startsWith('image/')) {
-                    continue; // Not a processable image
+                    await supabasePatch(TABLE_NAME, expense.id, { 
+                        receipt_scanned: true, 
+                        receipt_processing_status: 'failed' 
+                    });
+                    continue;
                 }
                 
                 // Call Gemini API to extract items
@@ -7707,18 +7742,45 @@ async function processUnscannedReceipts() {
                         });
                     }
                     processedCount++;
+                    
+                    // Mark as completed
+                    await supabasePatch(TABLE_NAME, expense.id, { 
+                        receipt_scanned: true,
+                        receipt_processing_status: 'completed'
+                    });
+                } else {
+                    // No items extracted - mark as completed but note it
+                    await supabasePatch(TABLE_NAME, expense.id, { 
+                        receipt_scanned: true,
+                        receipt_processing_status: 'completed'
+                    });
                 }
-                
-                // Mark receipt as scanned
-                await supabasePatch(TABLE_NAME, expense.id, { receipt_scanned: true });
                 
             } catch (itemError) {
                 console.error('Error processing receipt for expense:', expense.id, itemError);
                 errorCount++;
+                
+                // Check if it's a rate limit error - stop processing more
+                if (itemError.message && (
+                    itemError.message.includes('rate limit') || 
+                    itemError.message.includes('Rate limit') ||
+                    itemError.message.includes('quota') ||
+                    itemError.message.includes('429')
+                )) {
+                    rateLimited = true;
+                    // Keep status as 'pending' so it's retried next time
+                    await supabasePatch(TABLE_NAME, expense.id, { receipt_processing_status: 'pending' });
+                    showNotification(`Rate limit reached. Processed ${processedCount} receipts. Try again later for remaining ${expenses.length - i} receipts.`, 'warning');
+                } else {
+                    // Other error - mark as failed but don't retry automatically
+                    await supabasePatch(TABLE_NAME, expense.id, { receipt_processing_status: 'failed' });
+                }
             }
         }
         
-        showNotification(`Processed ${processedCount} receipts (${errorCount} errors)`, processedCount > 0 ? 'success' : 'info');
+        if (!rateLimited) {
+            showNotification(`Processed ${processedCount} receipts (${errorCount} errors)`, processedCount > 0 ? 'success' : 'info');
+        }
         
         // Refresh search results
         searchReceiptItems('');
