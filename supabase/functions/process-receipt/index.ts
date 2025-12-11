@@ -120,9 +120,12 @@ Important:
     try {
       console.log(`Gemini API attempt ${attempt}/${MAX_RETRIES}...`);
       
-      const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      const response = await fetch(GEMINI_API_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
+        },
         body: JSON.stringify(requestBody),
       });
 
