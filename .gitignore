@@ -1,0 +1,16 @@
+# SQL scripts (local only)
+*.sql
+
+# README files
+README.md
+**/README.md
+
+# Supabase temp files
+supabase/.temp/
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+
