@@ -14,7 +14,7 @@ const corsHeaders = {
 // Gemini API configuration
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY")!;
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
 // Retry configuration for exponential backoff
 const INITIAL_RETRY_DELAY_MS = 1000; // Start with 1 second
