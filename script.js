@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-11T18:07:46Z'; // Auto-updated on deployment
-const APP_VERSION = '25.50.24'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-11T18:30:00Z'; // Auto-updated on deployment
+const APP_VERSION = '25.50.26'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -7635,11 +7635,9 @@ async function retryFailedScan(expenseId) {
                 showNotification('Scanned but no items found', 'info');
             }
             await renderFailedScansList();
-            // Refresh search results if visible
+            // Always refresh items list (pass empty string to show all recent items)
             const searchInput = document.getElementById('itemSearchInput');
-            if (searchInput && searchInput.value) {
-                searchReceiptItems(searchInput.value);
-            }
+            await searchReceiptItems(searchInput?.value || '');
         } else {
             showNotification('Scan failed again: ' + (result.error || 'Unknown error'), 'error');
             await renderFailedScansList();
@@ -7690,7 +7688,8 @@ function showScanningSpinner(message = 'Scanning receipt...') {
     
     const spinner = document.createElement('div');
     spinner.id = 'receipt-scanning-spinner';
-    spinner.className = 'fixed bottom-4 right-4 bg-white rounded-lg shadow-xl border border-purple-200 p-4 z-50 flex items-center gap-3 animate-slide-up';
+    spinner.className = 'fixed bottom-4 right-4 bg-white rounded-lg shadow-xl border border-purple-200 p-4 flex items-center gap-3 animate-slide-up';
+    spinner.style.zIndex = '9999'; // Above modals (z-index: 1000)
     spinner.innerHTML = `
         <div class="relative">
             <div class="w-10 h-10 border-4 border-purple-200 rounded-full animate-spin border-t-purple-600"></div>
