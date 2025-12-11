@@ -7615,10 +7615,11 @@ async function processUnscannedReceipts() {
         showNotification('Scanning receipts in database...', 'info');
         
         // Get expenses with receipts that haven't been scanned
+        // TESTING: Limit to 1 receipt at a time (change to 50 for production)
         const expenses = await supabaseGet(TABLE_NAME, {
             'has_receipt': 'eq.true',
             'receipt_scanned': 'eq.false'
-        }, 50);
+        }, 1);
         
         if (!expenses || expenses.length === 0) {
             showNotification('No unscanned receipts found', 'info');
