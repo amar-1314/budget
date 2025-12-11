@@ -1094,6 +1094,12 @@ async function loadData() {
             overlay.style.display = 'none';
         }
 
+        // Update last refresh timestamp
+        const refreshTime = new Date().toISOString();
+        localStorage.setItem('last_app_refresh', refreshTime);
+        updateLastRefreshTime();
+        console.log('✅ Updated last refresh time:', refreshTime);
+        
         showNotification('Data loaded successfully!', 'success');
     } catch (error) {
         const errorTime = performance.now() - startTime;
@@ -1790,19 +1796,27 @@ function loadExpenseTrendTab(expenseId) {
         
         <div class="mt-6">
             <h4 class="text-md font-bold text-gray-800 mb-3">Monthly Breakdown</h4>
+            <p class="text-xs text-gray-500 mb-3"><i class="fas fa-mouse-pointer mr-1"></i>Click on any month to view expenses</p>
             <div class="space-y-2">
                 ${sortedMonths.map(key => {
                     const data = monthlyData[key];
                     const monthLabel = `${monthNames[parseInt(data.month) - 1]} ${data.year}`;
                     const percentage = ((data.total / maxAmount) * 100).toFixed(0);
+                    // Escape itemName for use in onclick
+                    const escapedItemName = itemName.replace(/'/g, "\\'").replace(/"/g, '\\"');
                     return `
-                        <div class="bg-gray-50 p-3 rounded">
+                        <div class="bg-gray-50 p-3 rounded cursor-pointer hover:bg-purple-50 hover:border-purple-200 border border-transparent transition-all"
+                             onclick="showMonthlyExpensesModal('${escapedItemName}', '${data.year}', '${data.month}')"
+                             title="Click to view ${data.count} expense(s)">
                             <div class="flex justify-between items-center mb-2">
                                 <span class="font-semibold text-gray-700">${monthLabel}</span>
                                 <span class="text-purple-600 font-bold">$${data.total.toFixed(2)}</span>
                             </div>
                             <div class="flex items-center gap-2 text-xs text-gray-500">
-                                <span>${data.count} expense${data.count > 1 ? 's' : ''}</span>
+                                <span class="inline-flex items-center gap-1 text-purple-600 font-medium">
+                                    <i class="fas fa-eye text-xs"></i>
+                                    ${data.count} expense${data.count > 1 ? 's' : ''}
+                                </span>
                                 <span>•</span>
                                 <span>Avg: $${(data.total / data.count).toFixed(2)}</span>
                             </div>
@@ -2569,6 +2583,124 @@ function loadExpenseAnalyticsTab(expenseId) {
 function closeExpenseDetailModal() {
     document.getElementById('expenseDetailModal').classList.remove('active');
     currentExpenseIdForDetail = null;
+}
+
+// Show expenses for a specific item in a specific month
+function showMonthlyExpensesModal(itemName, year, month) {
+    console.log('📅 Showing expenses for:', itemName, 'in', month, year);
+    
+    // Find all matching expenses for this item in this month/year
+    const matchingExpenses = allExpenses.filter(exp => {
+        const expItem = (exp.fields.Item || 'Unnamed').toLowerCase();
+        const expYear = String(exp.fields.Year);
+        const expMonth = String(exp.fields.Month).padStart(2, '0');
+        return expItem === itemName.toLowerCase() && 
+               expYear === String(year) && 
+               expMonth === String(month).padStart(2, '0');
+    });
+    
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                        'July', 'August', 'September', 'October', 'November', 'December'];
+    const monthLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
+    
+    // Calculate totals
+    const total = matchingExpenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+    
+    // Build the modal content
+    let modalHTML = `
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold text-gray-800">
+                <i class="fas fa-calendar-alt mr-2 text-purple-600"></i>
+                ${itemName} - ${monthLabel}
+            </h3>
+            <button onclick="closeMonthlyExpensesModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <div class="bg-purple-50 border-l-4 border-purple-500 p-3 rounded mb-4">
+            <div class="flex justify-between items-center">
+                <span class="text-sm text-purple-700">
+                    <strong>${matchingExpenses.length}</strong> expense${matchingExpenses.length !== 1 ? 's' : ''} found
+                </span>
+                <span class="text-lg font-bold text-purple-700">$${total.toFixed(2)}</span>
+            </div>
+        </div>
+    `;
+    
+    if (matchingExpenses.length === 0) {
+        modalHTML += `
+            <div class="text-center py-8 text-gray-400">
+                <i class="fas fa-inbox text-4xl mb-3"></i>
+                <p>No expenses found</p>
+            </div>
+        `;
+    } else {
+        modalHTML += `<div class="space-y-3 max-h-96 overflow-y-auto">`;
+        
+        matchingExpenses.forEach((exp, index) => {
+            const fields = exp.fields;
+            const amount = fields.Actual || 0;
+            const day = fields.Day || '?';
+            const category = fields.Category || 'Uncategorized';
+            const isLLC = fields.LLC === 'Yes';
+            const amarContrib = fields.AmarContribution || 0;
+            const priyaContrib = fields.PriyaContribution || 0;
+            
+            modalHTML += `
+                <div class="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                     onclick="closeMonthlyExpensesModal(); viewExpenseDetails('${exp.id}')">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <div class="font-semibold text-gray-800">${fields.Item || 'Unnamed'}</div>
+                            <div class="text-xs text-gray-500">
+                                <i class="fas fa-calendar mr-1"></i>${monthLabel.split(' ')[0]} ${day}, ${year}
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-lg font-bold text-purple-600">$${amount.toFixed(2)}</div>
+                            ${isLLC ? '<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">LLC</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="bg-purple-100 text-purple-700 px-2 py-1 rounded">${category}</span>
+                        ${amarContrib > 0 ? `<span class="text-blue-600"><i class="fas fa-user mr-1"></i>Amar: $${amarContrib.toFixed(2)}</span>` : ''}
+                        ${priyaContrib > 0 ? `<span class="text-pink-600"><i class="fas fa-user mr-1"></i>Priya: $${priyaContrib.toFixed(2)}</span>` : ''}
+                    </div>
+                </div>
+            `;
+        });
+        
+        modalHTML += `</div>`;
+    }
+    
+    modalHTML += `
+        <div class="mt-4 pt-4 border-t">
+            <button onclick="closeMonthlyExpensesModal()" class="btn-secondary w-full">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Trend
+            </button>
+        </div>
+    `;
+    
+    // Create and show the modal
+    let modal = document.getElementById('monthlyExpensesModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'monthlyExpensesModal';
+        modal.className = 'modal';
+        modal.innerHTML = `<div class="modal-content" style="max-width: 500px;"><div id="monthlyExpensesContent"></div></div>`;
+        document.body.appendChild(modal);
+    }
+    
+    document.getElementById('monthlyExpensesContent').innerHTML = modalHTML;
+    modal.classList.add('active');
+}
+
+function closeMonthlyExpensesModal() {
+    const modal = document.getElementById('monthlyExpensesModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
 }
 
 // View receipt in a modal (prevents navigation issues with base64 data URLs on mobile)
@@ -5388,7 +5520,100 @@ function openRentalIncomeModal() {
     document.getElementById('contributionModal').classList.add('active');
 }
 
+// Track if user has seen the payment info modal recently
+let paymentInfoShown = false;
+
+function showPaymentInfoModal(person) {
+    // Show info modal explaining what payments are for
+    const infoHTML = `
+        <div class="text-center mb-6">
+            <div class="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <i class="fas fa-exclamation-triangle text-white text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Important: About Payments</h3>
+        </div>
+        
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded mb-4">
+            <p class="text-sm text-blue-800">
+                <i class="fas fa-info-circle mr-2"></i>
+                <strong>Payments are NOT for tracking expenses.</strong>
+            </p>
+        </div>
+        
+        <div class="space-y-3 mb-6">
+            <div class="flex items-start gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                <i class="fas fa-check-circle text-green-600 mt-1"></i>
+                <div>
+                    <p class="font-semibold text-green-800">Use Payments For:</p>
+                    <ul class="text-sm text-green-700 mt-1 space-y-1">
+                        <li>• <strong>Bulk transfers</strong> between accounts</li>
+                        <li>• <strong>Rental income</strong> reporting</li>
+                        <li>• <strong>Mortgage contributions</strong> (Priya → Amar)</li>
+                        <li>• <strong>Lump sum reimbursements</strong></li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                <i class="fas fa-times-circle text-red-600 mt-1"></i>
+                <div>
+                    <p class="font-semibold text-red-800">Do NOT Use Payments For:</p>
+                    <ul class="text-sm text-red-700 mt-1 space-y-1">
+                        <li>• Individual expenses (use Add Expense instead)</li>
+                        <li>• Credit card charges</li>
+                        <li>• Daily purchases</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div class="flex gap-3">
+            <button onclick="closePaymentInfoModal()" class="btn-secondary flex-1">
+                <i class="fas fa-times mr-2"></i>Cancel
+            </button>
+            <button onclick="proceedToAddPayment('${person}')" class="btn-primary flex-1">
+                <i class="fas fa-check mr-2"></i>I Understand, Continue
+            </button>
+        </div>
+    `;
+    
+    // Create and show the info modal
+    let infoModal = document.getElementById('paymentInfoModal');
+    if (!infoModal) {
+        infoModal = document.createElement('div');
+        infoModal.id = 'paymentInfoModal';
+        infoModal.className = 'modal';
+        infoModal.innerHTML = `<div class="modal-content" style="max-width: 480px;"><div id="paymentInfoContent"></div></div>`;
+        document.body.appendChild(infoModal);
+    }
+    
+    document.getElementById('paymentInfoContent').innerHTML = infoHTML;
+    infoModal.classList.add('active');
+}
+
+function closePaymentInfoModal() {
+    const modal = document.getElementById('paymentInfoModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+function proceedToAddPayment(person) {
+    closePaymentInfoModal();
+    paymentInfoShown = true;
+    openContributionModalDirect(person);
+}
+
 function openContributionModal(person) {
+    // Show info modal first if not recently shown
+    if (!paymentInfoShown) {
+        showPaymentInfoModal(person);
+        return;
+    }
+    openContributionModalDirect(person);
+}
+
+function openContributionModalDirect(person) {
     closeAllModalsExcept('contributionModal');
     document.getElementById('contributionModalTitle').textContent = `Add ${person}'s Payment`;
     document.getElementById('contributionForm').reset();
