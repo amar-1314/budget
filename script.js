@@ -4048,50 +4048,97 @@ function populateCategorySelector() {
 function suggestCategoryFromItem() {
     const itemInput = document.getElementById('itemName');
     const categoryInput = document.getElementById('category');
+    const tagsInput = document.getElementById('tags');
+    const llcSelect = document.getElementById('llc');
     const itemName = itemInput.value.trim().toLowerCase();
 
-    // Clear auto-filled category and hint if item name is cleared or too short
+    // Clear auto-filled fields and hints if item name is cleared or too short
     if (itemName.length < 3) {
         if (categoryInput.dataset.autoFilled === 'true') {
             categoryInput.value = '';
             categoryInput.dataset.autoFilled = 'false';
             categoryInput.style.backgroundColor = '';
             categoryInput.style.borderColor = '';
-
             const existingHint = document.getElementById('categoryHint');
+            if (existingHint) existingHint.remove();
+        }
+        if (tagsInput && tagsInput.dataset.autoFilled === 'true') {
+            tagsInput.value = '';
+            tagsInput.dataset.autoFilled = 'false';
+            tagsInput.style.backgroundColor = '';
+            tagsInput.style.borderColor = '';
+            const existingHint = document.getElementById('tagsHint');
+            if (existingHint) existingHint.remove();
+        }
+        if (llcSelect && llcSelect.dataset.autoFilled === 'true') {
+            llcSelect.value = 'No';
+            llcSelect.dataset.autoFilled = 'false';
+            updateLLCButtonStyle('No');
+            const existingHint = document.getElementById('llcHint');
             if (existingHint) existingHint.remove();
         }
         return;
     }
 
-    // If category was auto-filled but item changed, clear it first
+    // If category was auto-filled but item changed, clear all auto-filled fields
     if (categoryInput.dataset.autoFilled === 'true' && categoryInput.dataset.lastItem !== itemName) {
         categoryInput.value = '';
         categoryInput.dataset.autoFilled = 'false';
         categoryInput.style.backgroundColor = '';
         categoryInput.style.borderColor = '';
-
         const existingHint = document.getElementById('categoryHint');
         if (existingHint) existingHint.remove();
+        
+        // Also clear tags and LLC if they were auto-filled
+        if (tagsInput && tagsInput.dataset.autoFilled === 'true') {
+            tagsInput.value = '';
+            tagsInput.dataset.autoFilled = 'false';
+            tagsInput.style.backgroundColor = '';
+            const tagsHint = document.getElementById('tagsHint');
+            if (tagsHint) tagsHint.remove();
+        }
+        if (llcSelect && llcSelect.dataset.autoFilled === 'true') {
+            llcSelect.value = 'No';
+            llcSelect.dataset.autoFilled = 'false';
+            updateLLCButtonStyle('No');
+            const llcHint = document.getElementById('llcHint');
+            if (llcHint) llcHint.remove();
+        }
     }
 
-    // Build item-category frequency map from historical data
+    // Build item-based frequency maps from historical data
     const itemCategoryMap = {};
+    const itemTagsMap = {};
+    const itemLLCMap = {};
 
     allExpenses.forEach(exp => {
-        if (exp.fields.Item && exp.fields.Category) {
+        if (exp.fields.Item) {
             const item = exp.fields.Item.trim().toLowerCase();
-            const category = exp.fields.Category.trim();
-
-            if (!itemCategoryMap[item]) {
-                itemCategoryMap[item] = {};
+            
+            // Category mapping
+            if (exp.fields.Category) {
+                const category = exp.fields.Category.trim();
+                if (!itemCategoryMap[item]) itemCategoryMap[item] = {};
+                if (!itemCategoryMap[item][category]) itemCategoryMap[item][category] = 0;
+                itemCategoryMap[item][category]++;
             }
-
-            if (!itemCategoryMap[item][category]) {
-                itemCategoryMap[item][category] = 0;
+            
+            // Tags mapping
+            if (exp.fields.Tags) {
+                if (!itemTagsMap[item]) itemTagsMap[item] = {};
+                exp.fields.Tags.split(',').forEach(tag => {
+                    const trimmedTag = tag.trim();
+                    if (trimmedTag) {
+                        if (!itemTagsMap[item][trimmedTag]) itemTagsMap[item][trimmedTag] = 0;
+                        itemTagsMap[item][trimmedTag]++;
+                    }
+                });
             }
-
-            itemCategoryMap[item][category]++;
+            
+            // LLC mapping
+            const llcValue = exp.fields.LLC === 'Yes' || exp.fields.LLC === true ? 'Yes' : 'No';
+            if (!itemLLCMap[item]) itemLLCMap[item] = { Yes: 0, No: 0 };
+            itemLLCMap[item][llcValue]++;
         }
     });
 
@@ -4191,6 +4238,149 @@ function suggestCategoryFromItem() {
                 }
             }
         }
+    }
+    
+    // Now suggest Tags based on item history
+    suggestTagsFromItem(itemName, itemTagsMap);
+    
+    // Suggest LLC based on item history
+    suggestLLCFromItem(itemName, itemLLCMap);
+}
+
+// Helper function to suggest tags based on item
+function suggestTagsFromItem(itemName, itemTagsMap) {
+    const tagsInput = document.getElementById('tags');
+    if (!tagsInput) return;
+    
+    // Skip if user has manually entered tags
+    if (tagsInput.value.trim() && tagsInput.dataset.autoFilled !== 'true') return;
+    
+    // Try exact match first, then partial match
+    let tagsData = itemTagsMap[itemName];
+    let matchType = 'exact';
+    let matchedItem = itemName;
+    
+    if (!tagsData) {
+        // Try partial match
+        for (const [historicalItem, tags] of Object.entries(itemTagsMap)) {
+            if (historicalItem.includes(itemName) || itemName.includes(historicalItem)) {
+                tagsData = tags;
+                matchType = 'partial';
+                matchedItem = historicalItem;
+                break;
+            }
+        }
+    }
+    
+    if (!tagsData || Object.keys(tagsData).length === 0) return;
+    
+    // Sort by frequency and get top 3 tags
+    const sortedTags = Object.entries(tagsData)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(entry => entry[0]);
+    
+    if (sortedTags.length === 0) return;
+    
+    const totalCount = Object.values(tagsData).reduce((sum, count) => sum + count, 0);
+    const topTagCount = tagsData[sortedTags[0]];
+    const confidence = (topTagCount / totalCount) * 100;
+    
+    // Only suggest if confidence >= 70% for tags (lower threshold since tags can vary)
+    if (confidence >= 70) {
+        tagsInput.value = sortedTags.join(', ');
+        tagsInput.dataset.autoFilled = 'true';
+        tagsInput.style.backgroundColor = matchType === 'exact' ? '#f0fdf4' : '#fef3c7';
+        tagsInput.style.borderColor = matchType === 'exact' ? '#86efac' : '#fbbf24';
+        
+        const existingHint = document.getElementById('tagsHint');
+        if (existingHint) existingHint.remove();
+        
+        const hint = document.createElement('div');
+        hint.id = 'tagsHint';
+        hint.className = matchType === 'exact' ? 'text-xs text-green-600 mt-1 flex items-center gap-1' : 'text-xs text-yellow-700 mt-1 flex items-center gap-1';
+        hint.innerHTML = `<i class="fas fa-magic"></i> Auto-suggested tags (${Math.round(confidence)}% confidence)`;
+        tagsInput.parentElement.appendChild(hint);
+        
+        setTimeout(() => {
+            tagsInput.style.backgroundColor = '';
+            tagsInput.style.borderColor = '';
+        }, 3000);
+    }
+}
+
+// Helper function to suggest LLC based on item
+function suggestLLCFromItem(itemName, itemLLCMap) {
+    const llcSelect = document.getElementById('llc');
+    const llcBtn = document.getElementById('llcToggleBtn');
+    if (!llcSelect || !llcBtn) return;
+    
+    // Skip if user has manually changed LLC
+    if (llcSelect.dataset.autoFilled === 'false' && llcSelect.dataset.userChanged === 'true') return;
+    
+    // Try exact match first, then partial match
+    let llcData = itemLLCMap[itemName];
+    let matchType = 'exact';
+    
+    if (!llcData) {
+        // Try partial match
+        for (const [historicalItem, data] of Object.entries(itemLLCMap)) {
+            if (historicalItem.includes(itemName) || itemName.includes(historicalItem)) {
+                llcData = data;
+                matchType = 'partial';
+                break;
+            }
+        }
+    }
+    
+    if (!llcData) return;
+    
+    const totalCount = llcData.Yes + llcData.No;
+    if (totalCount === 0) return;
+    
+    const yesConfidence = (llcData.Yes / totalCount) * 100;
+    const noConfidence = (llcData.No / totalCount) * 100;
+    
+    // Only suggest if confidence >= 90% (high threshold for LLC since it's important)
+    if (yesConfidence >= 90) {
+        llcSelect.value = 'Yes';
+        llcSelect.dataset.autoFilled = 'true';
+        updateLLCButtonStyle('Yes');
+        
+        const existingHint = document.getElementById('llcHint');
+        if (existingHint) existingHint.remove();
+        
+        const hint = document.createElement('div');
+        hint.id = 'llcHint';
+        hint.className = 'text-xs text-green-600 mt-1 flex items-center gap-1';
+        hint.innerHTML = `<i class="fas fa-magic"></i> Auto-set to LLC (${Math.round(yesConfidence)}% confidence)`;
+        llcBtn.parentElement.appendChild(hint);
+        
+        setTimeout(() => {
+            const h = document.getElementById('llcHint');
+            if (h) h.remove();
+        }, 5000);
+    } else if (noConfidence >= 90 && llcSelect.value === 'Yes') {
+        // Only suggest No if currently Yes (don't override default No)
+        llcSelect.value = 'No';
+        llcSelect.dataset.autoFilled = 'true';
+        updateLLCButtonStyle('No');
+    }
+}
+
+// Helper to update LLC button style
+function updateLLCButtonStyle(value) {
+    const llcBtn = document.getElementById('llcToggleBtn');
+    if (!llcBtn) return;
+    
+    if (value === 'Yes') {
+        llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+        llcBtn.style.color = 'white';
+        llcBtn.style.borderColor = '#1d4ed8';
+    } else {
+        llcBtn.style.background = 'white';
+        llcBtn.style.color = '#6b7280';
+        llcBtn.style.borderColor = '#e5e7eb';
     }
 }
 
@@ -7093,18 +7283,34 @@ async function uploadReceiptAndSave(recordId, fields, file) {
         // Set has_receipt flag
         fields.has_receipt = true;
         
-        // Mark as not scanned yet (will be auto-processed)
-        fields.receipt_scanned = false;
+        // Only auto-scan receipts for grocery category
+        // Check if category contains "grocery" (case-insensitive)
+        const category = (fields.Category || '').toLowerCase();
+        const isGrocery = category.includes('grocery') || category.includes('groceries');
+        
+        if (isGrocery) {
+            // Mark as not scanned yet (will be auto-processed by Edge Function)
+            fields.receipt_scanned = false;
+            fields.receipt_processing_status = 'pending';
+            console.log('Grocery receipt - will be auto-scanned');
+        } else {
+            // Non-grocery receipts: mark as already scanned (won't be auto-processed)
+            fields.receipt_scanned = true;
+            fields.receipt_processing_status = 'skipped';
+            console.log('Non-grocery receipt - skipping auto-scan');
+        }
 
         // Save expense with receipt data
         await saveExpenseToSupabase(recordId, fields);
         
-        showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB) - Processing in background...`, 'success');
-        
-        // Backend Edge Function will automatically process the receipt via database webhook
-        // No need to process client-side - the database trigger will invoke the Edge Function
-        // This ensures processing continues even if the app is closed
-        console.log('Receipt uploaded - backend will process automatically via Edge Function');
+        if (isGrocery) {
+            showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB) - Will scan items automatically...`, 'success');
+            // Backend Edge Function will automatically process the receipt via database webhook
+            console.log('Receipt uploaded - backend will process automatically via Edge Function');
+        } else {
+            showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB)`, 'success');
+            console.log('Receipt saved - not a grocery category, skipping item extraction');
+        }
         
     } catch (error) {
         console.error('Error uploading receipt:', error);
@@ -7615,11 +7821,18 @@ async function processUnscannedReceipts() {
         showNotification('Scanning receipts in database...', 'info');
         
         // Get expenses with receipts that haven't been scanned
+        // Only get grocery receipts (Category contains 'grocery')
         // TESTING: Limit to 1 receipt at a time (change to 50 for production)
-        const expenses = await supabaseGet(TABLE_NAME, {
+        const allUnscanned = await supabaseGet(TABLE_NAME, {
             'has_receipt': 'eq.true',
             'receipt_scanned': 'eq.false'
-        }, 1);
+        }, 50);
+        
+        // Filter to only grocery categories
+        const expenses = (allUnscanned || []).filter(exp => {
+            const category = (exp.Category || '').toLowerCase();
+            return category.includes('grocery') || category.includes('groceries');
+        }).slice(0, 1); // TESTING: Limit to 1 (change to remove .slice for production)
         
         if (!expenses || expenses.length === 0) {
             showNotification('No unscanned receipts found', 'info');
