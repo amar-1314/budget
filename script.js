@@ -2846,13 +2846,14 @@ function viewReceipt(receiptData) {
 // Helper function to view receipt from expense ID (avoids JSON in HTML onclick)
 async function viewReceiptFromExpense(expenseId) {
     try {
-        showNotification('Loading receipt...', 'info');
+        showLoader('Loading receipt...');
 
         // Check if we already have the receipt in memory
         const expense = allExpenses.find(exp => exp.id === expenseId);
 
         if (expense && expense.fields.Receipt) {
             // Receipt already loaded
+            hideLoader();
             viewReceipt(expense.fields.Receipt);
             return;
         }
@@ -2866,6 +2867,7 @@ async function viewReceiptFromExpense(expenseId) {
                 'id,Receipt' // Only get id and Receipt field
             );
 
+            hideLoader();
             if (expenseData && expenseData[0] && expenseData[0].Receipt) {
                 viewReceipt(expenseData[0].Receipt);
             } else {
@@ -2873,6 +2875,7 @@ async function viewReceiptFromExpense(expenseId) {
             }
         } else {
             // Airtable fallback
+            hideLoader();
             if (expense && expense.fields.Receipt) {
                 viewReceipt(expense.fields.Receipt);
             } else {
@@ -2880,6 +2883,7 @@ async function viewReceiptFromExpense(expenseId) {
             }
         }
     } catch (error) {
+        hideLoader();
         console.error('Error loading receipt:', error);
         showNotification('Error loading receipt: ' + error.message, 'error');
     }
@@ -5905,6 +5909,7 @@ async function saveStandaloneContribution(event) {
     // Show loading spinner on submit button
     const submitBtn = event.target.querySelector('button[type="submit"]');
     setButtonLoading(submitBtn, true);
+    showLoader('Saving payment...');
 
     const recordId = document.getElementById('paymentRecordId').value;
     const paymentType = document.getElementById('contributionPaymentType').value;
@@ -5940,6 +5945,7 @@ async function saveStandaloneContribution(event) {
 
                 if (!confirmed) {
                     setButtonLoading(submitBtn, false);
+                    hideLoader();
                     return;
                 }
             }
@@ -5975,6 +5981,7 @@ async function saveStandaloneContribution(event) {
 
             closeContributionModal();
             await loadData();
+            hideLoader();
             showNotification(`Rental income of $${amount.toFixed(2)} split equally: $${splitAmount.toFixed(2)} each to Amar and Priya`, 'success');
 
         } else {
@@ -6002,6 +6009,7 @@ async function saveStandaloneContribution(event) {
 
             closeContributionModal();
             await loadData();
+            hideLoader();
 
             let message = recordId ? 'Payment updated!' : `${person}'s payment of $${amount.toFixed(2)} recorded!`;
             if (paymentType === 'PriyaMortgageContribution') {
@@ -6010,6 +6018,7 @@ async function saveStandaloneContribution(event) {
             showNotification(message, 'success');
         }
     } catch (error) {
+        hideLoader();
         setButtonLoading(submitBtn, false);
         showNotification('Error: ' + error.message, 'error');
     }
@@ -6048,12 +6057,16 @@ function editPayment(id) {
 
 async function deletePayment(id) {
     if (!confirm('Delete this payment?')) return;
+    
+    showLoader('Deleting payment...');
     try {
         // Delete from Supabase
         await supabaseDelete(PAYMENTS_TABLE, id);
         await loadData();
+        hideLoader();
         showNotification('Payment deleted!', 'success');
     } catch (error) {
+        hideLoader();
         showNotification('Error: ' + error.message, 'error');
     }
 }
@@ -8574,6 +8587,7 @@ async function deleteCategoryBudget(category) {
     const monthKey = `${selectedYear}-${selectedMonth}`;
 
     if (confirm(`Remove budget for ${category} from ${selectedMonth}/${selectedYear}?`)) {
+        showLoader('Removing budget...');
         try {
             const budgetInfo = categoryBudgets[monthKey] && categoryBudgets[monthKey][category];
 
@@ -8584,9 +8598,13 @@ async function deleteCategoryBudget(category) {
                 await loadCategoryBudgets();
                 renderBudgetTable();
                 updateStats();
+                hideLoader();
                 showNotification(`Budget for ${category} removed`, 'success');
+            } else {
+                hideLoader();
             }
         } catch (error) {
+            hideLoader();
             showNotification('Error: ' + error.message, 'error');
         }
     }
@@ -8723,6 +8741,7 @@ async function saveFixedExpense(event) {
         StartMonth: document.getElementById('fixedStartMonth').value
     };
 
+    showLoader('Saving fixed expense...');
     try {
         if (id) {
             // Update existing in Supabase
@@ -8739,8 +8758,10 @@ async function saveFixedExpense(event) {
         closeAddFixedExpenseForm();
         await loadFixedExpenses();
         renderFixedExpenses();
+        hideLoader();
         showNotification(id ? 'Fixed expense updated!' : 'Fixed expense added!', 'success');
     } catch (error) {
+        hideLoader();
         showNotification('Error: ' + error.message, 'error');
     }
 }
@@ -8775,14 +8796,17 @@ async function editFixedExpense(id) {
 async function deleteFixedExpense(id) {
     if (!confirm('Delete this fixed expense? This will not affect existing expenses.')) return;
 
+    showLoader('Deleting fixed expense...');
     try {
         // Delete from Supabase
         await supabaseDelete(FIXED_EXPENSES_TABLE, id);
 
         await loadFixedExpenses();
         renderFixedExpenses();
+        hideLoader();
         showNotification('Fixed expense deleted!', 'success');
     } catch (error) {
+        hideLoader();
         showNotification('Error: ' + error.message, 'error');
     }
 }
@@ -8901,6 +8925,7 @@ async function saveLLCExpense(event) {
         Category: document.getElementById('llcCategoryName').value
     };
 
+    showLoader('Saving LLC expense...');
     try {
         if (id) {
             // Update existing in Supabase
@@ -8917,8 +8942,10 @@ async function saveLLCExpense(event) {
         closeAddLLCExpenseForm();
         await loadLLCExpenses();
         renderLLCExpenses();
+        hideLoader();
         showNotification(id ? 'LLC expense updated!' : 'LLC expense added!', 'success');
     } catch (error) {
+        hideLoader();
         showNotification('Error: ' + error.message, 'error');
     }
 }
@@ -8939,14 +8966,17 @@ async function editLLCExpense(id) {
 async function deleteLLCExpense(id) {
     if (!confirm('Delete this LLC eligible expense?')) return;
 
+    showLoader('Deleting LLC expense...');
     try {
         // Delete from Supabase
         await supabaseDelete(LLC_EXPENSES_TABLE, id);
 
         await loadLLCExpenses();
         renderLLCExpenses();
+        hideLoader();
         showNotification('LLC expense deleted!', 'success');
     } catch (error) {
+        hideLoader();
         showNotification('Error: ' + error.message, 'error');
     }
 }
