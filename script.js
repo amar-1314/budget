@@ -7202,6 +7202,21 @@ function showDuplicateConfirmation(duplicates, newExpense) {
  * @returns {Promise<{base64: string, filename: string, type: string, size: number, originalSize: number}>}
  */
 async function compressImage(file, maxWidth = 1200, quality = 0.8) {
+    // Check file type first
+    const supportedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
+    const fileType = file.type.toLowerCase();
+    
+    console.log(`📷 Processing image: ${file.name}, type: ${fileType}, size: ${(file.size / 1024).toFixed(0)}KB`);
+    
+    // Check for unsupported formats
+    if (fileType === 'image/heic' || fileType === 'image/heif' || file.name.toLowerCase().endsWith('.heic')) {
+        throw new Error('HEIC format not supported. Please convert to JPEG or PNG first, or use a different photo.');
+    }
+    
+    if (!supportedTypes.includes(fileType) && !fileType.startsWith('image/')) {
+        throw new Error(`Unsupported file type: ${fileType || 'unknown'}. Please use JPEG, PNG, or WebP.`);
+    }
+    
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
 
@@ -7251,11 +7266,17 @@ async function compressImage(file, maxWidth = 1200, quality = 0.8) {
                 });
             };
 
-            img.onerror = () => reject(new Error('Failed to load image'));
+            img.onerror = (err) => {
+                console.error('Image load error:', err);
+                reject(new Error(`Failed to load image. File may be corrupted or in an unsupported format (${file.name})`));
+            };
             img.src = e.target.result;
         };
 
-        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.onerror = (err) => {
+            console.error('File read error:', err);
+            reject(new Error('Failed to read file. Please try again.'));
+        };
         reader.readAsDataURL(file);
     });
 }
