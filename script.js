@@ -7207,72 +7207,79 @@ async function compressImage(file, maxWidth = 1200, quality = 0.8) {
     
     console.log(`📷 Processing image: ${fileName}, type: ${fileType || 'unknown'}, size: ${(file.size / 1024).toFixed(0)}KB`);
     
-    // Basic validation - must be an image
-    if (fileType && !fileType.startsWith('image/')) {
+    // Basic validation - must be an image or have image extension
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.heic', '.heif'];
+    const hasImageExtension = imageExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+    
+    if (fileType && !fileType.startsWith('image/') && !hasImageExtension) {
         throw new Error(`Not an image file: ${fileType}. Please select an image.`);
     }
     
     return new Promise((resolve, reject) => {
-        const reader = new FileReader();
+        const img = new Image();
+        
+        // Use createObjectURL instead of FileReader - better HEIC support on Safari/iOS
+        const objectUrl = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            // Revoke the object URL to free memory
+            URL.revokeObjectURL(objectUrl);
+            
+            // Calculate new dimensions
+            let width = img.width;
+            let height = img.height;
 
-        reader.onload = (e) => {
-            const img = new Image();
+            if (width > maxWidth) {
+                height = (height * maxWidth) / width;
+                width = maxWidth;
+            }
 
-            img.onload = () => {
-                // Calculate new dimensions
-                let width = img.width;
-                let height = img.height;
+            // Create canvas
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
 
-                if (width > maxWidth) {
-                    height = (height * maxWidth) / width;
-                    width = maxWidth;
-                }
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
 
-                // Create canvas
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
+            // Convert to WebP (best compression) or fallback to JPEG
+            let mimeType = 'image/webp';
+            let base64Data = canvas.toDataURL(mimeType, quality);
 
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
+            // Fallback to JPEG if WebP not supported
+            if (!base64Data || base64Data === 'data:,') {
+                mimeType = 'image/jpeg';
+                base64Data = canvas.toDataURL(mimeType, quality);
+            }
 
-                // Convert to WebP (best compression) or fallback to JPEG
-                let mimeType = 'image/webp';
-                let base64Data = canvas.toDataURL(mimeType, quality);
+            const originalSize = file.size;
+            const compressedSize = Math.round((base64Data.length * 3) / 4); // Approximate size
 
-                // Fallback to JPEG if WebP not supported
-                if (!base64Data || base64Data === 'data:,') {
-                    mimeType = 'image/jpeg';
-                    base64Data = canvas.toDataURL(mimeType, quality);
-                }
+            const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
+            console.log(`📦 Image compressed: ${(originalSize / 1024).toFixed(0)}KB → ${(compressedSize / 1024).toFixed(0)}KB (${compressionRatio}% reduction)`);
 
-                const originalSize = file.size;
-                const compressedSize = Math.round((base64Data.length * 3) / 4); // Approximate size
-
-                const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
-                console.log(`📦 Image compressed: ${(originalSize / 1024).toFixed(0)}KB → ${(compressedSize / 1024).toFixed(0)}KB (${compressionRatio}% reduction)`);
-
-                resolve({
-                    base64: base64Data,
-                    filename: file.name.replace(/\.[^.]+$/, '.webp'), // Change extension to .webp
-                    type: mimeType,
-                    size: compressedSize,
-                    originalSize: originalSize
-                });
-            };
-
-            img.onerror = (err) => {
-                console.error('Image load error:', err);
-                reject(new Error(`Failed to load image. File may be corrupted or in an unsupported format (${file.name})`));
-            };
-            img.src = e.target.result;
+            resolve({
+                base64: base64Data,
+                filename: file.name.replace(/\.[^.]+$/, '.webp'), // Change extension to .webp
+                type: mimeType,
+                size: compressedSize,
+                originalSize: originalSize
+            });
         };
 
-        reader.onerror = (err) => {
-            console.error('File read error:', err);
-            reject(new Error('Failed to read file. Please try again.'));
+        img.onerror = (err) => {
+            URL.revokeObjectURL(objectUrl);
+            console.error('Image load error:', err, 'File:', fileName, 'Type:', fileType);
+            
+            // Provide specific guidance for HEIC files
+            if (fileName.toLowerCase().endsWith('.heic') || fileName.toLowerCase().endsWith('.heif')) {
+                reject(new Error(`Cannot load HEIC image. Your browser may not support HEIC format. Try taking a screenshot of the receipt or converting to JPEG.`));
+            } else {
+                reject(new Error(`Failed to load image "${fileName}". The file may be corrupted.`));
+            }
         };
-        reader.readAsDataURL(file);
+        
+        img.src = objectUrl;
     });
 }
 
