@@ -42,6 +42,72 @@ function hideLoader() {
     }
 }
 
+// ==================== MODAL SCROLL LOCK FUNCTIONS ====================
+// Prevents background page from scrolling when modal is open
+let scrollPosition = 0;
+
+function lockBodyScroll() {
+    scrollPosition = window.pageYOffset;
+    document.body.classList.add('modal-open');
+    document.body.style.top = `-${scrollPosition}px`;
+}
+
+function unlockBodyScroll() {
+    document.body.classList.remove('modal-open');
+    document.body.style.top = '';
+    window.scrollTo(0, scrollPosition);
+}
+
+function updateBodyScrollLock() {
+    const activeModals = document.querySelectorAll('.modal.active');
+    if (activeModals.length > 0) {
+        if (!document.body.classList.contains('modal-open')) {
+            lockBodyScroll();
+        }
+    } else {
+        if (document.body.classList.contains('modal-open')) {
+            unlockBodyScroll();
+        }
+    }
+}
+
+// Watch for modal open/close using MutationObserver
+document.addEventListener('DOMContentLoaded', () => {
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const target = mutation.target;
+                if (target.classList.contains('modal')) {
+                    updateBodyScrollLock();
+                }
+            }
+        });
+    });
+    
+    // Observe all modals
+    document.querySelectorAll('.modal').forEach(modal => {
+        observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+    });
+    
+    // Also observe body for dynamically created modals
+    const bodyObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach(node => {
+                if (node.nodeType === 1 && node.classList && node.classList.contains('modal')) {
+                    observer.observe(node, { attributes: true, attributeFilter: ['class'] });
+                    updateBodyScrollLock();
+                }
+            });
+            mutation.removedNodes.forEach(node => {
+                if (node.nodeType === 1 && node.classList && node.classList.contains('modal')) {
+                    updateBodyScrollLock();
+                }
+            });
+        });
+    });
+    bodyObserver.observe(document.body, { childList: true });
+});
+
 // Try to get credentials from URL parameters first (works in private mode!)
 const urlParams = new URLSearchParams(window.location.search);
 
