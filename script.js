@@ -7202,19 +7202,14 @@ function showDuplicateConfirmation(duplicates, newExpense) {
  * @returns {Promise<{base64: string, filename: string, type: string, size: number, originalSize: number}>}
  */
 async function compressImage(file, maxWidth = 1200, quality = 0.8) {
-    // Check file type first
-    const supportedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/bmp'];
-    const fileType = file.type.toLowerCase();
+    const fileType = (file.type || '').toLowerCase();
+    const fileName = file.name || 'unknown';
     
-    console.log(`📷 Processing image: ${file.name}, type: ${fileType}, size: ${(file.size / 1024).toFixed(0)}KB`);
+    console.log(`📷 Processing image: ${fileName}, type: ${fileType || 'unknown'}, size: ${(file.size / 1024).toFixed(0)}KB`);
     
-    // Check for unsupported formats
-    if (fileType === 'image/heic' || fileType === 'image/heif' || file.name.toLowerCase().endsWith('.heic')) {
-        throw new Error('HEIC format not supported. Please convert to JPEG or PNG first, or use a different photo.');
-    }
-    
-    if (!supportedTypes.includes(fileType) && !fileType.startsWith('image/')) {
-        throw new Error(`Unsupported file type: ${fileType || 'unknown'}. Please use JPEG, PNG, or WebP.`);
+    // Basic validation - must be an image
+    if (fileType && !fileType.startsWith('image/')) {
+        throw new Error(`Not an image file: ${fileType}. Please select an image.`);
     }
     
     return new Promise((resolve, reject) => {
