@@ -53,6 +53,7 @@ body.modal-open {
 .modal-header { margin-bottom: 1.5rem; }
 .modal-footer { margin-top: 1.5rem; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.animate-slide-up { animation: slideUp 0.3s ease; }
 .expense-row { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .expense-row:hover { background: #f9fafb; }
 .expense-header { display: none; }

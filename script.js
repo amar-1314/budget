@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-11T15:48:00Z'; // Auto-updated on deployment
-const APP_VERSION = '25.50.23'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-11T18:15:00Z'; // Auto-updated on deployment
+const APP_VERSION = '25.50.25'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -7294,8 +7294,9 @@ async function uploadReceiptAndSave(recordId, fields, file) {
 
         // Store receipt as base64 in the Receipt field
         // Format: [{ url: "data:image/...", filename: "...", ... }]
+        const receiptDataUrl = compressed.base64;
         fields.Receipt = JSON.stringify([{
-            url: compressed.base64,
+            url: receiptDataUrl,
             filename: compressed.filename,
             type: compressed.type,
             size: compressed.size,
@@ -7312,31 +7313,52 @@ async function uploadReceiptAndSave(recordId, fields, file) {
         const isGrocery = category.includes('grocery') || category.includes('groceries');
         
         if (isGrocery) {
-            // Mark as not scanned yet (will be auto-processed by Edge Function)
+            // Mark as not scanned yet - will be scanned client-side immediately
             fields.receipt_scanned = false;
-            fields.receipt_processing_status = 'pending';
-            console.log('Grocery receipt - will be auto-scanned');
+            fields.receipt_processing_status = 'processing';
+            console.log('Grocery receipt - will be scanned client-side');
         } else {
-            // Non-grocery receipts: mark as already scanned (won't be auto-processed)
+            // Non-grocery receipts: mark as already scanned (won't be processed)
             fields.receipt_scanned = true;
             fields.receipt_processing_status = 'skipped';
             console.log('Non-grocery receipt - skipping auto-scan');
         }
 
-        // Save expense with receipt data
-        await saveExpenseToSupabase(recordId, fields);
+        // Save expense with receipt data (async - don't wait for scan to complete form)
+        const savedExpense = await saveExpenseToSupabase(recordId, fields);
+        const expenseId = savedExpense?.id || recordId;
         
-        if (isGrocery) {
-            showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB) - Will scan items automatically...`, 'success');
-            // Backend Edge Function will automatically process the receipt via database webhook
-            console.log('Receipt uploaded - backend will process automatically via Edge Function');
-        } else {
+        if (!isGrocery) {
             showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB)`, 'success');
             console.log('Receipt saved - not a grocery category, skipping item extraction');
+            return;
+        }
+        
+        // For grocery receipts: Start client-side scanning with spinner
+        showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB) - Scanning items...`, 'success');
+        showScanningSpinner('Scanning receipt...');
+        
+        // Scan receipt with 3 retries (runs async but spinner shows progress)
+        const scanResult = await scanReceiptWithRetries(expenseId, receiptDataUrl, fields, 3);
+        
+        hideScanningSpinner();
+        
+        if (scanResult.success) {
+            if (scanResult.itemCount > 0) {
+                showNotification(`✓ Extracted ${scanResult.itemCount} items from receipt!`, 'success');
+            } else {
+                showNotification('Receipt scanned but no items found', 'info');
+            }
+        } else {
+            // Scan failed after all retries - mark as failed in database
+            console.error('Receipt scan failed after 3 retries:', scanResult.error);
+            await markScanAsFailed(expenseId, scanResult.error);
+            showNotification('Receipt saved but scan failed. Check Receipt Tracker to retry.', 'warning');
         }
         
     } catch (error) {
         console.error('Error uploading receipt:', error);
+        hideScanningSpinner();
         showNotification('Error: ' + error.message, 'error');
     }
 }
@@ -7439,6 +7461,373 @@ function handleReceiptFileChange() {
     
     // Note: Receipt will be scanned when "Process Unscanned Receipts" is run
     // This avoids issues with app closing mid-scan
+}
+
+// ============================================
+// FAILED SCANS MANAGEMENT (Database-based)
+// ============================================
+
+// Get failed scans from database (expenses with receipt_processing_status = 'failed')
+async function getFailedScans() {
+    try {
+        const failed = await supabaseGet(TABLE_NAME, {
+            'has_receipt': 'eq.true',
+            'receipt_processing_status': 'eq.failed'
+        }, 100);
+        // Filter to only grocery category expenses
+        const groceryFailed = (failed || []).filter(expense => {
+            const category = (expense.Category || '').toLowerCase();
+            return category.includes('grocery') || category.includes('groceries');
+        });
+        return groceryFailed;
+    } catch (e) {
+        console.error('Error loading failed scans from DB:', e);
+        return [];
+    }
+}
+
+// Mark a scan as failed in database
+async function markScanAsFailed(expenseId, errorMessage) {
+    try {
+        await supabasePatch(TABLE_NAME, expenseId, { 
+            receipt_processing_status: 'failed',
+            receipt_error: errorMessage?.substring(0, 255) || 'Unknown error'
+        });
+        console.log(`Marked expense ${expenseId} as failed scan`);
+    } catch (e) {
+        console.error('Error marking scan as failed:', e);
+    }
+}
+
+// Clear all failed scans (mark them as dismissed)
+async function clearAllFailedScans() {
+    if (!confirm('Are you sure you want to dismiss all failed scans? This cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const failed = await getFailedScans();
+        for (const expense of failed) {
+            await supabasePatch(TABLE_NAME, expense.id, { 
+                receipt_scanned: true,
+                receipt_processing_status: 'dismissed' 
+            });
+        }
+        showNotification(`Dismissed ${failed.length} failed scans`, 'success');
+        await renderFailedScansList();
+    } catch (e) {
+        console.error('Error clearing failed scans:', e);
+        showNotification('Error clearing failed scans', 'error');
+    }
+}
+
+// Render failed scans list in Receipt Tracker (from database)
+async function renderFailedScansList() {
+    const section = document.getElementById('failedScansSection');
+    const list = document.getElementById('failedScansList');
+    const countEl = document.getElementById('failedScansCount');
+    
+    if (!section || !list) return;
+    
+    const scans = await getFailedScans();
+    
+    if (scans.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+    
+    section.classList.remove('hidden');
+    countEl.textContent = `(${scans.length})`;
+    
+    list.innerHTML = scans.map(expense => {
+        const date = `${expense.Year}-${String(expense.Month || 1).padStart(2, '0')}-${String(expense.Day || 1).padStart(2, '0')}`;
+        return `
+        <div class="bg-white rounded-lg p-3 border border-red-100 flex items-center justify-between">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-receipt text-gray-400"></i>
+                    <span class="font-medium text-gray-800 truncate">${escapeHtml(expense.Item || 'Unknown')}</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">
+                    <span>${escapeHtml(expense.Category)}</span> • 
+                    <span>${date}</span>
+                </div>
+                ${expense.receipt_error ? `<div class="text-xs text-red-400 mt-1 truncate" title="${escapeHtml(expense.receipt_error)}">${escapeHtml(expense.receipt_error.substring(0, 50))}...</div>` : ''}
+            </div>
+            <div class="flex gap-2 ml-3">
+                <button onclick="retryFailedScan('${expense.id}')" 
+                    class="px-3 py-1.5 text-xs bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-medium">
+                    <i class="fas fa-redo mr-1"></i>Retry
+                </button>
+                <button onclick="dismissFailedScan('${expense.id}')" 
+                    class="px-2 py-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors" title="Dismiss">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    }).join('');
+}
+
+// Retry a single failed scan (fetches receipt from database)
+async function retryFailedScan(expenseId) {
+    showScanningSpinner('Loading receipt...');
+    
+    try {
+        // Fetch the expense with receipt data from database
+        const expenses = await supabaseGet(TABLE_NAME, { 'id': `eq.${expenseId}` }, 1, '*');
+        const expense = expenses?.[0];
+        
+        if (!expense) {
+            hideScanningSpinner();
+            showNotification('Expense not found', 'error');
+            return;
+        }
+        
+        if (!expense.Receipt) {
+            hideScanningSpinner();
+            showNotification('No receipt data found', 'error');
+            return;
+        }
+        
+        // Parse receipt data to get base64
+        let receiptDataUrl = null;
+        let receiptData = expense.Receipt;
+        
+        if (typeof receiptData === 'string') {
+            if (receiptData.startsWith('data:')) {
+                receiptDataUrl = receiptData;
+            } else if (receiptData.startsWith('[') || receiptData.startsWith('{')) {
+                const parsed = JSON.parse(receiptData);
+                if (Array.isArray(parsed) && parsed[0]?.url) {
+                    receiptDataUrl = parsed[0].url;
+                } else if (parsed.url) {
+                    receiptDataUrl = parsed.url;
+                }
+            }
+        } else if (Array.isArray(receiptData) && receiptData[0]?.url) {
+            receiptDataUrl = receiptData[0].url;
+        } else if (receiptData?.url) {
+            receiptDataUrl = receiptData.url;
+        }
+        
+        if (!receiptDataUrl) {
+            hideScanningSpinner();
+            showNotification('Could not extract receipt image', 'error');
+            return;
+        }
+        
+        updateScanningSpinner('Retrying scan...', 'Starting...');
+        
+        const result = await scanReceiptWithRetries(
+            expenseId, 
+            receiptDataUrl, 
+            expense, 
+            3
+        );
+        
+        hideScanningSpinner();
+        
+        if (result.success) {
+            if (result.itemCount > 0) {
+                showNotification(`✓ Extracted ${result.itemCount} items!`, 'success');
+            } else {
+                showNotification('Scanned but no items found', 'info');
+            }
+            await renderFailedScansList();
+            // Refresh search results if visible
+            const searchInput = document.getElementById('itemSearchInput');
+            if (searchInput && searchInput.value) {
+                searchReceiptItems(searchInput.value);
+            }
+        } else {
+            showNotification('Scan failed again: ' + (result.error || 'Unknown error'), 'error');
+            await renderFailedScansList();
+        }
+        
+    } catch (error) {
+        hideScanningSpinner();
+        showNotification('Error retrying scan: ' + error.message, 'error');
+    }
+}
+
+// Dismiss a failed scan without retrying
+async function dismissFailedScan(expenseId) {
+    if (!confirm('Dismiss this failed scan? The receipt will remain but items won\'t be extracted.')) {
+        return;
+    }
+    
+    try {
+        await supabasePatch(TABLE_NAME, expenseId, { 
+            receipt_scanned: true, 
+            receipt_processing_status: 'dismissed' 
+        });
+        showNotification('Scan dismissed', 'info');
+        await renderFailedScansList();
+    } catch (e) {
+        console.error('Error dismissing scan:', e);
+        showNotification('Error dismissing scan', 'error');
+    }
+}
+
+// Helper to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ============================================
+// RECEIPT SCANNING SPINNER
+// ============================================
+
+let activeScanningSpinner = null;
+
+function showScanningSpinner(message = 'Scanning receipt...') {
+    // Remove existing if any
+    hideScanningSpinner();
+    
+    const spinner = document.createElement('div');
+    spinner.id = 'receipt-scanning-spinner';
+    spinner.className = 'fixed bottom-4 right-4 bg-white rounded-lg shadow-xl border border-purple-200 p-4 z-50 flex items-center gap-3 animate-slide-up';
+    spinner.innerHTML = `
+        <div class="relative">
+            <div class="w-10 h-10 border-4 border-purple-200 rounded-full animate-spin border-t-purple-600"></div>
+            <i class="fas fa-receipt absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-purple-600 text-xs"></i>
+        </div>
+        <div>
+            <div class="font-semibold text-gray-800" id="scanning-spinner-title">${message}</div>
+            <div class="text-xs text-gray-500" id="scanning-spinner-status">Extracting items...</div>
+        </div>
+    `;
+    
+    document.body.appendChild(spinner);
+    activeScanningSpinner = spinner;
+}
+
+function updateScanningSpinner(title, status) {
+    if (activeScanningSpinner) {
+        const titleEl = document.getElementById('scanning-spinner-title');
+        const statusEl = document.getElementById('scanning-spinner-status');
+        if (titleEl) titleEl.textContent = title;
+        if (statusEl) statusEl.textContent = status;
+    }
+}
+
+function hideScanningSpinner() {
+    if (activeScanningSpinner) {
+        activeScanningSpinner.remove();
+        activeScanningSpinner = null;
+    }
+    // Also remove by ID in case reference was lost
+    const existing = document.getElementById('receipt-scanning-spinner');
+    if (existing) existing.remove();
+}
+
+// ============================================
+// CLIENT-SIDE RECEIPT SCANNING WITH RETRIES
+// ============================================
+
+async function scanReceiptWithRetries(expenseId, base64DataUrl, expenseFields, maxRetries = 3) {
+    let lastError = null;
+    
+    // Extract base64 and mimeType from data URL
+    let mimeType = 'image/jpeg';
+    let cleanBase64 = base64DataUrl;
+    
+    if (base64DataUrl.startsWith('data:')) {
+        const matches = base64DataUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (matches) {
+            mimeType = matches[1];
+            cleanBase64 = matches[2];
+        }
+    }
+    
+    if (!cleanBase64 || !mimeType.startsWith('image/')) {
+        console.error('Invalid image data for scanning');
+        return { success: false, error: 'Invalid image data' };
+    }
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            updateScanningSpinner('Scanning receipt...', `Attempt ${attempt}/${maxRetries}`);
+            console.log(`Receipt scan attempt ${attempt}/${maxRetries} for expense ${expenseId}`);
+            
+            // Call Gemini API
+            const extractedData = await extractReceiptDataWithGemini(cleanBase64, mimeType);
+            
+            if (extractedData && extractedData.items && extractedData.items.length > 0) {
+                // Success! Save items to database
+                updateScanningSpinner('Saving items...', `Found ${extractedData.items.length} items`);
+                
+                // Determine purchase date
+                let purchaseDate = extractedData.date;
+                if (!purchaseDate && expenseFields) {
+                    const year = expenseFields.Year || new Date().getFullYear();
+                    const month = String(expenseFields.Month || 1).padStart(2, '0');
+                    const day = String(expenseFields.Day || 1).padStart(2, '0');
+                    purchaseDate = `${year}-${month}-${day}`;
+                }
+                
+                // Save items to ReceiptItems table
+                for (const item of extractedData.items) {
+                    await supabasePost(RECEIPT_ITEMS_TABLE, {
+                        expense_id: expenseId,
+                        item_name: item.description || 'Unknown Item',
+                        quantity: item.quantity || 1,
+                        unit_price: item.unit_price || 0,
+                        total_price: item.total_price || 0,
+                        store: extractedData.store || expenseFields?.Item || 'Unknown',
+                        purchase_date: purchaseDate
+                    });
+                }
+                
+                // Mark receipt as scanned (this also clears 'failed' status if retrying)
+                await supabasePatch(TABLE_NAME, expenseId, { 
+                    receipt_scanned: true, 
+                    receipt_processing_status: 'completed',
+                    receipt_error: null
+                });
+                
+                return { 
+                    success: true, 
+                    itemCount: extractedData.items.length,
+                    store: extractedData.store
+                };
+            } else {
+                // No items found - not an error, just no items
+                await supabasePatch(TABLE_NAME, expenseId, { 
+                    receipt_scanned: true, 
+                    receipt_processing_status: 'completed',
+                    receipt_error: null
+                });
+                return { success: true, itemCount: 0 };
+            }
+            
+        } catch (error) {
+            console.error(`Scan attempt ${attempt} failed:`, error.message);
+            lastError = error;
+            
+            // Check if it's a rate limit error
+            const isRateLimit = error.message?.includes('rate limit') || 
+                               error.message?.includes('Rate limit') ||
+                               error.message?.includes('quota') ||
+                               error.message?.includes('429');
+            
+            if (isRateLimit && attempt < maxRetries) {
+                // Wait before retry on rate limit
+                updateScanningSpinner('Rate limited...', `Waiting to retry (${attempt}/${maxRetries})`);
+                await new Promise(resolve => setTimeout(resolve, 3000 * attempt)); // Exponential backoff
+            } else if (attempt < maxRetries) {
+                // Short delay before retry for other errors
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+    }
+    
+    // All retries failed
+    return { success: false, error: lastError?.message || 'Unknown error' };
 }
 
 // Receipt Tracker & Google Gemini OCR Integration
@@ -7554,6 +7943,7 @@ function switchReceiptTab(tabName) {
 
     if (tabName === 'search') {
         searchReceiptItems(''); // Load initial history
+        renderFailedScansList(); // Show failed scans if any
     }
 }
 
@@ -8029,39 +8419,13 @@ async function processUnscannedReceipts() {
 }
 
 // Try to process receipts using the backend Edge Function
+// NOTE: Edge Function disabled due to Gemini API rate limiting on Supabase's shared IPs.
+// Google rate-limits data center IPs more aggressively than residential IPs.
+// Client-side processing works reliably since it uses the user's own IP.
 async function tryProcessWithEdgeFunction(expenses) {
-    try {
-        if (!SUPABASE_URL) return { success: false };
-        
-        const edgeFunctionUrl = `${SUPABASE_URL}/functions/v1/process-receipt`;
-        
-        // Process each expense via Edge Function
-        const promises = expenses.map(expense => 
-            fetch(edgeFunctionUrl, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ expense_id: expense.id })
-            }).catch(e => ({ ok: false, error: e }))
-        );
-        
-        // Wait for first response to check if Edge Function is available
-        const firstResult = await Promise.race(promises);
-        
-        if (firstResult.ok || firstResult.status === 200) {
-            return { success: true };
-        }
-        
-        // Edge function not deployed or error
-        console.log('Edge Function not available:', firstResult.status);
-        return { success: false };
-        
-    } catch (error) {
-        console.log('Edge Function check failed:', error);
-        return { success: false };
-    }
+    // Always use client-side processing - Edge Function is rate-limited on shared IPs
+    console.log('Using client-side processing (Edge Function disabled due to IP-based rate limits)');
+    return { success: false };
 }
 
 // Helper function to extract receipt data using Gemini
@@ -8210,6 +8574,9 @@ async function saveExpenseToSupabase(recordId, fields) {
                 `${cleanFields.Item} - $${cleanFields.Actual.toFixed(2)}`
             );
         }
+        
+        // Return the saved record info for further processing
+        return { id: savedRecordId, ...cleanFields };
     } catch (error) {
         console.error('Error saving to Supabase:', error);
         showNotification('Error: ' + error.message, 'error');

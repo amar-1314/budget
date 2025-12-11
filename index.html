@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-    <link rel="stylesheet" href="style.css?v=25.50.8">
+    <link rel="stylesheet" href="style.css?v=25.50.25">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -1528,6 +1528,27 @@
                     </div>
                 </div>
 
+                <!-- Failed Scans Section -->
+                <div id="failedScansSection" class="mb-4 hidden">
+                    <div class="p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-200">
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <p class="text-sm font-semibold text-gray-800">
+                                    <i class="fas fa-exclamation-triangle mr-2 text-red-500"></i>
+                                    Failed Scans <span id="failedScansCount" class="text-red-600">(0)</span>
+                                </p>
+                                <p class="text-xs text-gray-500">Receipts that couldn't be scanned. Retry individually.</p>
+                            </div>
+                            <button onclick="clearAllFailedScans()" class="text-xs text-red-600 hover:text-red-800 font-medium">
+                                <i class="fas fa-trash-alt mr-1"></i>Clear All
+                            </button>
+                        </div>
+                        <div id="failedScansList" class="space-y-2 max-h-48 overflow-y-auto">
+                            <!-- Failed scans will be listed here -->
+                        </div>
+                    </div>
+                </div>
+
                 <div class="mb-6 relative">
                     <input type="text" id="itemSearchInput" placeholder="Search for an item (e.g., 'milk', 'tomato')..." 
                         class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
@@ -1897,6 +1918,6 @@
             </div>
         </div>
     </div>
-    <script src="script.js?v=25.50.8"></script>
+    <script src="script.js?v=25.50.25"></script>
 </body>
 </html>
