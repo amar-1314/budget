@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-    <link rel="stylesheet" href="style.css?v=25.50.28">
+    <link rel="stylesheet" href="style.css?v=25.50.29">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -86,6 +86,14 @@
                         <div class="text-xs text-gray-500">View detailed monthly reports</div>
                     </div>
                 </button>
+                <button onclick="openReceiptTracker(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-receipt text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Receipt Tracker</div>
+                        <div class="text-xs text-gray-500">Scan & track item prices</div>
+                    </div>
+                </button>
                 <button onclick="openPredictiveBudgeting(); toggleMenu();"
                     class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
                     <i class="fas fa-crystal-ball text-purple-600 text-xl"></i>
@@ -132,14 +140,6 @@
                     <div>
                         <div class="font-semibold text-gray-800">LLC Eligible Expenses</div>
                         <div class="text-xs text-gray-500">Define business-eligible items</div>
-                    </div>
-                </button>
-                <button onclick="openReceiptTracker(); toggleMenu();"
-                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
-                    <i class="fas fa-receipt text-purple-600 text-xl"></i>
-                    <div>
-                        <div class="font-semibold text-gray-800">Receipt Tracker</div>
-                        <div class="text-xs text-gray-500">Scan & track item prices</div>
                     </div>
                 </button>
                 <button onclick="openSettings(); toggleMenu();"
@@ -1918,6 +1918,6 @@
             </div>
         </div>
     </div>
-    <script src="script.js?v=25.50.28"></script>
+    <script src="script.js?v=25.50.29"></script>
 </body>
 </html>
