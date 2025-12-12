@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-12T13:39:56Z'; // Auto-updated on deployment
-const APP_VERSION = '25.50.26'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-12T13:45:00Z'; // Auto-updated on deployment
+const APP_VERSION = '25.50.28'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -2852,8 +2852,10 @@ function viewReceipt(receiptData) {
 
         document.body.appendChild(modal);
 
-        // Zoom functionality
+        // Zoom and pan functionality
         let currentZoom = 1;
+        let panX = 0;
+        let panY = 0;
         const minZoom = 0.5;
         const maxZoom = 5;
         const zoomStep = 0.25;
@@ -2865,19 +2867,68 @@ function viewReceipt(receiptData) {
         const zoomOutBtn = modal.querySelector('#zoomOutBtn');
         const zoomResetBtn = modal.querySelector('#zoomResetBtn');
         
-        function updateZoom(newZoom) {
-            currentZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
-            img.style.transform = `scale(${currentZoom})`;
+        function updateTransform() {
+            img.style.transform = `scale(${currentZoom}) translate(${panX}px, ${panY}px)`;
             zoomLevelEl.textContent = `${Math.round(currentZoom * 100)}%`;
             
             // Update button states
             zoomInBtn.style.opacity = currentZoom >= maxZoom ? '0.5' : '1';
             zoomOutBtn.style.opacity = currentZoom <= minZoom ? '0.5' : '1';
+            
+            // Update cursor based on zoom level
+            img.style.cursor = currentZoom > 1 ? 'grab' : 'default';
+        }
+        
+        function updateZoom(newZoom, resetPan = false) {
+            currentZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+            if (resetPan || currentZoom <= 1) {
+                panX = 0;
+                panY = 0;
+            }
+            updateTransform();
         }
         
         zoomInBtn.addEventListener('click', () => updateZoom(currentZoom + zoomStep));
         zoomOutBtn.addEventListener('click', () => updateZoom(currentZoom - zoomStep));
-        zoomResetBtn.addEventListener('click', () => updateZoom(1));
+        zoomResetBtn.addEventListener('click', () => updateZoom(1, true));
+        
+        // Mouse drag to pan (when zoomed in)
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let panStartX = 0;
+        let panStartY = 0;
+        
+        img.addEventListener('mousedown', (e) => {
+            if (currentZoom > 1) {
+                isDragging = true;
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+                panStartX = panX;
+                panStartY = panY;
+                img.style.cursor = 'grabbing';
+                img.style.transition = 'none';
+                e.preventDefault();
+            }
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const dx = (e.clientX - dragStartX) / currentZoom;
+                const dy = (e.clientY - dragStartY) / currentZoom;
+                panX = panStartX + dx;
+                panY = panStartY + dy;
+                updateTransform();
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                img.style.cursor = currentZoom > 1 ? 'grab' : 'default';
+                img.style.transition = 'transform 0.2s ease';
+            }
+        });
         
         // Mouse wheel zoom
         container.addEventListener('wheel', (e) => {
@@ -2888,17 +2939,32 @@ function viewReceipt(receiptData) {
             }
         }, { passive: false });
         
-        // Pinch-to-zoom for touch devices
+        // Touch: pinch-to-zoom and single-finger pan
         let initialDistance = 0;
         let initialZoom = 1;
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchPanStartX = 0;
+        let touchPanStartY = 0;
+        let isTouchPanning = false;
         
         container.addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
+                // Pinch zoom
                 initialDistance = Math.hypot(
                     e.touches[0].pageX - e.touches[1].pageX,
                     e.touches[0].pageY - e.touches[1].pageY
                 );
                 initialZoom = currentZoom;
+                isTouchPanning = false;
+            } else if (e.touches.length === 1 && currentZoom > 1) {
+                // Single finger pan when zoomed
+                isTouchPanning = true;
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                touchPanStartX = panX;
+                touchPanStartY = panY;
+                img.style.transition = 'none';
             }
         }, { passive: true });
         
@@ -2910,20 +2976,36 @@ function viewReceipt(receiptData) {
                     e.touches[0].pageY - e.touches[1].pageY
                 );
                 const scale = currentDistance / initialDistance;
-                updateZoom(initialZoom * scale);
+                currentZoom = Math.max(minZoom, Math.min(maxZoom, initialZoom * scale));
+                updateTransform();
+            } else if (e.touches.length === 1 && isTouchPanning && currentZoom > 1) {
+                e.preventDefault();
+                const dx = (e.touches[0].clientX - touchStartX) / currentZoom;
+                const dy = (e.touches[0].clientY - touchStartY) / currentZoom;
+                panX = touchPanStartX + dx;
+                panY = touchPanStartY + dy;
+                updateTransform();
             }
         }, { passive: false });
         
+        container.addEventListener('touchend', (e) => {
+            if (isTouchPanning) {
+                isTouchPanning = false;
+                img.style.transition = 'transform 0.2s ease';
+            }
+        });
+        
         // Double-tap to zoom on mobile
         let lastTap = 0;
-        container.addEventListener('touchend', (e) => {
+        img.addEventListener('touchend', (e) => {
             const now = Date.now();
             if (now - lastTap < 300 && e.changedTouches.length === 1) {
+                e.preventDefault();
                 // Double tap detected
                 if (currentZoom === 1) {
                     updateZoom(2.5); // Zoom in to 250%
                 } else {
-                    updateZoom(1); // Reset to 100%
+                    updateZoom(1, true); // Reset to 100%
                 }
             }
             lastTap = now;
