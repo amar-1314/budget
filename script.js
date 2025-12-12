@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-11T18:19:57Z'; // Auto-updated on deployment
-const APP_VERSION = '25.50.25'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-11T19:00:00Z'; // Auto-updated on deployment
+const APP_VERSION = '25.50.27'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -2809,25 +2809,37 @@ function viewReceipt(receiptData) {
             if (mimeMatch) fileExt = mimeMatch[1];
         }
 
-        // Create modal dynamically
+        // Create modal dynamically with zoom functionality
         const modal = document.createElement('div');
         modal.className = 'modal active';
         modal.style.zIndex = '10002'; // Higher than other modals
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 100%; width: 95vw; max-height: 95vh; padding: 0; display: flex; flex-direction: column;">
-                <div class="modal-header" style="position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e5e7eb; padding: 16px; flex-shrink: 0;">
+                <div class="modal-header" style="position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e5e7eb; padding: 12px 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;">
                     <h2 class="modal-title" style="margin: 0; font-size: 18px;"><i class="fas fa-receipt mr-2"></i>Receipt</h2>
-                    <button class="close-modal" onclick="this.closest('.modal').remove()" style="position: absolute; right: 16px; top: 16px;">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button id="zoomOutBtn" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Zoom Out">
+                            <i class="fas fa-search-minus text-gray-600"></i>
+                        </button>
+                        <span id="zoomLevel" style="font-size: 12px; color: #6b7280; min-width: 45px; text-align: center;">100%</span>
+                        <button id="zoomInBtn" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center;" title="Zoom In">
+                            <i class="fas fa-search-plus text-gray-600"></i>
+                        </button>
+                        <button id="zoomResetBtn" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #e5e7eb; background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 4px;" title="Reset Zoom">
+                            <i class="fas fa-undo text-gray-600"></i>
+                        </button>
+                        <button class="close-modal" onclick="this.closest('.modal').remove()" style="width: 36px; height: 36px; border-radius: 8px; border: none; background: #fee2e2; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-left: 8px;">
+                            <i class="fas fa-times text-red-600"></i>
+                        </button>
+                    </div>
                 </div>
-                <div style="flex: 1; overflow: auto; padding: 16px; text-align: center; background: #f9fafb;">
-                    <img src="${receiptUrl}" 
+                <div id="receiptImageContainer" style="flex: 1; overflow: auto; padding: 16px; text-align: center; background: #f9fafb; touch-action: pan-x pan-y;">
+                    <img id="receiptImage" src="${receiptUrl}" 
                          alt="Receipt" 
-                         style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); background: white;"
+                         style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); background: white; transition: transform 0.2s ease; transform-origin: center center;"
                          onerror="this.parentElement.innerHTML='<p style=\\'color: #ef4444; padding: 20px;\\'>Error loading receipt image</p>'">
                 </div>
-                <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #e5e7eb; padding: 16px; display: flex; gap: 12px; flex-shrink: 0;">
+                <div class="modal-footer" style="position: sticky; bottom: 0; background: white; border-top: 1px solid #e5e7eb; padding: 12px 16px; display: flex; gap: 12px; flex-shrink: 0;">
                     <button class="btn-secondary" onclick="this.closest('.modal').remove()" style="flex: 1;">
                         <i class="fas fa-times mr-2"></i>Close
                     </button>
@@ -2839,6 +2851,83 @@ function viewReceipt(receiptData) {
         `;
 
         document.body.appendChild(modal);
+
+        // Zoom functionality
+        let currentZoom = 1;
+        const minZoom = 0.5;
+        const maxZoom = 5;
+        const zoomStep = 0.25;
+        
+        const img = modal.querySelector('#receiptImage');
+        const container = modal.querySelector('#receiptImageContainer');
+        const zoomLevelEl = modal.querySelector('#zoomLevel');
+        const zoomInBtn = modal.querySelector('#zoomInBtn');
+        const zoomOutBtn = modal.querySelector('#zoomOutBtn');
+        const zoomResetBtn = modal.querySelector('#zoomResetBtn');
+        
+        function updateZoom(newZoom) {
+            currentZoom = Math.max(minZoom, Math.min(maxZoom, newZoom));
+            img.style.transform = `scale(${currentZoom})`;
+            zoomLevelEl.textContent = `${Math.round(currentZoom * 100)}%`;
+            
+            // Update button states
+            zoomInBtn.style.opacity = currentZoom >= maxZoom ? '0.5' : '1';
+            zoomOutBtn.style.opacity = currentZoom <= minZoom ? '0.5' : '1';
+        }
+        
+        zoomInBtn.addEventListener('click', () => updateZoom(currentZoom + zoomStep));
+        zoomOutBtn.addEventListener('click', () => updateZoom(currentZoom - zoomStep));
+        zoomResetBtn.addEventListener('click', () => updateZoom(1));
+        
+        // Mouse wheel zoom
+        container.addEventListener('wheel', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const delta = e.deltaY > 0 ? -zoomStep : zoomStep;
+                updateZoom(currentZoom + delta);
+            }
+        }, { passive: false });
+        
+        // Pinch-to-zoom for touch devices
+        let initialDistance = 0;
+        let initialZoom = 1;
+        
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                initialDistance = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+                initialZoom = currentZoom;
+            }
+        }, { passive: true });
+        
+        container.addEventListener('touchmove', (e) => {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                const currentDistance = Math.hypot(
+                    e.touches[0].pageX - e.touches[1].pageX,
+                    e.touches[0].pageY - e.touches[1].pageY
+                );
+                const scale = currentDistance / initialDistance;
+                updateZoom(initialZoom * scale);
+            }
+        }, { passive: false });
+        
+        // Double-tap to zoom on mobile
+        let lastTap = 0;
+        container.addEventListener('touchend', (e) => {
+            const now = Date.now();
+            if (now - lastTap < 300 && e.changedTouches.length === 1) {
+                // Double tap detected
+                if (currentZoom === 1) {
+                    updateZoom(2.5); // Zoom in to 250%
+                } else {
+                    updateZoom(1); // Reset to 100%
+                }
+            }
+            lastTap = now;
+        });
 
         // Close modal when clicking outside
         modal.addEventListener('click', (e) => {
