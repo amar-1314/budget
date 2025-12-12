@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-11T19:00:00Z'; // Auto-updated on deployment
-const APP_VERSION = '25.50.27'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-12T13:39:56Z'; // Auto-updated on deployment
+const APP_VERSION = '25.50.26'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
