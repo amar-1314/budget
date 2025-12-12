@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2025-12-12T18:45:12Z'; // Auto-updated on deployment
-const APP_VERSION = '25.50.28'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2025-12-12T18:50:00Z'; // Auto-updated on deployment
+const APP_VERSION = '25.50.30'; // Auto-updated on deployment
 
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
@@ -872,11 +872,13 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }, true);
 
-    // Pull-to-refresh functionality
+    // Pull-to-refresh functionality with haptic feedback
     let touchStartY = 0;
     let touchEndY = 0;
     let isPulling = false;
     let pullDistance = 0;
+    let hasTriggeredHaptic = false;
+    const PULL_THRESHOLD = 150; // Increased threshold for less sensitivity
 
     const pullToRefreshIndicator = document.createElement('div');
     pullToRefreshIndicator.id = 'pullToRefreshIndicator';
@@ -896,13 +898,21 @@ document.addEventListener('DOMContentLoaded', function () {
                  font-weight: 600;
                  font-size: 14px;
              `;
-    pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Pull to refresh</div></div>';
+    pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><i class="fas fa-arrow-down" style="font-size: 20px; margin-bottom: 6px; opacity: 0.7;"></i><div>Pull down to refresh</div></div>';
     document.body.appendChild(pullToRefreshIndicator);
+    
+    // Haptic feedback helper
+    function triggerHaptic(pattern = [50]) {
+        if ('vibrate' in navigator) {
+            navigator.vibrate(pattern);
+        }
+    }
 
     document.addEventListener('touchstart', function (e) {
         if (window.scrollY === 0) {
             touchStartY = e.touches[0].clientY;
             isPulling = true;
+            hasTriggeredHaptic = false;
         }
     }, { passive: true });
 
@@ -912,15 +922,26 @@ document.addEventListener('DOMContentLoaded', function () {
         touchEndY = e.touches[0].clientY;
         pullDistance = touchEndY - touchStartY;
 
-        if (pullDistance > 0 && window.scrollY === 0) {
-            // Show indicator
-            const translateY = Math.min(pullDistance * 0.5, 80);
+        // Only start showing indicator after 30px pull (reduces accidental triggers)
+        if (pullDistance > 30 && window.scrollY === 0) {
+            // Reduced sensitivity: slower translation (0.35 instead of 0.5)
+            const translateY = Math.min((pullDistance - 30) * 0.35, 80);
             pullToRefreshIndicator.style.transform = `translateY(${translateY}px)`;
+            
+            // Calculate progress percentage
+            const progress = Math.min((pullDistance / PULL_THRESHOLD) * 100, 100);
 
-            if (pullDistance > 100) {
-                pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><i class="fas fa-arrow-down" style="font-size: 24px; margin-bottom: 8px;"></i><div>Release to refresh</div></div>';
+            if (pullDistance >= PULL_THRESHOLD) {
+                // Ready to refresh - trigger haptic once
+                if (!hasTriggeredHaptic) {
+                    triggerHaptic([30]); // Short vibration when threshold reached
+                    hasTriggeredHaptic = true;
+                }
+                pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><i class="fas fa-check-circle" style="font-size: 24px; margin-bottom: 6px;"></i><div>Release to refresh</div></div>';
+                pullToRefreshIndicator.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)'; // Green
             } else {
-                pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Pull to refresh</div></div>';
+                pullToRefreshIndicator.innerHTML = `<div style="text-align: center;"><i class="fas fa-arrow-down" style="font-size: 20px; margin-bottom: 6px; opacity: ${0.5 + progress/200};"></i><div>Pull down to refresh</div></div>`;
+                pullToRefreshIndicator.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'; // Purple
             }
         }
     }, { passive: true });
@@ -928,9 +949,13 @@ document.addEventListener('DOMContentLoaded', function () {
     document.addEventListener('touchend', async function (e) {
         if (!isPulling) return;
 
-        if (pullDistance > 100 && window.scrollY === 0) {
+        if (pullDistance >= PULL_THRESHOLD && window.scrollY === 0) {
+            // Trigger haptic on release
+            triggerHaptic([20, 30, 20]); // Pattern: short-pause-short
+            
             // Trigger refresh
             pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Refreshing...</div></div>';
+            pullToRefreshIndicator.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
             pullToRefreshIndicator.style.transform = 'translateY(80px)';
 
             try {
@@ -945,25 +970,29 @@ document.addEventListener('DOMContentLoaded', function () {
                 renderPayments();
                 updateStats();
 
+                triggerHaptic([50]); // Success haptic
                 showNotification('Data refreshed successfully!', 'success');
             } catch (error) {
+                triggerHaptic([100, 50, 100]); // Error haptic pattern
                 showNotification('Failed to refresh data', 'error');
             }
 
             // Hide indicator
             setTimeout(() => {
                 pullToRefreshIndicator.style.transform = 'translateY(0)';
-                pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Pull to refresh</div></div>';
+                pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><i class="fas fa-arrow-down" style="font-size: 20px; margin-bottom: 6px; opacity: 0.7;"></i><div>Pull down to refresh</div></div>';
             }, 500);
         } else {
             // Reset
             pullToRefreshIndicator.style.transform = 'translateY(0)';
+            pullToRefreshIndicator.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
         }
 
         isPulling = false;
         touchStartY = 0;
         touchEndY = 0;
         pullDistance = 0;
+        hasTriggeredHaptic = false;
     }, { passive: true });
 });
 
