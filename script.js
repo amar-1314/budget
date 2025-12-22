@@ -7804,8 +7804,11 @@ async function autoExtractReceiptItems(expenseId, base64Data, mimeType, expenseF
         
         showNotification('Extracting items from receipt...', 'info');
         
-        // Call Gemini API to extract items
-        const extractedData = await extractReceiptDataWithGemini(cleanBase64, mimeType);
+        const dataUrl = base64Data.startsWith('data:')
+            ? base64Data
+            : `data:${mimeType};base64,${cleanBase64}`;
+
+        const extractedData = await extractReceiptDataWithOcrSpaceAndGemini(dataUrl);
         
         if (extractedData && extractedData.items && extractedData.items.length > 0) {
             // Determine purchase date from expense fields
@@ -7819,9 +7822,13 @@ async function autoExtractReceiptItems(expenseId, base64Data, mimeType, expenseF
             
             // Save items to ReceiptItems table
             for (const item of extractedData.items) {
+                const unit = String(item.quantity_unit || '').trim();
+                const baseName = String(item.description || item.raw_description || 'Unknown Item').trim() || 'Unknown Item';
+                const itemName = unit && unit !== 'ea' ? `${baseName} (${unit})` : baseName;
+
                 await supabasePost(RECEIPT_ITEMS_TABLE, {
                     expense_id: expenseId,
-                    item_name: item.description || 'Unknown Item',
+                    item_name: itemName,
                     quantity: item.quantity || 1,
                     unit_price: item.unit_price || 0,
                     total_price: item.total_price || 0,
@@ -7831,13 +7838,21 @@ async function autoExtractReceiptItems(expenseId, base64Data, mimeType, expenseF
             }
             
             // Mark receipt as scanned
-            await supabasePatch(TABLE_NAME, expenseId, { receipt_scanned: true });
+            await supabasePatch(TABLE_NAME, expenseId, { 
+                receipt_scanned: true,
+                receipt_processing_status: 'completed',
+                receipt_error: null
+            });
             
             showNotification(`Extracted ${extractedData.items.length} items from receipt!`, 'success');
         } else {
             showNotification('No items could be extracted from receipt', 'warning');
             // Still mark as scanned to avoid repeated attempts
-            await supabasePatch(TABLE_NAME, expenseId, { receipt_scanned: true });
+            await supabasePatch(TABLE_NAME, expenseId, { 
+                receipt_scanned: true,
+                receipt_processing_status: 'completed',
+                receipt_error: null
+            });
         }
         
     } catch (error) {
@@ -8151,31 +8166,13 @@ function hideScanningSpinner() {
 
 async function scanReceiptWithRetries(expenseId, base64DataUrl, expenseFields, maxRetries = 3) {
     let lastError = null;
-    
-    // Extract base64 and mimeType from data URL
-    let mimeType = 'image/jpeg';
-    let cleanBase64 = base64DataUrl;
-    
-    if (base64DataUrl.startsWith('data:')) {
-        const matches = base64DataUrl.match(/^data:([^;]+);base64,(.+)$/);
-        if (matches) {
-            mimeType = matches[1];
-            cleanBase64 = matches[2];
-        }
-    }
-    
-    if (!cleanBase64 || !mimeType.startsWith('image/')) {
-        console.error('Invalid image data for scanning');
-        return { success: false, error: 'Invalid image data' };
-    }
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             updateScanningSpinner('Scanning receipt...', `Attempt ${attempt}/${maxRetries}`);
             console.log(`Receipt scan attempt ${attempt}/${maxRetries} for expense ${expenseId}`);
             
-            // Call Gemini API
-            const extractedData = await extractReceiptDataWithGemini(cleanBase64, mimeType);
+            const extractedData = await extractReceiptDataWithOcrSpaceAndGemini(base64DataUrl);
             
             if (extractedData && extractedData.items && extractedData.items.length > 0) {
                 // Success! Save items to database
@@ -8192,9 +8189,13 @@ async function scanReceiptWithRetries(expenseId, base64DataUrl, expenseFields, m
                 
                 // Save items to ReceiptItems table
                 for (const item of extractedData.items) {
+                    const unit = String(item.quantity_unit || '').trim();
+                    const baseName = String(item.description || item.raw_description || 'Unknown Item').trim() || 'Unknown Item';
+                    const itemName = unit && unit !== 'ea' ? `${baseName} (${unit})` : baseName;
+
                     await supabasePost(RECEIPT_ITEMS_TABLE, {
                         expense_id: expenseId,
-                        item_name: item.description || 'Unknown Item',
+                        item_name: itemName,
                         quantity: item.quantity || 1,
                         unit_price: item.unit_price || 0,
                         total_price: item.total_price || 0,
@@ -8604,6 +8605,68 @@ async function runOcrSpace(receiptDataUrlOrUrl) {
     return parsedText;
 }
 
+async function extractReceiptDataWithOcrSpaceAndGemini(receiptUrlOrDataUrl) {
+    let ocrInput = receiptUrlOrDataUrl;
+
+    if (String(receiptUrlOrDataUrl).startsWith('data:')) {
+        const mimeMatch = String(receiptUrlOrDataUrl).match(/^data:([^;]+);base64,/i);
+        const mimeType = (mimeMatch?.[1] || '').toLowerCase();
+        const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/bmp', 'image/tiff'];
+        if (mimeType && !allowed.includes(mimeType)) {
+            updateScanningSpinner('Preparing receipt...', 'Converting image');
+            ocrInput = await compressReceiptImageToDataUrl(receiptUrlOrDataUrl);
+        }
+    }
+
+    if (String(receiptUrlOrDataUrl).startsWith('data:')) {
+        const estimated = estimateDataUrlBytes(receiptUrlOrDataUrl);
+        if (estimated > 950 * 1024) {
+            updateScanningSpinner('Compressing receipt...', 'Reducing image size');
+            ocrInput = await compressReceiptImageToDataUrl(receiptUrlOrDataUrl);
+        }
+    } else {
+        try {
+            const head = await fetch(receiptUrlOrDataUrl, { method: 'HEAD' });
+            const len = head.headers.get('content-length');
+            const bytes = len ? Number(len) : NaN;
+            const contentType = (head.headers.get('content-type') || '').toLowerCase();
+            if (head.ok && contentType.includes('image/webp')) {
+                updateScanningSpinner('Preparing receipt...', 'Converting image');
+                ocrInput = await compressReceiptImageToDataUrl(receiptUrlOrDataUrl);
+            }
+            if (head.ok && isFinite(bytes) && bytes > 950 * 1024) {
+                updateScanningSpinner('Compressing receipt...', 'Reducing image size');
+                ocrInput = await compressReceiptImageToDataUrl(receiptUrlOrDataUrl);
+            }
+        } catch (e) {
+        }
+    }
+
+    updateScanningSpinner('Running OCR...', 'Sending to OCR.Space');
+    let ocrText = '';
+    try {
+        ocrText = await runOcrSpace(ocrInput);
+    } catch (e) {
+        const msg = String(e?.message || e);
+        const sizeLimitHit = msg.includes('Maximum size limit 1024 KB') || msg.includes('File size exceeds');
+        if (!sizeLimitHit) throw e;
+
+        updateScanningSpinner('Compressing receipt...', 'Reducing image size');
+        const compressed = await compressReceiptImageToDataUrl(receiptUrlOrDataUrl);
+
+        updateScanningSpinner('Running OCR...', 'Retrying with compressed image');
+        ocrText = await runOcrSpace(compressed);
+    }
+
+    if (!ocrText || ocrText.trim().length < 10) {
+        throw new Error('OCR returned no text');
+    }
+
+    updateScanningSpinner('Extracting items...', 'Sending OCR text to Gemini');
+    const extracted = await extractReceiptDataWithGeminiFromOcrText(ocrText);
+    return extracted;
+}
+
 async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
     const prompt = `You are given OCR text extracted from a grocery receipt. Extract receipt data and return ONLY valid JSON.
 
@@ -8679,50 +8742,7 @@ async function runOcrGeminiTest(expenseId) {
             return;
         }
 
-        let ocrInput = receiptUrl;
-        if (String(receiptUrl).startsWith('data:')) {
-            const estimated = estimateDataUrlBytes(receiptUrl);
-            if (estimated > 950 * 1024) {
-                updateScanningSpinner('Compressing receipt...', 'Reducing image size');
-                ocrInput = await compressReceiptImageToDataUrl(receiptUrl);
-            }
-        } else {
-            try {
-                const head = await fetch(receiptUrl, { method: 'HEAD' });
-                const len = head.headers.get('content-length');
-                const bytes = len ? Number(len) : NaN;
-                if (head.ok && isFinite(bytes) && bytes > 950 * 1024) {
-                    updateScanningSpinner('Compressing receipt...', 'Reducing image size');
-                    ocrInput = await compressReceiptImageToDataUrl(receiptUrl);
-                }
-            } catch (e) {
-            }
-        }
-
-        updateScanningSpinner('Running OCR...', 'Sending to OCR.Space');
-        let ocrText = '';
-        try {
-            ocrText = await runOcrSpace(ocrInput);
-        } catch (e) {
-            const msg = String(e?.message || e);
-            const sizeLimitHit = msg.includes('Maximum size limit 1024 KB') || msg.includes('File size exceeds');
-            if (!sizeLimitHit) throw e;
-
-            updateScanningSpinner('Compressing receipt...', 'Reducing image size');
-            const compressed = await compressReceiptImageToDataUrl(receiptUrl);
-
-            updateScanningSpinner('Running OCR...', 'Retrying with compressed image');
-            ocrText = await runOcrSpace(compressed);
-        }
-
-        if (!ocrText || ocrText.trim().length < 10) {
-            hideScanningSpinner();
-            showNotification('OCR returned no text', 'error');
-            return;
-        }
-
-        updateScanningSpinner('Extracting items...', 'Sending OCR text to Gemini');
-        const parsed = await extractReceiptDataWithGeminiFromOcrText(ocrText);
+        const parsed = await extractReceiptDataWithOcrSpaceAndGemini(receiptUrl);
         hideScanningSpinner();
 
         if (!parsed) {
@@ -9167,15 +9187,19 @@ async function processUnscannedReceipts() {
                     continue;
                 }
                 
-                // Call Gemini API to extract items
-                const extractedData = await extractReceiptDataWithGemini(base64Data, mimeType);
+                const dataUrl = `data:${mimeType};base64,${base64Data}`;
+                const extractedData = await extractReceiptDataWithOcrSpaceAndGemini(dataUrl);
                 
                 if (extractedData && extractedData.items && extractedData.items.length > 0) {
                     // Save items to ReceiptItems table
                     for (const item of extractedData.items) {
+                        const unit = String(item.quantity_unit || '').trim();
+                        const baseName = String(item.description || item.raw_description || 'Unknown Item').trim() || 'Unknown Item';
+                        const itemName = unit && unit !== 'ea' ? `${baseName} (${unit})` : baseName;
+
                         await supabasePost(RECEIPT_ITEMS_TABLE, {
                             expense_id: expense.id,
-                            item_name: item.description || 'Unknown Item',
+                            item_name: itemName,
                             quantity: item.quantity || 1,
                             unit_price: item.unit_price || 0,
                             total_price: item.total_price || 0,
@@ -9188,13 +9212,15 @@ async function processUnscannedReceipts() {
                     // Mark as completed
                     await supabasePatch(TABLE_NAME, expense.id, { 
                         receipt_scanned: true,
-                        receipt_processing_status: 'completed'
+                        receipt_processing_status: 'completed',
+                        receipt_error: null
                     });
                 } else {
                     // No items extracted - mark as completed but note it
                     await supabasePatch(TABLE_NAME, expense.id, { 
                         receipt_scanned: true,
-                        receipt_processing_status: 'completed'
+                        receipt_processing_status: 'completed',
+                        receipt_error: null
                     });
                 }
                 
