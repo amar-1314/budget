@@ -23,6 +23,47 @@ function updateAppVersionDisplay() {
     console.log(`📱 App Version: v${APP_VERSION}`);
 }
 
+function handleLLCTileClick() {
+    try {
+        switchTab('category');
+
+        setTimeout(() => {
+            const yearSelector = document.getElementById('yearSelector');
+            const monthSelector = document.getElementById('monthSelector');
+            const parsedYear = yearSelector ? parseInt(yearSelector.value) : NaN;
+            const parsedMonth = monthSelector ? parseInt(monthSelector.value) : NaN;
+            const defaultYear = Number.isFinite(parsedYear) ? String(parsedYear) : String(new Date().getFullYear());
+            const defaultMonth = Number.isFinite(parsedMonth) ? String(parsedMonth).padStart(2, '0') : String(new Date().getMonth() + 1).padStart(2, '0');
+
+            const yearEl = document.getElementById('filterYear');
+            if (yearEl) {
+                yearEl.value = defaultYear;
+            }
+
+            document.querySelectorAll('#monthDropdownContent input[type="checkbox"]').forEach(cb => {
+                cb.checked = (cb.value === defaultMonth);
+            });
+            if (typeof updateMonthSelection === 'function') updateMonthSelection();
+
+            const llcEl = document.getElementById('filterLLC');
+            if (llcEl) llcEl.value = 'Yes';
+
+            const contributorEl = document.getElementById('filterContributor');
+            if (contributorEl) contributorEl.selectedIndex = 0;
+
+            if (typeof updateFilteredView === 'function') updateFilteredView();
+
+            const scrollTarget = document.getElementById('filterResults') || document.getElementById('categoryTab');
+            if (scrollTarget && typeof scrollTarget.scrollIntoView === 'function') {
+                scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 0);
+    } catch (error) {
+        console.error('Error handling LLC tile click:', error);
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
 // Call on load
 document.addEventListener('DOMContentLoaded', updateAppVersionDisplay);
 
@@ -322,6 +363,10 @@ let allExpenses = [];
 let allPayments = [];
 let currentReceiptData = null; // Store current receipt for editing
 let charts = { pie: null, llc: null, line: null, categoryMonthly: null, contributionsMonthly: null, contributionCoverage: null, yearComparison: null, categoryTrend: null, contributionTrend: null };
+
+// Latest computed over-budget categories for the current dashboard period
+let latestOverBudgetCategories = [];
+let latestOverBudgetMonthKey = '';
 
 // Pagination variables
 let currentPage = 1;
@@ -3312,6 +3357,11 @@ function updateStats() {
         }
     });
 
+    latestOverBudgetCategories = overBudgetCategories
+        .slice()
+        .sort((a, b) => (b.over || 0) - (a.over || 0));
+    latestOverBudgetMonthKey = monthKey;
+
     // Calculate contributions (from expenses + standalone payments)
     // Filter payments by same year/month as expenses
     let filteredPayments = allPayments;
@@ -3532,6 +3582,138 @@ function updateStats() {
     if (priyaRemainingProgressEl) priyaRemainingProgressEl.style.width = `${Math.min(100 - priyaContribPercent, 100)}%`;
 
     console.log('✅ updateStats complete');
+}
+
+function handleLeftTileClick() {
+    try {
+        if (latestOverBudgetCategories && latestOverBudgetCategories.length > 0) {
+            openOverBudgetModal();
+        } else {
+            openBudgetManager();
+        }
+    } catch (error) {
+        console.error('Error handling LEFT tile click:', error);
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+function openOverBudgetModal() {
+    closeAllModalsExcept('overBudgetModal');
+
+    const subtitleEl = document.getElementById('overBudgetSubtitle');
+    if (subtitleEl) {
+        if (latestOverBudgetMonthKey) {
+            const [y, m] = latestOverBudgetMonthKey.split('-');
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const monthName = monthNames[(parseInt(m, 10) || 1) - 1] || m;
+            subtitleEl.textContent = `${monthName} ${y} • ${latestOverBudgetCategories.length} category${latestOverBudgetCategories.length !== 1 ? 'ies' : 'y'} over budget`;
+        } else {
+            subtitleEl.textContent = `${latestOverBudgetCategories.length} category${latestOverBudgetCategories.length !== 1 ? 'ies' : 'y'} over budget`;
+        }
+    }
+
+    const listEl = document.getElementById('overBudgetList');
+    if (!listEl) return;
+
+    if (!latestOverBudgetCategories || latestOverBudgetCategories.length === 0) {
+        listEl.innerHTML = `
+            <div class="text-center py-10 text-gray-400">
+                <i class="fas fa-check-circle text-5xl text-green-500 mb-4"></i>
+                <p class="text-lg">No over-budget categories</p>
+            </div>
+        `;
+        return;
+    }
+
+    const rows = latestOverBudgetCategories.map(entry => {
+        const categoryRaw = String(entry.category || 'Unknown');
+        const category = escapeHtml(categoryRaw);
+        const categoryEncoded = encodeURIComponent(categoryRaw);
+        const budget = Number(entry.budget || 0);
+        const spent = Number(entry.spent || 0);
+        const over = Number(entry.over || 0);
+        const pct = budget > 0 ? (spent / budget) * 100 : 0;
+
+        return `
+            <div class="border border-red-200 bg-red-50 rounded-lg p-4 cursor-pointer hover:shadow-md transition-all" onclick="applyOverBudgetDrilldown('${categoryEncoded}')">
+                <div class="flex justify-between items-start gap-3">
+                    <div class="min-w-0">
+                        <div class="font-bold text-gray-800 truncate">
+                            <i class="fas fa-tag mr-2 text-red-500"></i>${category}
+                        </div>
+                        <div class="text-xs text-gray-600 mt-1">
+                            Spent <span class="font-semibold text-red-700">$${spent.toFixed(2)}</span>
+                            of <span class="font-semibold">$${budget.toFixed(2)}</span>
+                            <span class="text-gray-500">(${pct.toFixed(0)}%)</span>
+                        </div>
+                    </div>
+                    <div class="text-right flex-shrink-0">
+                        <div class="text-xs text-gray-500">Over by</div>
+                        <div class="text-2xl font-extrabold text-red-600">$${over.toFixed(2)}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    listEl.innerHTML = rows;
+
+    const modal = document.getElementById('overBudgetModal');
+    if (modal) modal.classList.add('active');
+}
+
+function closeOverBudgetModal() {
+    const modal = document.getElementById('overBudgetModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function applyOverBudgetDrilldown(categoryEncoded) {
+    try {
+        const category = decodeURIComponent(String(categoryEncoded || ''));
+        const [year, month] = String(latestOverBudgetMonthKey || '').split('-');
+
+        closeOverBudgetModal();
+        switchTab('category');
+
+        setTimeout(() => {
+            const yearEl = document.getElementById('filterYear');
+            if (yearEl && year) {
+                yearEl.value = year;
+            }
+
+            // Clear contributor
+            const contributorEl = document.getElementById('filterContributor');
+            if (contributorEl) contributorEl.selectedIndex = 0;
+
+            // Clear tags
+            document.querySelectorAll('#tagDropdownContent input[type="checkbox"]').forEach(cb => cb.checked = false);
+            const tagText = document.getElementById('tagDropdownText');
+            if (tagText) tagText.innerHTML = '<span class="custom-dropdown-placeholder">Select tags...</span>';
+
+            // Set month
+            document.querySelectorAll('#monthDropdownContent input[type="checkbox"]').forEach(cb => {
+                cb.checked = (month && cb.value === month);
+            });
+            if (typeof updateMonthSelection === 'function') updateMonthSelection();
+
+            // Set category
+            document.querySelectorAll('#categoryDropdownContent input[type="checkbox"]').forEach(cb => {
+                cb.checked = (cb.value === category);
+            });
+            if (typeof updateCategorySelection === 'function') updateCategorySelection();
+
+            // Ensure results are up to date
+            if (typeof updateFilteredView === 'function') updateFilteredView();
+
+            const scrollTarget = document.getElementById('filterResults') || document.getElementById('categoryTab');
+            if (scrollTarget && typeof scrollTarget.scrollIntoView === 'function') {
+                scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 0);
+    } catch (error) {
+        console.error('Error applying over-budget drilldown:', error);
+        showNotification('Error: ' + error.message, 'error');
+    }
 }
 
 function updateCharts() {
@@ -4577,10 +4759,12 @@ function updateLLCButtonStyle(value) {
         llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
         llcBtn.style.color = 'white';
         llcBtn.style.borderColor = '#1d4ed8';
+        llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Business</span>';
     } else {
         llcBtn.style.background = 'white';
         llcBtn.style.color = '#6b7280';
         llcBtn.style.borderColor = '#e5e7eb';
+        llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
     }
 }
 
@@ -5240,6 +5424,7 @@ function updateTagsForSelectedCategories(categories) {
 
 function updateFilteredView() {
     const year = document.getElementById('filterYear')?.value || '';
+    const llcFilter = document.getElementById('filterLLC')?.value || '';
     const contributor = document.getElementById('filterContributor')?.value || '';
 
     // Get multi-select values from checkboxes
@@ -5252,6 +5437,7 @@ function updateFilteredView() {
         months: selectedMonths,
         categories: selectedCategories,
         tags: selectedTags,
+        llc: llcFilter,
         contributor
     });
 
@@ -5259,6 +5445,13 @@ function updateFilteredView() {
     let filtered = allExpenses.filter(exp => {
         // Year filter
         if (year && exp.fields.Year !== parseInt(year)) return false;
+
+        // LLC filter
+        if (llcFilter) {
+            const isLLC = exp.fields.LLC === 'Yes' || exp.fields.LLC === true;
+            if (llcFilter === 'Yes' && !isLLC) return false;
+            if (llcFilter === 'No' && isLLC) return false;
+        }
 
         // Month filter - match ANY selected month (OR logic)
         if (selectedMonths.length > 0) {
@@ -5298,6 +5491,7 @@ function updateFilteredView() {
         months: selectedMonths,
         categories: selectedCategories,
         tags: selectedTags,
+        llc: llcFilter,
         contributor
     });
 }
@@ -5325,64 +5519,48 @@ function displayFilteredResults(expenses, filters) {
 
     const total = expenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
 
-    // Calculate contributions with mortgage adjustments
-    const amarMortgageContrib = expenses
-        .filter(exp => exp.fields.Category === 'Mortgage')
-        .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
-    const amarNonMortgageContrib = expenses
-        .filter(exp => exp.fields.Category !== 'Mortgage')
-        .reduce((sum, exp) => sum + (exp.fields.AmarContribution || 0), 0);
-    const priyaContribFromExpenses = expenses.reduce((sum, exp) => sum + (exp.fields.PriyaContribution || 0), 0);
+    let amarTotal = 0;
+    let priyaTotal = 0;
+    expenses.forEach(exp => {
+        let amarContrib = exp.fields.AmarContribution || 0;
+        let priyaContrib = exp.fields.PriyaContribution || 0;
+        const category = exp.fields.Category || '';
+        const year = exp.fields.Year;
+        const month = exp.fields.Month;
 
-    // Get unique year-month combinations from filtered expenses
-    const filteredPeriods = new Set(expenses.map(exp => `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`));
+        if (category === 'Mortgage' && amarContrib > 0) {
+            const expenseYear = String(year);
+            const expenseMonth = String(month).padStart(2, '0');
 
-    // Calculate Priya's mortgage contributions for the filtered periods
-    let priyaMortgageContribs = 0;
-    filteredPeriods.forEach(period => {
-        const [year, month] = period.split('-');
-        const periodContrib = allPayments
-            .filter(p =>
-                String(p.fields.Year) === year &&
-                String(p.fields.Month).padStart(2, '0') === month &&
-                p.fields.Person === 'Priya' &&
-                p.fields.PaymentType === 'PriyaMortgageContribution'
-            )
-            .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
-        priyaMortgageContribs += periodContrib;
+            const priyaMortgagePayments = allPayments
+                .filter(p =>
+                    p.fields.Person === 'Priya' &&
+                    p.fields.PaymentType === 'PriyaMortgageContribution' &&
+                    String(p.fields.Year) === expenseYear &&
+                    String(p.fields.Month).padStart(2, '0') === expenseMonth
+                )
+                .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+
+            if (priyaMortgagePayments > 0) {
+                const totalMortgageExpenses = allExpenses
+                    .filter(e =>
+                        e.fields.Category === 'Mortgage' &&
+                        String(e.fields.Year) === expenseYear &&
+                        String(e.fields.Month).padStart(2, '0') === expenseMonth
+                    )
+                    .reduce((sum, e) => sum + (e.fields.AmarContribution || 0), 0);
+
+                const adjustmentRatio = totalMortgageExpenses > 0 ? amarContrib / totalMortgageExpenses : 0;
+                const thisExpenseAdjustment = priyaMortgagePayments * adjustmentRatio;
+
+                amarContrib = Math.max(0, amarContrib - thisExpenseAdjustment);
+                priyaContrib = priyaContrib + thisExpenseAdjustment;
+            }
+        }
+
+        amarTotal += amarContrib;
+        priyaTotal += priyaContrib;
     });
-
-    // Add standalone payments for the filtered periods (excluding rental income)
-    let amarStandalonePayments = 0;
-    let priyaStandalonePayments = 0;
-    filteredPeriods.forEach(period => {
-        const [year, month] = period.split('-');
-        amarStandalonePayments += allPayments
-            .filter(p =>
-                !p.fields.FromExpense &&
-                String(p.fields.Year) === year &&
-                String(p.fields.Month).padStart(2, '0') === month &&
-                p.fields.Person === 'Amar' &&
-                p.fields.PaymentType !== 'RentalIncome'
-            )
-            .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
-
-        priyaStandalonePayments += allPayments
-            .filter(p =>
-                !p.fields.FromExpense &&
-                String(p.fields.Year) === year &&
-                String(p.fields.Month).padStart(2, '0') === month &&
-                p.fields.Person === 'Priya' &&
-                p.fields.PaymentType !== 'PriyaMortgageContribution' &&
-                p.fields.PaymentType !== 'RentalIncome'
-            )
-            .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
-    });
-
-    // Apply adjustment
-    const amarAdjustedMortgage = Math.max(0, amarMortgageContrib - priyaMortgageContribs);
-    const amarTotal = amarNonMortgageContrib + amarAdjustedMortgage + amarStandalonePayments;
-    const priyaTotal = priyaContribFromExpenses + priyaMortgageContribs + priyaStandalonePayments;
 
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -5399,6 +5577,8 @@ function displayFilteredResults(expenses, filters) {
     if (filters.tags && filters.tags.length > 0) {
         filterSummary.push(`Tags: ${filters.tags.join(', ')}`);
     }
+    if (filters.llc === 'Yes') filterSummary.push('LLC: Yes');
+    if (filters.llc === 'No') filterSummary.push('LLC: No');
     if (filters.contributor) filterSummary.push(`Contributor: ${filters.contributor}`);
 
     container.innerHTML = `
@@ -5553,14 +5733,23 @@ function clearAllFilters() {
         console.log('📍 Step 1: Getting filter elements...');
         const filterYear = document.getElementById('filterYear');
         const filterContributor = document.getElementById('filterContributor');
+        const filterTag = document.getElementById('filterTag');
+        const filterLLC = document.getElementById('filterLLC');
         const resultsDiv = document.getElementById('filterResults');
 
         console.log('  Element availability:', {
             filterYear: filterYear ? '✅ EXISTS' : '❌ NULL',
             filterContributor: filterContributor ? '✅ EXISTS' : '❌ NULL',
+            filterTag: filterTag ? '✅ EXISTS' : '❌ NULL',
+            filterLLC: filterLLC ? '✅ EXISTS' : '❌ NULL',
             resultsDiv: resultsDiv ? '✅ EXISTS' : '❌ NULL'
         });
         console.log('');
+
+        // Clear LLC filter
+        if (filterLLC) {
+            filterLLC.value = '';
+        }
 
         // Log current values BEFORE clearing
         console.log('📍 Step 2: Current values BEFORE clear:');
@@ -5665,6 +5854,7 @@ function clearAllFilters() {
         console.log('  Months:', getSelectedMonths(), '(should be empty array)');
         console.log('  Categories:', getSelectedCategories(), '(should be empty array)');
         console.log('  Tags:', getSelectedTags(), '(should be empty array)');
+        if (filterLLC) console.log('  LLC:', filterLLC.value, '(should be empty)');
         if (filterContributor) console.log('  Contributor:', filterContributor.value, '(should be empty)');
         console.log('');
 
@@ -6711,14 +6901,19 @@ let isSavingExpense = false;
 // Helper function to format tags: lowercase and replace spaces with hyphens
 function formatTags(tags) {
     if (!tags) return '';
-    return tags.trim()
-        .toLowerCase()
-        .replace(/\s+/g, '-') // Replace spaces with hyphens
-        .replace(/,\s*/g, ',') // Normalize commas
+    const normalized = String(tags)
         .split(',')
-        .map(tag => tag.trim().replace(/\s+/g, '-'))
-        .filter(tag => tag) // Remove empty tags
-        .join(',');
+        .map(t => t.trim())
+        .filter(Boolean)
+        .map(t => t
+            .toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-+/, '')
+            .replace(/-+$/, '')
+        )
+        .filter(Boolean);
+    return normalized.join(', ');
 }
 
 // Helper function to format category: Title Case
@@ -8701,11 +8896,13 @@ async function saveExpenseToSupabase(recordId, fields) {
     try {
         // Filter out empty optional fields
         const cleanFields = { ...fields };
-        if (!cleanFields.Tags || cleanFields.Tags.trim() === '') {
-            delete cleanFields.Tags;
+        if (!cleanFields.Tags || String(cleanFields.Tags).trim() === '') {
+            if (recordId) cleanFields.Tags = null;
+            else delete cleanFields.Tags;
         }
-        if (!cleanFields.Notes || cleanFields.Notes.trim() === '') {
-            delete cleanFields.Notes;
+        if (!cleanFields.Notes || String(cleanFields.Notes).trim() === '') {
+            if (recordId) cleanFields.Notes = null;
+            else delete cleanFields.Notes;
         }
 
         // Save to Supabase
@@ -8948,8 +9145,10 @@ function openRolloverDues() {
     // Get current filter from main page
     const yearFilterEl = document.getElementById('yearSelector');
     const monthFilterEl = document.getElementById('monthSelector');
-    const defaultYear = yearFilterEl ? parseInt(yearFilterEl.value) : new Date().getFullYear();
-    const defaultMonth = monthFilterEl ? parseInt(monthFilterEl.value) : new Date().getMonth() + 1;
+    const parsedYear = yearFilterEl ? parseInt(yearFilterEl.value) : NaN;
+    const parsedMonth = monthFilterEl ? parseInt(monthFilterEl.value) : NaN;
+    const defaultYear = Number.isFinite(parsedYear) ? parsedYear : new Date().getFullYear();
+    const defaultMonth = Number.isFinite(parsedMonth) ? parsedMonth : (new Date().getMonth() + 1);
     
     // Set to current month being viewed (to show what rolled INTO this month)
     document.getElementById('rolloverYearFilter').value = defaultYear;
@@ -8966,47 +9165,44 @@ function openRolloverDues() {
 function updateRolloverDisplay() {
     const year = parseInt(document.getElementById('rolloverYearFilter').value);
     const month = parseInt(document.getElementById('rolloverMonthFilter').value);
-    
-    // Get PREVIOUS month's rollover data (what rolls INTO this month)
-    let prevYear = year;
-    let prevMonth = month - 1;
-    if (prevMonth === 0) {
-        prevMonth = 12;
-        prevYear--;
+
+    // Show rollover FROM the selected month INTO the next month
+    let nextYear = year;
+    let nextMonth = month + 1;
+    if (nextMonth === 13) {
+        nextMonth = 1;
+        nextYear++;
     }
-    
-    const rolloverKey = `rollover_${prevYear}_${String(prevMonth).padStart(2, '0')}`;
+
+    const rolloverKey = `rollover_${year}_${String(month).padStart(2, '0')}`;
     const rolloverData = localStorage.getItem(rolloverKey);
-    
+
     const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+
     if (rolloverData) {
         const data = JSON.parse(rolloverData);
-        
-        // Calculate net amounts that rolled into this month
+
+        // Calculate net amounts that roll into the next month
         const amarNet = data.amarOverpaid - data.amarOwes;  // Negative if owed, positive if credit
         const priyaNet = data.priyaOverpaid - data.priyaOwes;
-        
-        // Update Amar's data - show net that came into this month
+
         document.getElementById('rolloverAmarOwes').textContent = amarNet < 0 ? `$${Math.abs(amarNet).toFixed(2)}` : '$0.00';
         document.getElementById('rolloverAmarOverpaid').textContent = amarNet > 0 ? `$${amarNet.toFixed(2)}` : '$0.00';
         document.getElementById('rolloverAmarNet').textContent = `$${amarNet.toFixed(2)}`;
-        document.getElementById('rolloverAmarNetLabel').textContent = 'Rolled into this month:';
+        document.getElementById('rolloverAmarNetLabel').textContent = 'Rolls into next month:';
         document.getElementById('rolloverAmarNet').className = amarNet > 0 ? 'text-green-600 font-bold text-xl' : amarNet < 0 ? 'text-red-600 font-bold text-xl' : 'text-gray-600 font-bold text-xl';
-        
-        // Update Priya's data - show net that came into this month
+
         document.getElementById('rolloverPriyaOwes').textContent = priyaNet < 0 ? `$${Math.abs(priyaNet).toFixed(2)}` : '$0.00';
         document.getElementById('rolloverPriyaOverpaid').textContent = priyaNet > 0 ? `$${priyaNet.toFixed(2)}` : '$0.00';
         document.getElementById('rolloverPriyaNet').textContent = `$${priyaNet.toFixed(2)}`;
-        document.getElementById('rolloverPriyaNetLabel').textContent = 'Rolled into this month:';
+        document.getElementById('rolloverPriyaNetLabel').textContent = 'Rolls into next month:';
         document.getElementById('rolloverPriyaNet').className = priyaNet > 0 ? 'text-green-600 font-bold text-xl' : priyaNet < 0 ? 'text-red-600 font-bold text-xl' : 'text-gray-600 font-bold text-xl';
-        
-        document.getElementById('rolloverPeriod').textContent = `${monthNames[prevMonth]} ${prevYear} → ${monthNames[month]} ${year}`;
+
+        document.getElementById('rolloverPeriod').textContent = `${monthNames[month]} ${year} → ${monthNames[nextMonth]} ${nextYear}`;
         document.getElementById('rolloverNoData').style.display = 'none';
         document.getElementById('rolloverDataContent').style.display = 'block';
     } else {
-        // No data for previous month
-        document.getElementById('rolloverPeriod').textContent = `No rollover into ${monthNames[month]} ${year}`;
+        document.getElementById('rolloverPeriod').textContent = `No rollover from ${monthNames[month]} ${year}`;
         document.getElementById('rolloverNoData').style.display = 'block';
         document.getElementById('rolloverDataContent').style.display = 'none';
     }
