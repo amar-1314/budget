@@ -8455,13 +8455,21 @@ function openOcrGeminiTestResultModal(parsed) {
             `;
         } else {
             itemsEl.innerHTML = items.map(item => {
-                const desc = escapeHtml(String(item.description || 'Item'));
+                const normalized = String(item.description || item.raw_description || 'Item');
+                const raw = String(item.raw_description || '').trim();
+                const desc = escapeHtml(normalized);
+                const rawExtra = raw && raw !== normalized ? `<div class="text-xs text-gray-400 mt-1">${escapeHtml(raw)}</div>` : '';
+
                 const qty = Number(item.quantity || 1);
+                const unit = String(item.quantity_unit || item.unit || '').trim();
+                const qtyDisplay = unit && unit !== 'ea'
+                    ? `${isFinite(qty) ? qty : 1} ${escapeHtml(unit)}`
+                    : `${isFinite(qty) ? qty : 1}`;
                 const price = Number(item.total_price || item.unit_price || 0);
                 return `
                     <tr>
-                        <td class="px-4 py-3 font-medium text-gray-800">${desc}</td>
-                        <td class="px-4 py-3 text-right">${isFinite(qty) ? qty : 1}</td>
+                        <td class="px-4 py-3 font-medium text-gray-800">${desc}${rawExtra}</td>
+                        <td class="px-4 py-3 text-right">${qtyDisplay}</td>
                         <td class="px-4 py-3 text-right text-gray-700">$${isFinite(price) ? price.toFixed(2) : '0.00'}</td>
                     </tr>
                 `;
@@ -8498,13 +8506,6 @@ function parseReceiptDataUrlFromExpense(expense) {
 }
 
 async function compressReceiptImageToDataUrl(receiptUrl, maxBytes = 950 * 1024) {
-    const estimateBytes = (dataUrl) => {
-        const base64Index = dataUrl.indexOf('base64,');
-        if (base64Index === -1) return dataUrl.length;
-        const base64 = dataUrl.slice(base64Index + 7);
-        return Math.floor(base64.length * 0.75);
-    };
-
     let sourceDataUrl = receiptUrl;
 
     if (!sourceDataUrl.startsWith('data:')) {
@@ -8566,6 +8567,13 @@ async function compressReceiptImageToDataUrl(receiptUrl, maxBytes = 950 * 1024) 
     return out;
 }
 
+function estimateDataUrlBytes(dataUrl) {
+    const base64Index = String(dataUrl).indexOf('base64,');
+    if (base64Index === -1) return String(dataUrl).length;
+    const base64 = String(dataUrl).slice(base64Index + 7);
+    return Math.floor(base64.length * 0.75);
+}
+
 async function runOcrSpace(receiptDataUrlOrUrl) {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
         throw new Error('Supabase credentials not configured');
@@ -8606,8 +8614,10 @@ Return JSON in this exact schema:
   "total": number,
   "items": [
     {
-      "description": "item name/description",
+      "raw_description": "as-written on receipt (can be abbreviated)",
+      "description": "normalized human-friendly item name (expand abbreviations)",
       "quantity": number,
+      "quantity_unit": "lb|oz|g|kg|ml|l|ea|ct|pack|bag|bottle|box|other",
       "unit_price": number,
       "total_price": number
     }
@@ -8617,9 +8627,12 @@ Return JSON in this exact schema:
 Rules:
 - Extract ALL line items as best as possible
 - quantity defaults to 1
+- If the receipt indicates weight/units (e.g. 0.66 LB), put quantity=0.66 and quantity_unit="lb" (not quantity=0.66)
 - Prices must be numbers only (no $)
 - If unit price is not available, set unit_price to 0
 - If total price not available, use unit_price * quantity when possible, else 0
+- Normalize/expand common abbreviations conservatively (e.g., "swt potatoes" -> "sweet potatoes", "mand 3 bag" -> "mandarins 3lb bag")
+- Do not hallucinate brands or details not present; if unsure, keep description close to raw_description
 - No markdown, no explanations, only JSON
 
 OCR TEXT:
@@ -8666,10 +8679,30 @@ async function runOcrGeminiTest(expenseId) {
             return;
         }
 
+        let ocrInput = receiptUrl;
+        if (String(receiptUrl).startsWith('data:')) {
+            const estimated = estimateDataUrlBytes(receiptUrl);
+            if (estimated > 950 * 1024) {
+                updateScanningSpinner('Compressing receipt...', 'Reducing image size');
+                ocrInput = await compressReceiptImageToDataUrl(receiptUrl);
+            }
+        } else {
+            try {
+                const head = await fetch(receiptUrl, { method: 'HEAD' });
+                const len = head.headers.get('content-length');
+                const bytes = len ? Number(len) : NaN;
+                if (head.ok && isFinite(bytes) && bytes > 950 * 1024) {
+                    updateScanningSpinner('Compressing receipt...', 'Reducing image size');
+                    ocrInput = await compressReceiptImageToDataUrl(receiptUrl);
+                }
+            } catch (e) {
+            }
+        }
+
         updateScanningSpinner('Running OCR...', 'Sending to OCR.Space');
         let ocrText = '';
         try {
-            ocrText = await runOcrSpace(receiptUrl);
+            ocrText = await runOcrSpace(ocrInput);
         } catch (e) {
             const msg = String(e?.message || e);
             const sizeLimitHit = msg.includes('Maximum size limit 1024 KB') || msg.includes('File size exceeds');
