@@ -130,109 +130,121 @@ serve(async (req: Request) => {
 
     const auth = "Basic " + btoa(`${username}:${password}`);
 
-    const { data: rows, error: rowsError } = await supabase
-      .from("Budget")
-      .select("id,Year,Month,Day,Receipt,has_receipt")
-      .eq("has_receipt", true)
-      .order("Year", { ascending: true })
-      .order("Month", { ascending: true })
-      .order("Day", { ascending: true })
-      .limit(rowLimit);
-
-    if (rowsError) throw new Error(rowsError.message);
-
-    const candidates = (rows || []).filter((r: any) => {
-      const dt = toDate(r.Year, r.Month, r.Day);
-      if (!dt) return false;
-      if (dt >= cutoff) return false;
-
-      const parsed = parseReceiptField(r.Receipt);
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
-      const first = arr?.[0] as any;
-      const storage = String(first?.storage || "").toLowerCase();
-      if (storage !== "supabase") return false;
-      return true;
-    });
-
+    const pageSize = Math.max(50, Math.min(500, rowLimit * 10));
+    let offset = 0;
+    let scanned = 0;
     let archived = 0;
     const errors: Array<{ id: string; error: string }> = [];
 
-    for (const r of candidates) {
-      const parsed = parseReceiptField(r.Receipt);
-      const arr = Array.isArray(parsed) ? parsed : [parsed];
-      const first = arr?.[0] as any;
-      const bucket = String(first?.bucket || "");
-      const path = String(first?.path || "");
-      const mime = String(first?.type || "application/octet-stream");
-      const ext = extFromMime(mime);
+    while (archived < rowLimit) {
+      const { data: rows, error: rowsError } = await supabase
+        .from("Budget")
+        .select("id,Year,Month,Day,Receipt,has_receipt")
+        .eq("has_receipt", true)
+        .order("Year", { ascending: true })
+        .order("Month", { ascending: true })
+        .order("Day", { ascending: true })
+        .order("id", { ascending: true })
+        .range(offset, offset + pageSize - 1);
 
-      if (!bucket || !path) {
-        errors.push({ id: r.id, error: "Invalid supabase receipt pointer" });
-        continue;
-      }
+      if (rowsError) throw new Error(rowsError.message);
+      if (!rows || rows.length === 0) break;
 
-      try {
-        const { data: file, error: dlError } = await supabase.storage.from(bucket).download(path);
-        if (dlError) throw new Error(dlError.message);
-        if (!file) throw new Error("Download returned empty file");
+      scanned += rows.length;
 
-        const bytes = new Uint8Array(await file.arrayBuffer());
+      const candidates = (rows || []).filter((r: any) => {
+        const dt = toDate(r.Year, r.Month, r.Day);
+        if (!dt) return false;
+        if (dt >= cutoff) return false;
 
-        const y = String(r.Year || "unknown");
-        const m = monthPad(r.Month || "unknown");
-        const cleanedRoot = rootPath.replace(/\/+$/, "");
-        const yearDir = `${cleanedRoot}/${y}`;
-        const monthDir = `${cleanedRoot}/${y}/${m}`;
+        const parsed = parseReceiptField(r.Receipt);
+        const arr = Array.isArray(parsed) ? parsed : [parsed];
+        const first = arr?.[0] as any;
+        const storage = String(first?.storage || "").toLowerCase();
+        if (storage !== "supabase") return false;
+        return true;
+      });
 
-        await ensureWebDavDirsRecursive(baseUrl, cleanedRoot, auth);
-        await ensureWebDavDirsRecursive(baseUrl, yearDir, auth);
-        await ensureWebDavDirsRecursive(baseUrl, monthDir, auth);
+      for (const r of candidates) {
+        if (archived >= rowLimit) break;
 
-        const destPath = `${monthDir}/${r.id}.${ext}`;
-        const destUrl = `${baseUrl.replace(/\/+$/, "")}${destPath.startsWith("/") ? "" : "/"}${destPath}`;
+        const parsed = parseReceiptField(r.Receipt);
+        const arr = Array.isArray(parsed) ? parsed : [parsed];
+        const first = arr?.[0] as any;
+        const bucket = String(first?.bucket || "");
+        const path = String(first?.path || "");
+        const mime = String(first?.type || "application/octet-stream");
+        const ext = extFromMime(mime);
 
-        const put = await fetch(destUrl, {
-          method: "PUT",
-          headers: {
-            Authorization: auth,
-            "Content-Type": mime,
-            "Content-Length": String(bytes.byteLength),
-          },
-          body: bytes,
-        });
-
-        if (!put.ok) {
-          const txt = await put.text().catch(() => "");
-          throw new Error(`WebDAV PUT failed ${put.status}: ${txt}`);
+        if (!bucket || !path) {
+          errors.push({ id: r.id, error: "Invalid supabase receipt pointer" });
+          continue;
         }
 
-        const newPointer = {
-          storage: "pcloud_webdav",
-          baseUrl,
-          path: destPath,
-          type: mime,
-          archivedAt: new Date().toISOString(),
-        };
+        try {
+          const { data: file, error: dlError } = await supabase.storage.from(bucket).download(path);
+          if (dlError) throw new Error(dlError.message);
+          if (!file) throw new Error("Download returned empty file");
 
-        await supabase
-          .from("Budget")
-          .update({ Receipt: JSON.stringify([newPointer]) })
-          .eq("id", r.id);
+          const bytes = new Uint8Array(await file.arrayBuffer());
 
-        if (doDelete) {
-          await supabase.storage.from(bucket).remove([path]);
+          const y = String(r.Year || "unknown");
+          const m = monthPad(r.Month || "unknown");
+          const cleanedRoot = rootPath.replace(/\/+$/, "");
+          const yearDir = `${cleanedRoot}/${y}`;
+          const monthDir = `${cleanedRoot}/${y}/${m}`;
+
+          await ensureWebDavDirsRecursive(baseUrl, cleanedRoot, auth);
+          await ensureWebDavDirsRecursive(baseUrl, yearDir, auth);
+          await ensureWebDavDirsRecursive(baseUrl, monthDir, auth);
+
+          const destPath = `${monthDir}/${r.id}.${ext}`;
+          const destUrl = `${baseUrl.replace(/\/+$/, "")}${destPath.startsWith("/") ? "" : "/"}${destPath}`;
+
+          const put = await fetch(destUrl, {
+            method: "PUT",
+            headers: {
+              Authorization: auth,
+              "Content-Type": mime,
+              "Content-Length": String(bytes.byteLength),
+            },
+            body: bytes,
+          });
+
+          if (!put.ok) {
+            const txt = await put.text().catch(() => "");
+            throw new Error(`WebDAV PUT failed ${put.status}: ${txt}`);
+          }
+
+          const newPointer = {
+            storage: "pcloud_webdav",
+            baseUrl,
+            path: destPath,
+            type: mime,
+            archivedAt: new Date().toISOString(),
+          };
+
+          await supabase
+            .from("Budget")
+            .update({ Receipt: JSON.stringify([newPointer]) })
+            .eq("id", r.id);
+
+          if (doDelete) {
+            await supabase.storage.from(bucket).remove([path]);
+          }
+
+          archived += 1;
+        } catch (e: any) {
+          errors.push({ id: r.id, error: e?.message || String(e) });
         }
-
-        archived += 1;
-      } catch (e: any) {
-        errors.push({ id: r.id, error: e?.message || String(e) });
       }
+
+      offset += pageSize;
     }
 
     return jsonResponse({
       cutoff: cutoff.toISOString(),
-      scanned: rows?.length || 0,
-      candidates: candidates.length,
+      scanned,
       archived,
       errors,
     });
