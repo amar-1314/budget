@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -10,6 +11,22 @@ function jsonResponse(body: unknown, status = 200) {
       "Access-Control-Allow-Methods": "POST, OPTIONS",
     },
   });
+}
+
+async function getSecret(supabaseUrl: string, serviceRoleKey: string, name: string) {
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false },
+  });
+
+  const { data, error } = await supabase
+    .from("app_secrets")
+    .select("value")
+    .eq("name", name)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!data?.value) throw new Error(`Missing secret: ${name}`);
+  return String(data.value);
 }
 
 serve(async (req) => {
@@ -29,10 +46,14 @@ serve(async (req) => {
   }
 
   try {
-    const OCR_SPACE_API_KEY = Deno.env.get("OCR_SPACE_API_KEY");
-    if (!OCR_SPACE_API_KEY) {
-      return jsonResponse({ error: "OCR_SPACE_API_KEY is not configured" }, 500);
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+    const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+      return jsonResponse({ error: "Supabase service credentials not configured" }, 500);
     }
+
+    const OCR_SPACE_API_KEY = await getSecret(SUPABASE_URL, SERVICE_ROLE_KEY, "OCR_SPACE_API_KEY");
 
     const { imageUrl, base64Image } = await req.json().catch(() => ({}));
 

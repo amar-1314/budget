@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Budget Tracker PWA with auto-versioning",
   "scripts": {
+    "build": "echo \"No build step (static site)\"",
     "version:update": "node update-version.js",
     "deploy": "bash deploy.sh",
     "deploy:message": "bash deploy.sh",
