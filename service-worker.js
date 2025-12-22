@@ -69,6 +69,30 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const isAppShell = url.origin === self.location.origin && (
+    event.request.mode === 'navigate' ||
+    url.pathname.endsWith('/') ||
+    url.pathname.endsWith('/index.html') ||
+    url.pathname.endsWith('/script.js') ||
+    url.pathname.endsWith('/style.css') ||
+    url.pathname.endsWith('/manifest.json')
+  );
+
+  if (isAppShell) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' })
+        .then((response) => {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME)
+            .then((cache) => cache.put(event.request, responseClone))
+            .catch(() => {});
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   // Only cache our own app files
   event.respondWith(
     caches.match(event.request)
