@@ -8343,6 +8343,282 @@ function openReceiptTracker() {
     switchReceiptTab('scan');
 }
 
+
+function openOcrGeminiTest() {
+    closeAllModalsExcept('ocrGeminiTestModal');
+    const modal = document.getElementById('ocrGeminiTestModal');
+    if (!modal) return;
+
+    modal.classList.add('active');
+}
+
+function closeOcrGeminiTest() {
+    const modal = document.getElementById('ocrGeminiTestModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function closeOcrGeminiTestResult() {
+    const modal = document.getElementById('ocrGeminiTestResultModal');
+    if (modal) modal.classList.remove('active');
+}
+
+async function loadOcrGeminiTestReceipts() {
+    try {
+        const listEl = document.getElementById('ocrGeminiTestList');
+        if (!listEl) return;
+
+        listEl.innerHTML = `
+            <div class="text-center py-12 text-gray-400">
+                <div class="loading mx-auto mb-4"></div>
+                <p>Loading receipts...</p>
+            </div>
+        `;
+
+        const selectCols = 'id,Item,Category,Year,Month,Day,Actual,has_receipt,receipt_processing_status,receipt_error';
+        const receipts = await supabaseGet(TABLE_NAME, { has_receipt: 'eq.true' }, 300, selectCols, 'Year.desc,Month.desc,Day.desc');
+
+        if (!receipts || receipts.length === 0) {
+            listEl.innerHTML = `
+                <div class="text-center py-12 text-gray-400">
+                    <i class="fas fa-inbox text-5xl mb-4"></i>
+                    <p class="text-lg font-semibold">No receipts found</p>
+                </div>
+            `;
+            return;
+        }
+
+        listEl.innerHTML = receipts.map(r => {
+            const date = `${r.Year || ''}-${String(r.Month || 1).padStart(2, '0')}-${String(r.Day || 1).padStart(2, '0')}`;
+            const amount = Number(r.Actual || 0);
+            const status = r.receipt_processing_status || (r.receipt_scanned ? 'completed' : 'unknown');
+            const statusClass = status === 'failed' ? 'text-red-600' : status === 'completed' ? 'text-green-600' : 'text-gray-500';
+            return `
+                <div class="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-between gap-4">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-receipt text-gray-400"></i>
+                            <div class="min-w-0">
+                                <div class="font-semibold text-gray-800 truncate">${escapeHtml(r.Item || 'Expense')}</div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    <span>${escapeHtml(r.Category || '')}</span> •
+                                    <span>${date}</span> •
+                                    <span>$${amount.toFixed(2)}</span>
+                                </div>
+                                <div class="text-xs mt-1 ${statusClass}">
+                                    ${escapeHtml(String(status))}
+                                    ${r.receipt_error ? ` • ${escapeHtml(String(r.receipt_error).substring(0, 60))}` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 flex-shrink-0">
+                        <button onclick="runOcrGeminiTest('${r.id}')" class="px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold">
+                            <i class="fas fa-vial mr-2"></i>Test
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('loadOcrGeminiTestReceipts error:', error);
+        showNotification('Error loading receipts: ' + error.message, 'error');
+    }
+}
+
+function openOcrGeminiTestResultModal(parsed) {
+    const modal = document.getElementById('ocrGeminiTestResultModal');
+    if (!modal) return;
+
+    const storeEl = document.getElementById('ocrTestStore');
+    const dateEl = document.getElementById('ocrTestDate');
+    const totalEl = document.getElementById('ocrTestTotal');
+    const itemsEl = document.getElementById('ocrTestItemsList');
+
+    if (storeEl) storeEl.textContent = parsed?.store || '-';
+    if (dateEl) dateEl.textContent = parsed?.date || '-';
+    if (totalEl) {
+        const total = Number(parsed?.total || 0);
+        totalEl.textContent = isFinite(total) ? `$${total.toFixed(2)}` : '-';
+    }
+
+    if (itemsEl) {
+        const items = Array.isArray(parsed?.items) ? parsed.items : [];
+        if (items.length === 0) {
+            itemsEl.innerHTML = `
+                <tr>
+                    <td class="px-4 py-3 text-gray-400" colspan="3">No items extracted</td>
+                </tr>
+            `;
+        } else {
+            itemsEl.innerHTML = items.map(item => {
+                const desc = escapeHtml(String(item.description || 'Item'));
+                const qty = Number(item.quantity || 1);
+                const price = Number(item.total_price || item.unit_price || 0);
+                return `
+                    <tr>
+                        <td class="px-4 py-3 font-medium text-gray-800">${desc}</td>
+                        <td class="px-4 py-3 text-right">${isFinite(qty) ? qty : 1}</td>
+                        <td class="px-4 py-3 text-right text-gray-700">$${isFinite(price) ? price.toFixed(2) : '0.00'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    }
+
+    closeAllModalsExcept('ocrGeminiTestResultModal');
+    modal.classList.add('active');
+}
+
+function parseReceiptDataUrlFromExpense(expense) {
+    if (!expense) return null;
+    const receiptData = expense.Receipt;
+    if (!receiptData) return null;
+
+    if (typeof receiptData === 'string') {
+        if (receiptData.startsWith('data:')) return receiptData;
+        if (receiptData.startsWith('[') || receiptData.startsWith('{')) {
+            try {
+                const parsed = JSON.parse(receiptData);
+                if (Array.isArray(parsed) && parsed[0]?.url) return parsed[0].url;
+                if (parsed?.url) return parsed.url;
+            } catch (e) {
+                return null;
+            }
+        }
+        return receiptData;
+    }
+
+    if (Array.isArray(receiptData) && receiptData[0]?.url) return receiptData[0].url;
+    if (receiptData?.url) return receiptData.url;
+    return null;
+}
+
+async function runOcrSpace(receiptDataUrlOrUrl) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/ocr-space`;
+    const body = receiptDataUrlOrUrl && receiptDataUrlOrUrl.startsWith('data:')
+        ? { base64Image: receiptDataUrlOrUrl }
+        : { imageUrl: receiptDataUrlOrUrl };
+
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify(body)
+    });
+
+    const data = await resp.json().catch(() => null);
+
+    if (!resp.ok) {
+        throw new Error(data?.error || `OCR proxy failed: ${resp.status}`);
+    }
+
+    const parsedText = data?.text || '';
+    return parsedText;
+}
+
+async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
+    const prompt = `You are given OCR text extracted from a grocery receipt. Extract receipt data and return ONLY valid JSON.
+
+Return JSON in this exact schema:
+{
+  "store": "store/merchant name",
+  "date": "YYYY-MM-DD format",
+  "total": number,
+  "items": [
+    {
+      "description": "item name/description",
+      "quantity": number,
+      "unit_price": number,
+      "total_price": number
+    }
+  ]
+}
+
+Rules:
+- Extract ALL line items as best as possible
+- quantity defaults to 1
+- Prices must be numbers only (no $)
+- If unit price is not available, set unit_price to 0
+- If total price not available, use unit_price * quantity when possible, else 0
+- No markdown, no explanations, only JSON
+
+OCR TEXT:
+${ocrText}`;
+
+    const requestBody = {
+        contents: [{
+            parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 4096
+        }
+    };
+
+    const result = await callGeminiWithRetry(requestBody);
+    const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textResponse) return null;
+
+    let jsonStr = String(textResponse).trim();
+    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+    jsonStr = jsonStr.trim();
+
+    return JSON.parse(jsonStr);
+}
+
+async function runOcrGeminiTest(expenseId) {
+    showScanningSpinner('Loading receipt...');
+    try {
+        const expenses = await supabaseGet(TABLE_NAME, { 'id': `eq.${expenseId}` }, 1, 'id,Item,Category,Year,Month,Day,Actual,Receipt');
+        const expense = expenses?.[0];
+        if (!expense) {
+            hideScanningSpinner();
+            showNotification('Expense not found', 'error');
+            return;
+        }
+
+        const receiptUrl = parseReceiptDataUrlFromExpense(expense);
+        if (!receiptUrl) {
+            hideScanningSpinner();
+            showNotification('Could not extract receipt image', 'error');
+            return;
+        }
+
+        updateScanningSpinner('Running OCR...', 'Sending to OCR.Space');
+        const ocrText = await runOcrSpace(receiptUrl);
+        if (!ocrText || ocrText.trim().length < 10) {
+            hideScanningSpinner();
+            showNotification('OCR returned no text', 'error');
+            return;
+        }
+
+        updateScanningSpinner('Extracting items...', 'Sending OCR text to Gemini');
+        const parsed = await extractReceiptDataWithGeminiFromOcrText(ocrText);
+        hideScanningSpinner();
+
+        if (!parsed) {
+            showNotification('No data extracted', 'error');
+            return;
+        }
+
+        openOcrGeminiTestResultModal(parsed);
+    } catch (error) {
+        console.error('runOcrGeminiTest error:', error);
+        hideScanningSpinner();
+        showNotification('Test failed: ' + error.message, 'error');
+    }
+}
+
 function closeReceiptTracker() {
     document.getElementById('receiptTrackerModal').classList.remove('active');
 }

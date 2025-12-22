@@ -48,6 +48,7 @@
             <div class="loading-dot" style="animation-delay: 0.4s;"></div>
         </div>
     </div>
+
     <div id="notification" class="notification">
         <div class="flex items-center gap-3"><i class="fas fa-check-circle text-green-500"></i><span
                 id="notificationText"></span></div>
@@ -92,6 +93,14 @@
                     <div>
                         <div class="font-semibold text-gray-800">Receipt Tracker</div>
                         <div class="text-xs text-gray-500">Scan & track item prices</div>
+                    </div>
+                </button>
+                <button onclick="openOcrGeminiTest(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
+                    <i class="fas fa-vial text-purple-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">OCR + Gemini Text (Test)</div>
+                        <div class="text-xs text-gray-500">Evaluate OCR fallback accuracy</div>
                     </div>
                 </button>
                 <button onclick="openPredictiveBudgeting(); toggleMenu();"
@@ -1595,6 +1604,83 @@
                         <p>Search for items to see price history</p>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ocrGeminiTestModal" class="modal">
+        <div class="modal-content" style="max-width: 900px; height: 90vh; display: flex; flex-direction: column;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-vial mr-2 text-purple-600"></i>OCR + Gemini Text (Test)</h2>
+                <button onclick="closeOcrGeminiTest()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-lg mb-6 text-sm text-blue-800">
+                <i class="fas fa-info-circle mr-2"></i>This is a test tool. It will not save anything to the database.
+            </div>
+
+            <div class="flex justify-end mb-6">
+                <button onclick="loadOcrGeminiTestReceipts()" class="btn-primary">
+                    <i class="fas fa-sync-alt mr-2"></i>Load Receipts
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto">
+                <div id="ocrGeminiTestList" class="space-y-3">
+                    <div class="text-center py-12 text-gray-400">
+                        <div class="loading mx-auto mb-4"></div>
+                        <p>Click “Load Receipts” to begin.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="ocrGeminiTestResultModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-receipt mr-2 text-purple-600"></i>OCR Test Result</h2>
+                <button onclick="closeOcrGeminiTestResult()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-2xl"></i>
+                </button>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-4 text-sm">
+                <div>
+                    <span class="text-gray-500 block">Store</span>
+                    <span id="ocrTestStore" class="font-semibold text-lg">-</span>
+                </div>
+                <div>
+                    <span class="text-gray-500 block">Date</span>
+                    <span id="ocrTestDate" class="font-semibold text-lg">-</span>
+                </div>
+                <div>
+                    <span class="text-gray-500 block">Total</span>
+                    <span id="ocrTestTotal" class="font-semibold text-lg text-green-600">-</span>
+                </div>
+                <div>
+                    <span class="text-gray-500 block">Source</span>
+                    <span id="ocrTestSource" class="font-semibold text-lg">OCR.Space + Gemini Text</span>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
+                        <tr>
+                            <th class="px-4 py-3">Item</th>
+                            <th class="px-4 py-3 text-right">Qty</th>
+                            <th class="px-4 py-3 text-right">Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ocrTestItemsList" class="divide-y divide-gray-200">
+                        <!-- Items will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4">
+                <button onclick="closeOcrGeminiTestResult()" class="btn-secondary w-full">Close</button>
             </div>
         </div>
     </div>
