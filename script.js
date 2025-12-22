@@ -8550,7 +8550,7 @@ async function compressReceiptImageToDataUrl(receiptUrl, maxBytes = 950 * 1024) 
         ctx.drawImage(img, 0, 0, w, h);
 
         out = canvas.toDataURL('image/jpeg', quality);
-        const bytes = estimateBytes(out);
+        const bytes = estimateDataUrlBytes(out);
 
         if (bytes <= maxBytes) {
             return out;
