@@ -1,0 +1,12 @@
+.git/
+.github/
+supabase/
+scripts/
+node_modules/
+*.log
+*.sh
+*.sql
+*.md
+*.bak
+.deploy*
+.DS_Store
