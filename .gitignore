@@ -1,6 +1,8 @@
 # SQL scripts (local only)
 *.sql
 
+!supabase/setup.sql
+
 # README files
 README.md
 **/README.md

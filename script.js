@@ -90,6 +90,63 @@ function handleLLCTileClick() {
     }
 }
 
+async function getReceiptViewUrl(expenseId) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/receipt-link`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ expenseId })
+    });
+
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        if (resp.status === 404) return null;
+        throw new Error(data?.error || `Receipt link failed: ${resp.status}`);
+    }
+    return data?.url || null;
+}
+
+async function uploadReceiptToStorage(expenseId, receiptDataUrl, expenseFields, filename) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+
+    const year = expenseFields?.Year || new Date().getFullYear();
+    const month = String(expenseFields?.Month || 1).padStart(2, '0');
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/receipt-upload`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+            expenseId,
+            dataUrl: receiptDataUrl,
+            year,
+            month,
+            filename
+        })
+    });
+
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `Receipt upload failed: ${resp.status}`);
+    }
+
+    return data?.receipt;
+}
+
 // Call on load
 document.addEventListener('DOMContentLoaded', updateAppVersionDisplay);
 
@@ -3128,39 +3185,23 @@ async function viewReceiptFromExpense(expenseId) {
     try {
         showLoader('Loading receipt...');
 
-        // Check if we already have the receipt in memory
-        const expense = allExpenses.find(exp => exp.id === expenseId);
-
-        if (expense && expense.fields.Receipt) {
-            // Receipt already loaded
+        if (DATA_SOURCE === 'supabase') {
+            const url = await getReceiptViewUrl(expenseId);
             hideLoader();
-            viewReceipt(expense.fields.Receipt);
+            if (url) {
+                viewReceipt(url);
+            } else {
+                showNotification('No receipt found for this expense', 'warning');
+            }
             return;
         }
 
-        // Fetch just this expense WITH the receipt field
-        if (DATA_SOURCE === 'supabase') {
-            const expenseData = await supabaseGet(
-                TABLE_NAME,
-                { id: { operator: 'eq', value: expenseId } },
-                1,
-                'id,Receipt' // Only get id and Receipt field
-            );
-
-            hideLoader();
-            if (expenseData && expenseData[0] && expenseData[0].Receipt) {
-                viewReceipt(expenseData[0].Receipt);
-            } else {
-                showNotification('No receipt found for this expense', 'warning');
-            }
+        hideLoader();
+        const expense = allExpenses.find(exp => exp.id === expenseId);
+        if (expense && expense.fields.Receipt) {
+            viewReceipt(expense.fields.Receipt);
         } else {
-            // Airtable fallback
-            hideLoader();
-            if (expense && expense.fields.Receipt) {
-                viewReceipt(expense.fields.Receipt);
-            } else {
-                showNotification('No receipt found for this expense', 'warning');
-            }
+            showNotification('No receipt found for this expense', 'warning');
         }
     } catch (error) {
         hideLoader();
@@ -6735,6 +6776,29 @@ async function editExpense(id) {
         return;
     }
     console.log('Found expense:', expense);
+
+    if (DATA_SOURCE === 'supabase' && expense.fields.has_receipt && (!expense.fields.Receipt || expense.fields.Receipt.length === 0)) {
+        try {
+            const withReceipt = await supabaseGet(TABLE_NAME, { id: { operator: 'eq', value: id } }, 1, 'id,Receipt');
+            if (withReceipt?.[0]?.Receipt) {
+                const raw = withReceipt[0].Receipt;
+                if (typeof raw === 'string') {
+                    const s = raw.trim();
+                    if (s.startsWith('data:')) {
+                        expense.fields.Receipt = [{ url: s, filename: 'receipt' }];
+                    } else if (s.startsWith('[') || s.startsWith('{')) {
+                        expense.fields.Receipt = JSON.parse(s);
+                    } else {
+                        expense.fields.Receipt = [{ url: s, filename: 'receipt' }];
+                    }
+                } else {
+                    expense.fields.Receipt = raw;
+                }
+            }
+        } catch (e) {
+        }
+    }
+
     closeAllModalsExcept('expenseModal');
     document.getElementById('modalTitle').textContent = 'Edit Expense';
     document.getElementById('recordId').value = id;
@@ -6797,7 +6861,12 @@ async function editExpense(id) {
     if (expense.fields.Receipt && expense.fields.Receipt.length > 0) {
         currentReceiptData = expense.fields.Receipt[0];
         document.getElementById('receiptFileName').textContent = currentReceiptData.filename;
-        document.getElementById('receiptViewLink').href = currentReceiptData.url;
+        const receiptLink = document.getElementById('receiptViewLink');
+        receiptLink.href = '#';
+        receiptLink.onclick = (e) => {
+            e.preventDefault();
+            viewReceiptFromExpense(id);
+        };
         document.getElementById('currentReceipt').classList.remove('hidden');
         document.getElementById('receiptUploadBtn').classList.add('hidden');
     } else {
@@ -7141,7 +7210,8 @@ async function saveExpense(event) {
             await uploadReceiptAndSave(recordId, fields, receiptFile);
         } else if (currentReceiptData) {
             // Keep existing receipt
-            fields.Receipt = [currentReceiptData];
+            fields.has_receipt = true;
+            fields.Receipt = JSON.stringify([currentReceiptData]);
             await saveExpenseToSupabase(recordId, fields);
         } else {
             // No receipt
@@ -7755,17 +7825,7 @@ async function uploadReceiptAndSave(recordId, fields, file) {
         // Compress the image before saving
         const compressed = await compressImage(file, 1200, 0.8);
 
-        // Store receipt as base64 in the Receipt field
-        // Format: [{ url: "data:image/...", filename: "...", ... }]
         const receiptDataUrl = compressed.base64;
-        fields.Receipt = JSON.stringify([{
-            url: receiptDataUrl,
-            filename: compressed.filename,
-            type: compressed.type,
-            size: compressed.size,
-            originalSize: compressed.originalSize,
-            compressed: true
-        }]);
 
         // Set has_receipt flag
         fields.has_receipt = true;
@@ -7790,6 +7850,15 @@ async function uploadReceiptAndSave(recordId, fields, file) {
         // Save expense with receipt data (async - don't wait for scan to complete form)
         const savedExpense = await saveExpenseToSupabase(recordId, fields);
         const expenseId = savedExpense?.id || recordId;
+
+        const uploaded = await uploadReceiptToStorage(expenseId, receiptDataUrl, fields, compressed.filename);
+        await supabasePatch(TABLE_NAME, expenseId, {
+            Receipt: JSON.stringify([{
+                ...uploaded,
+                originalSize: compressed.originalSize,
+                compressed: true
+            }])
+        });
         
         if (!isGrocery) {
             showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB)`, 'success');
@@ -8052,8 +8121,7 @@ async function retryFailedScan(expenseId) {
     showScanningSpinner('Loading receipt...');
     
     try {
-        // Fetch the expense with receipt data from database
-        const expenses = await supabaseGet(TABLE_NAME, { 'id': `eq.${expenseId}` }, 1, '*');
+        const expenses = await supabaseGet(TABLE_NAME, { 'id': `eq.${expenseId}` }, 1, 'id,Item,Category,Year,Month,Day,Actual');
         const expense = expenses?.[0];
         
         if (!expense) {
@@ -8061,35 +8129,9 @@ async function retryFailedScan(expenseId) {
             showNotification('Expense not found', 'error');
             return;
         }
-        
-        if (!expense.Receipt) {
-            hideScanningSpinner();
-            showNotification('No receipt data found', 'error');
-            return;
-        }
-        
-        // Parse receipt data to get base64
-        let receiptDataUrl = null;
-        let receiptData = expense.Receipt;
-        
-        if (typeof receiptData === 'string') {
-            if (receiptData.startsWith('data:')) {
-                receiptDataUrl = receiptData;
-            } else if (receiptData.startsWith('[') || receiptData.startsWith('{')) {
-                const parsed = JSON.parse(receiptData);
-                if (Array.isArray(parsed) && parsed[0]?.url) {
-                    receiptDataUrl = parsed[0].url;
-                } else if (parsed.url) {
-                    receiptDataUrl = parsed.url;
-                }
-            }
-        } else if (Array.isArray(receiptData) && receiptData[0]?.url) {
-            receiptDataUrl = receiptData[0].url;
-        } else if (receiptData?.url) {
-            receiptDataUrl = receiptData.url;
-        }
-        
-        if (!receiptDataUrl) {
+
+        const receiptUrl = await getReceiptViewUrl(expenseId);
+        if (!receiptUrl) {
             hideScanningSpinner();
             showNotification('Could not extract receipt image', 'error');
             return;
@@ -8099,7 +8141,7 @@ async function retryFailedScan(expenseId) {
         
         const result = await scanReceiptWithRetries(
             expenseId, 
-            receiptDataUrl, 
+            receiptUrl,
             expense, 
             3
         );
@@ -8296,78 +8338,14 @@ async function scanReceiptWithRetries(expenseId, base64DataUrl, expenseFields, m
 // Receipt Tracker & Google Gemini OCR Integration
 // API key is obfuscated to prevent automated scanning/revocation
 const _gk = () => {
-    // Encoded key parts (reversed + base64 chunks)
-    const p = ['WmdTQnN3V3lJb3EwQQ==', 'Q0t5amlHb0pMaGVRbw==', 'QUl6YVN5Q2tZS29uaQ=='];
-    return p.map(s => atob(s)).reverse().join('');
+    return '';
 };
-const GEMINI_API_KEY = _gk();
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const GEMINI_API_KEY = '';
+const GEMINI_API_URL = '';
 
 // Gemini API call with retry logic and rate limit handling
 async function callGeminiWithRetry(requestBody, maxRetries = 3) {
-    let lastError = null;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            const response = await fetch(GEMINI_API_URL, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'x-goog-api-key': GEMINI_API_KEY
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (response.ok) {
-                return await response.json();
-            }
-
-            const errorData = await response.json();
-            console.error(`Gemini API error (attempt ${attempt}/${maxRetries}):`, errorData);
-            
-            // Check for rate limit (429) or quota exceeded errors
-            if (response.status === 429 || 
-                errorData.error?.message?.includes('quota') || 
-                errorData.error?.message?.includes('rate') ||
-                errorData.error?.message?.includes('Too Many Requests')) {
-                
-                // Extract retry time from error message if available
-                let waitTime = Math.min(5000 * Math.pow(2, attempt - 1), 60000); // Exponential backoff, max 60s
-                const retryMatch = errorData.error?.message?.match(/retry in (\d+\.?\d*)s/i);
-                if (retryMatch) {
-                    waitTime = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 1000; // Add 1s buffer
-                }
-                
-                if (attempt < maxRetries) {
-                    const waitSeconds = Math.ceil(waitTime / 1000);
-                    showNotification(`Rate limited. Retrying in ${waitSeconds}s... (attempt ${attempt}/${maxRetries})`, 'warning');
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                    continue;
-                } else {
-                    // Final attempt failed - give user-friendly message
-                    throw new Error(`API rate limit exceeded. Please wait a minute and try again. The free tier has limited requests.`);
-                }
-            }
-            
-            // For other errors, don't retry
-            throw new Error(errorData.error?.message || `API request failed with status ${response.status}`);
-            
-        } catch (error) {
-            lastError = error;
-            
-            // If it's a network error, maybe retry
-            if (error.name === 'TypeError' && error.message.includes('fetch') && attempt < maxRetries) {
-                const waitTime = 2000 * attempt;
-                showNotification(`Network error. Retrying in ${waitTime/1000}s...`, 'warning');
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-                continue;
-            }
-            
-            throw error;
-        }
-    }
-    
-    throw lastError || new Error('Max retries exceeded');
+    throw new Error('Gemini is handled server-side');
 }
 
 // State for receipt scanner
@@ -8710,66 +8688,33 @@ async function extractReceiptDataWithOcrSpaceAndGemini(receiptUrlOrDataUrl) {
 }
 
 async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
-    const prompt = `You are given OCR text extracted from a grocery receipt. Extract receipt data and return ONLY valid JSON.
-
-Return JSON in this exact schema:
-{
-  "store": "store/merchant name",
-  "date": "YYYY-MM-DD format",
-  "total": number,
-  "items": [
-    {
-      "raw_description": "as-written on receipt (can be abbreviated)",
-      "description": "normalized human-friendly item name (expand abbreviations)",
-      "quantity": number,
-      "quantity_unit": "lb|oz|g|kg|ml|l|ea|ct|pack|bag|bottle|box|other",
-      "unit_price": number,
-      "total_price": number
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
     }
-  ]
-}
 
-Rules:
-- Extract ALL line items as best as possible
-- quantity defaults to 1
-- If the receipt indicates weight/units (e.g. 0.66 LB), put quantity=0.66 and quantity_unit="lb" (not quantity=0.66)
-- Prices must be numbers only (no $)
-- If unit price is not available, set unit_price to 0
-- If total price not available, use unit_price * quantity when possible, else 0
-- Normalize/expand common abbreviations conservatively (e.g., "swt potatoes" -> "sweet potatoes", "mand 3 bag" -> "mandarins 3lb bag")
-- Do not hallucinate brands or details not present; if unsure, keep description close to raw_description
-- No markdown, no explanations, only JSON
+    const endpoint = `${SUPABASE_URL}/functions/v1/gemini-parse`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ ocrText })
+    });
 
-OCR TEXT:
-${ocrText}`;
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `Gemini parse failed: ${resp.status}`);
+    }
 
-    const requestBody = {
-        contents: [{
-            parts: [{ text: prompt }]
-        }],
-        generationConfig: {
-            temperature: 0.1,
-            maxOutputTokens: 4096
-        }
-    };
-
-    const result = await callGeminiWithRetry(requestBody);
-    const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!textResponse) return null;
-
-    let jsonStr = String(textResponse).trim();
-    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
-    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
-    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
-    jsonStr = jsonStr.trim();
-
-    return JSON.parse(jsonStr);
+    return data?.data || null;
 }
 
 async function runOcrGeminiTest(expenseId) {
     showScanningSpinner('Loading receipt...');
     try {
-        const expenses = await supabaseGet(TABLE_NAME, { 'id': `eq.${expenseId}` }, 1, 'id,Item,Category,Year,Month,Day,Actual,Receipt');
+        const expenses = await supabaseGet(TABLE_NAME, { 'id': `eq.${expenseId}` }, 1, 'id,Item,Category,Year,Month,Day,Actual');
         const expense = expenses?.[0];
         if (!expense) {
             hideScanningSpinner();
@@ -8777,7 +8722,7 @@ async function runOcrGeminiTest(expenseId) {
             return;
         }
 
-        const receiptUrl = parseReceiptDataUrlFromExpense(expense);
+        const receiptUrl = await getReceiptViewUrl(expenseId);
         if (!receiptUrl) {
             hideScanningSpinner();
             showNotification('Could not extract receipt image', 'error');
@@ -8851,94 +8796,30 @@ async function processReceiptWithGemini() {
     processBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
 
     try {
-        // Step 1: Convert image to base64
-        const file = fileInput.files[0];
-        const base64Data = await fileToBase64(file);
-        
-        // Get MIME type
-        let mimeType = file.type;
-        if (mimeType === 'image/heic' || file.name.toLowerCase().endsWith('.heic')) {
-            mimeType = 'image/jpeg'; // Gemini handles HEIC as JPEG
+        const previewImg = document.getElementById('newReceiptPreview');
+        let dataUrl = previewImg?.src || '';
+        if (!dataUrl || !String(dataUrl).startsWith('data:')) {
+            const file = fileInput.files[0];
+            dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result));
+                reader.onerror = () => reject(new Error('Failed to read receipt image'));
+                reader.readAsDataURL(file);
+            });
         }
 
-        // Step 2: Call Gemini API with vision
-        const prompt = `Analyze this receipt image and extract the following information in JSON format:
-{
-  "store": "store/merchant name",
-  "date": "YYYY-MM-DD format",
-  "total": numeric total amount,
-  "items": [
-    {
-      "description": "item name/description",
-      "quantity": numeric quantity (default 1 if not shown),
-      "unit_price": numeric unit price (0 if not shown),
-      "total_price": numeric total price for this item
-    }
-  ]
-}
+        showScanningSpinner('Processing receipt...');
+        const receiptData = await extractReceiptDataWithOcrSpaceAndGemini(dataUrl);
+        hideScanningSpinner();
 
-Important:
-- Extract ALL line items from the receipt
-- For quantity, use 1 if not explicitly shown
-- For prices, extract the actual numbers without currency symbols
-- Return ONLY valid JSON, no markdown or explanations
-- If you can't read something, use reasonable defaults`;
-
-        const requestBody = {
-            contents: [{
-                parts: [
-                    { text: prompt },
-                    {
-                        inline_data: {
-                            mime_type: mimeType,
-                            data: base64Data
-                        }
-                    }
-                ]
-            }],
-            generationConfig: {
-                temperature: 0.1,
-                maxOutputTokens: 4096
-            }
-        };
-
-        // Use the retry helper for better error handling
-        const result = await callGeminiWithRetry(requestBody);
-        console.log('Gemini Result:', result);
-
-        // Step 3: Parse the response
-        const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!textResponse) {
-            throw new Error('No response from Gemini');
-        }
-
-        // Clean up the response - remove markdown code blocks if present
-        let jsonStr = textResponse.trim();
-        if (jsonStr.startsWith('```json')) {
-            jsonStr = jsonStr.slice(7);
-        } else if (jsonStr.startsWith('```')) {
-            jsonStr = jsonStr.slice(3);
-        }
-        if (jsonStr.endsWith('```')) {
-            jsonStr = jsonStr.slice(0, -3);
-        }
-        jsonStr = jsonStr.trim();
-
-        console.log('Cleaned JSON:', jsonStr);
-
-        const receiptData = JSON.parse(jsonStr);
-        console.log('Parsed receipt data:', receiptData);
-
-        // Normalize the data
-        const store = receiptData.store || 'Unknown Store';
-        const date = receiptData.date || new Date().toISOString().split('T')[0];
-        const total = parseFloat(receiptData.total) || 0;
-        
-        const items = (receiptData.items || []).map(item => ({
-            description: item.description || 'Unknown Item',
+        const store = receiptData?.store || 'Unknown Store';
+        const date = receiptData?.date || new Date().toISOString().split('T')[0];
+        const total = parseFloat(receiptData?.total) || 0;
+        const items = (receiptData?.items || []).map(item => ({
+            description: item.description || item.raw_description || 'Unknown Item',
             quantity: parseFloat(item.quantity) || 1,
             unit_price: parseFloat(item.unit_price) || 0,
-            total_amount: parseFloat(item.total_price) || parseFloat(item.total_amount) || 0
+            total_amount: parseFloat(item.total_price) || 0
         }));
 
         currentScannedReceipt = {
@@ -8953,6 +8834,7 @@ Important:
 
     } catch (error) {
         console.error('Receipt processing error:', error);
+        hideScanningSpinner();
         showNotification('Failed to process receipt: ' + error.message, 'error');
     } finally {
         processBtn.disabled = false;
@@ -9166,10 +9048,9 @@ async function processUnscannedReceipts() {
                 
                 showNotification(`Processing receipt ${i + 1}/${expenses.length}...`, 'info');
                 
-                // Get full expense with receipt data
                 const fullExpense = await supabaseGet(TABLE_NAME, {
                     'id': `eq.${expense.id}`
-                }, 1, '*');
+                }, 1, 'id,Item,Year,Month,Day,Receipt');
                 
                 if (!fullExpense || !fullExpense[0]) {
                     await supabasePatch(TABLE_NAME, expense.id, { receipt_processing_status: 'failed' });
