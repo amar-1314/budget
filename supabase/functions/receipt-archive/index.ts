@@ -42,10 +42,20 @@ async function getSecret(supabase: any, name: string): Promise<string> {
 async function ensureWebDavDir(baseUrl: string, path: string, auth: string) {
   const url = `${baseUrl.replace(/\/+$/, "")}${path.startsWith("/") ? "" : "/"}${path}`;
   const resp = await fetch(url, { method: "MKCOL", headers: { Authorization: auth } });
-  if (resp.status === 201 || resp.status === 405 || resp.status === 409) return;
+  if (resp.status === 201 || resp.status === 405) return;
   if (resp.ok) return;
   const txt = await resp.text().catch(() => "");
   throw new Error(`WebDAV MKCOL failed ${resp.status}: ${txt}`);
+}
+
+async function ensureWebDavDirsRecursive(baseUrl: string, fullPath: string, auth: string) {
+  const cleaned = fullPath.replace(/\/+$/, "");
+  const parts = cleaned.split("/").filter((p) => p.length > 0);
+  let current = "";
+  for (const part of parts) {
+    current += `/${part}`;
+    await ensureWebDavDir(baseUrl, current, auth);
+  }
 }
 
 function monthPad(m: unknown) {
@@ -174,8 +184,9 @@ serve(async (req: Request) => {
         const yearDir = `${cleanedRoot}/${y}`;
         const monthDir = `${cleanedRoot}/${y}/${m}`;
 
-        await ensureWebDavDir(baseUrl, yearDir, auth);
-        await ensureWebDavDir(baseUrl, monthDir, auth);
+        await ensureWebDavDirsRecursive(baseUrl, cleanedRoot, auth);
+        await ensureWebDavDirsRecursive(baseUrl, yearDir, auth);
+        await ensureWebDavDirsRecursive(baseUrl, monthDir, auth);
 
         const destPath = `${monthDir}/${r.id}.${ext}`;
         const destUrl = `${baseUrl.replace(/\/+$/, "")}${destPath.startsWith("/") ? "" : "/"}${destPath}`;
