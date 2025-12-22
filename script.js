@@ -8931,14 +8931,15 @@ async function searchReceiptItems(query) {
     try {
         // Build filter for Supabase query
         let results;
+        const receiptItemsColumns = 'id,expense_id,item_name,quantity,total_price,store,purchase_date';
         if (query && query.trim()) {
             // Search by item name using ilike (case-insensitive)
             results = await supabaseGet(RECEIPT_ITEMS_TABLE, {
                 'item_name': `ilike.%${query}%`
-            }, 100, '*', 'purchase_date.desc');
+            }, 100, receiptItemsColumns, 'purchase_date.desc');
         } else {
             // Get all items, sorted by date
-            results = await supabaseGet(RECEIPT_ITEMS_TABLE, {}, 100, '*', 'purchase_date.desc');
+            results = await supabaseGet(RECEIPT_ITEMS_TABLE, {}, 100, receiptItemsColumns, 'purchase_date.desc');
         }
         
         if (!results || results.length === 0) {
