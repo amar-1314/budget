@@ -8412,6 +8412,9 @@ async function loadOcrGeminiTestReceipts() {
                         </div>
                     </div>
                     <div class="flex gap-2 flex-shrink-0">
+                        <button onclick="viewReceiptFromExpense('${r.id}')" class="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-semibold">
+                            <i class="fas fa-eye mr-2"></i>View
+                        </button>
                         <button onclick="runOcrGeminiTest('${r.id}')" class="px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold">
                             <i class="fas fa-vial mr-2"></i>Test
                         </button>
@@ -8492,6 +8495,75 @@ function parseReceiptDataUrlFromExpense(expense) {
     if (Array.isArray(receiptData) && receiptData[0]?.url) return receiptData[0].url;
     if (receiptData?.url) return receiptData.url;
     return null;
+}
+
+async function compressReceiptImageToDataUrl(receiptUrl, maxBytes = 950 * 1024) {
+    const estimateBytes = (dataUrl) => {
+        const base64Index = dataUrl.indexOf('base64,');
+        if (base64Index === -1) return dataUrl.length;
+        const base64 = dataUrl.slice(base64Index + 7);
+        return Math.floor(base64.length * 0.75);
+    };
+
+    let sourceDataUrl = receiptUrl;
+
+    if (!sourceDataUrl.startsWith('data:')) {
+        const response = await fetch(sourceDataUrl);
+        if (!response.ok) throw new Error(`Failed to fetch receipt image (${response.status})`);
+        const blob = await response.blob();
+        sourceDataUrl = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error('Failed to read receipt image'));
+            reader.readAsDataURL(blob);
+        });
+    }
+
+    const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('Failed to load receipt image'));
+        i.src = sourceDataUrl;
+    });
+
+    let scale = 1;
+    const maxDimension = 1600;
+    if (img.width > maxDimension || img.height > maxDimension) {
+        scale = Math.min(maxDimension / img.width, maxDimension / img.height);
+    }
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas not supported');
+
+    let quality = 0.85;
+    let attempt = 0;
+    let out = '';
+
+    while (attempt < 8) {
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        canvas.width = w;
+        canvas.height = h;
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+
+        out = canvas.toDataURL('image/jpeg', quality);
+        const bytes = estimateBytes(out);
+
+        if (bytes <= maxBytes) {
+            return out;
+        }
+
+        quality = Math.max(0.35, quality - 0.12);
+        if (quality <= 0.45) {
+            scale = scale * 0.85;
+        }
+
+        attempt += 1;
+    }
+
+    return out;
 }
 
 async function runOcrSpace(receiptDataUrlOrUrl) {
@@ -8595,7 +8667,21 @@ async function runOcrGeminiTest(expenseId) {
         }
 
         updateScanningSpinner('Running OCR...', 'Sending to OCR.Space');
-        const ocrText = await runOcrSpace(receiptUrl);
+        let ocrText = '';
+        try {
+            ocrText = await runOcrSpace(receiptUrl);
+        } catch (e) {
+            const msg = String(e?.message || e);
+            const sizeLimitHit = msg.includes('Maximum size limit 1024 KB') || msg.includes('File size exceeds');
+            if (!sizeLimitHit) throw e;
+
+            updateScanningSpinner('Compressing receipt...', 'Reducing image size');
+            const compressed = await compressReceiptImageToDataUrl(receiptUrl);
+
+            updateScanningSpinner('Running OCR...', 'Retrying with compressed image');
+            ocrText = await runOcrSpace(compressed);
+        }
+
         if (!ocrText || ocrText.trim().length < 10) {
             hideScanningSpinner();
             showNotification('OCR returned no text', 'error');
