@@ -23,6 +23,32 @@ function updateAppVersionDisplay() {
     console.log(`📱 App Version: v${APP_VERSION}`);
 }
 
+function getEasternNowParts() {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).formatToParts(new Date());
+
+    const map = {};
+    parts.forEach(p => {
+        if (p.type !== 'literal') map[p.type] = p.value;
+    });
+
+    const year = parseInt(map.year);
+    const month = parseInt(map.month);
+    const day = parseInt(map.day);
+    const hour = parseInt(map.hour);
+    const minute = parseInt(map.minute);
+    const dateKey = `${map.year}-${map.month}-${map.day}`;
+
+    return { year, month, day, hour, minute, dateKey };
+}
+
 function handleLLCTileClick() {
     try {
         switchTab('category');
@@ -13039,10 +13065,19 @@ async function autoHardRefreshApp() {
     console.log('🔄 Auto hard refresh initiated...');
     
     try {
+        // Show full-page loader so user knows the app is updating
+        const loaderText = document.getElementById('loaderText');
+        if (loaderText) loaderText.textContent = 'Refreshing to latest version...';
+        showLoader('Refreshing to latest version...');
+
+        // Let the UI render the loader before heavy work/reload
+        await new Promise(resolve => setTimeout(resolve, 100));
+
         // Store refresh timestamps FIRST before clearing anything
         const refreshTime = new Date().toISOString();
         localStorage.setItem('last_app_refresh', refreshTime);
-        localStorage.setItem('last_auto_refresh', new Date().toDateString());
+        const eastern = getEasternNowParts();
+        localStorage.setItem('last_auto_refresh', eastern.dateKey);
         console.log('✅ Stored auto-refresh timestamp:', refreshTime);
         
         // 1. Unregister all service workers
@@ -13068,7 +13103,9 @@ async function autoHardRefreshApp() {
         
         // 4. Reload the page (hard refresh)
         console.log('✅ Auto refresh complete. Reloading...');
-        window.location.reload(true);
+        const url = new URL(window.location.href);
+        url.searchParams.set('v', String(Date.now()));
+        window.location.replace(url.toString());
 
     } catch (error) {
         console.error('Auto hard refresh error:', error);
@@ -13093,6 +13130,9 @@ async function hardRefreshApp() {
     const loaderText = document.getElementById('loaderText');
     if (loaderText) loaderText.textContent = 'Clearing cache and updating...';
     showLoader('Clearing cache and updating...');
+
+    // Let the UI render the loader before heavy work/reload
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
         // 1. Unregister all service workers
@@ -13132,7 +13172,9 @@ async function hardRefreshApp() {
         
         // 5. Reload the page (hard refresh)
         setTimeout(() => {
-            window.location.reload(true);
+            const url = new URL(window.location.href);
+            url.searchParams.set('v', String(Date.now()));
+            window.location.replace(url.toString());
         }, 1500);
 
     } catch (error) {
@@ -13170,24 +13212,16 @@ function scheduleDailyRefresh() {
         if (!isEnabled) {
             return; // Skip if disabled
         }
-        
-        const now = new Date();
-        
-        // Convert to EST (UTC-5 or UTC-4 during DST)
-        const estOffset = -5; // Eastern Standard Time
-        const utcHours = now.getUTCHours();
-        const estHours = (utcHours + estOffset + 24) % 24;
-        
-        // Check if it's 6am EST (within first 5 minutes)
-        const is6amEST = estHours === 6 && now.getUTCMinutes() < 5;
-        
-        // Check if we already refreshed today
+
+        const eastern = getEasternNowParts();
+
+        const isAfter6amET = eastern.hour > 6 || (eastern.hour === 6 && eastern.minute >= 0);
+
         const lastRefresh = localStorage.getItem('last_auto_refresh');
-        const today = new Date().toDateString();
-        const alreadyRefreshedToday = lastRefresh === today;
-        
-        if (is6amEST && !alreadyRefreshedToday) {
-            console.log('🌅 6am EST detected - triggering automatic refresh...');
+        const alreadyRefreshedToday = lastRefresh === eastern.dateKey;
+
+        if (isAfter6amET && !alreadyRefreshedToday) {
+            console.log('🌅 After 6am ET and not refreshed today - triggering automatic refresh...');
             autoHardRefreshApp();
         }
     };
@@ -13197,6 +13231,12 @@ function scheduleDailyRefresh() {
     
     // Also check immediately on load
     checkAndRefresh();
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            checkAndRefresh();
+        }
+    });
     
     console.log('⏰ Daily auto-refresh scheduler started');
     console.log(`   Status: ${localStorage.getItem('auto_refresh_enabled') !== 'false' ? 'Enabled' : 'Disabled'}`);
