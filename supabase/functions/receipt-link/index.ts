@@ -32,7 +32,36 @@ function parseReceiptField(raw: unknown): unknown {
   return raw;
 }
 
-serve(async (req) => {
+async function getSecret(supabase: any, name: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("app_secrets")
+    .select("value")
+    .eq("name", name)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.value) throw new Error(`Missing secret: ${name}`);
+  return String(data.value);
+}
+
+function base64UrlEncode(bytes: Uint8Array) {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function hmacSignBase64Url(secret: string, message: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
+  return base64UrlEncode(new Uint8Array(sig));
+}
+
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
@@ -103,12 +132,21 @@ serve(async (req) => {
       return jsonResponse({ url: signed.signedUrl });
     }
 
+    if (storageType === "pcloud_webdav") {
+      const signingSecret = await getSecret(supabase, "RECEIPT_PROXY_SIGNING_SECRET");
+      const exp = Math.floor(Date.now() / 1000) + 10 * 60;
+      const msg = `${expenseId}.${exp}`;
+      const sig = await hmacSignBase64Url(signingSecret, msg);
+      const proxyUrl = `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/receipt-proxy?expenseId=${encodeURIComponent(expenseId)}&exp=${exp}&sig=${encodeURIComponent(sig)}`;
+      return jsonResponse({ url: proxyUrl });
+    }
+
     if (url) {
       return jsonResponse({ url });
     }
 
     return jsonResponse({ error: "Unsupported receipt type" }, 400);
-  } catch (e) {
+  } catch (e: any) {
     return jsonResponse({ error: e?.message || String(e) }, 500);
   }
 });
