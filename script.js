@@ -4725,10 +4725,18 @@ function suggestLLCFromItem(itemName, itemLLCMap) {
     
     // Skip if user has manually changed LLC
     if (llcSelect.dataset.autoFilled === 'false' && llcSelect.dataset.userChanged === 'true') return;
+
+    const categoryInput = document.getElementById('category');
+    const categoryAutoForThisItem = !!(
+        categoryInput &&
+        categoryInput.dataset.autoFilled === 'true' &&
+        categoryInput.dataset.lastItem === itemName
+    );
     
     // Try exact match first, then partial match
     let llcData = itemLLCMap[itemName];
     let matchType = 'exact';
+    let matchedItem = itemName;
     
     if (!llcData) {
         // Try partial match
@@ -4736,6 +4744,7 @@ function suggestLLCFromItem(itemName, itemLLCMap) {
             if (historicalItem.includes(itemName) || itemName.includes(historicalItem)) {
                 llcData = data;
                 matchType = 'partial';
+                matchedItem = historicalItem;
                 break;
             }
         }
@@ -4748,9 +4757,35 @@ function suggestLLCFromItem(itemName, itemLLCMap) {
     
     const yesConfidence = (llcData.Yes / totalCount) * 100;
     const noConfidence = (llcData.No / totalCount) * 100;
-    
-    // Only suggest if confidence >= 90% (high threshold for LLC since it's important)
-    if (yesConfidence >= 90) {
+
+    let mostRecentLLC = null;
+    let mostRecentTime = -1;
+    for (const exp of allExpenses) {
+        const expItem = String(exp.fields?.Item || '').trim().toLowerCase();
+        if (!expItem) continue;
+        if (expItem !== matchedItem) continue;
+        const y = Number(exp.fields?.Year || 0);
+        const m = Number(exp.fields?.Month || 1);
+        const d = Number(exp.fields?.Day || 1);
+        const t = new Date(y, m - 1, d).getTime();
+        if (t > mostRecentTime) {
+            mostRecentTime = t;
+            mostRecentLLC = exp.fields?.LLC === 'Yes' || exp.fields?.LLC === true ? 'Yes' : 'No';
+        }
+    }
+
+    let suggestedLLC = null;
+    if (yesConfidence >= 60) {
+        suggestedLLC = 'Yes';
+    } else if (noConfidence >= 60) {
+        suggestedLLC = 'No';
+    } else if (categoryAutoForThisItem && mostRecentLLC) {
+        suggestedLLC = mostRecentLLC;
+    }
+
+    if (!suggestedLLC) return;
+
+    if (suggestedLLC === 'Yes') {
         llcSelect.value = 'Yes';
         llcSelect.dataset.autoFilled = 'true';
         updateLLCButtonStyle('Yes');
@@ -4768,8 +4803,7 @@ function suggestLLCFromItem(itemName, itemLLCMap) {
             const h = document.getElementById('llcHint');
             if (h) h.remove();
         }, 5000);
-    } else if (noConfidence >= 90 && llcSelect.value === 'Yes') {
-        // Only suggest No if currently Yes (don't override default No)
+    } else {
         llcSelect.value = 'No';
         llcSelect.dataset.autoFilled = 'true';
         updateLLCButtonStyle('No');
@@ -6014,6 +6048,12 @@ function toggleDatePicker() {
 function toggleLLC() {
     const llcSelect = document.getElementById('llc');
     const llcBtn = document.getElementById('llcToggleBtn');
+    if (llcSelect) {
+        llcSelect.dataset.userChanged = 'true';
+        llcSelect.dataset.autoFilled = 'false';
+        const existingHint = document.getElementById('llcHint');
+        if (existingHint) existingHint.remove();
+    }
     
     if (llcSelect.value === 'No') {
         llcSelect.value = 'Yes';
@@ -6113,6 +6153,8 @@ function openAddExpenseModal() {
     
     // Reset LLC toggle to Personal
     document.getElementById('llc').value = 'No';
+    document.getElementById('llc').dataset.userChanged = 'false';
+    document.getElementById('llc').dataset.autoFilled = 'false';
     const llcBtn = document.getElementById('llcToggleBtn');
     llcBtn.style.background = 'white';
     llcBtn.style.color = '#6b7280';
