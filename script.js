@@ -4631,7 +4631,7 @@ function suggestCategoryFromItem() {
                 hint.id = 'categoryHint';
                 hint.className = 'text-xs text-green-600 mt-1 flex items-center gap-1';
                 hint.innerHTML = `<i class="fas fa-magic"></i> Auto-suggested based on ${maxCount} previous entries (${Math.round(confidence)}% confidence)`;
-                categoryInput.parentElement.appendChild(hint);
+                (categoryInput.parentElement?.parentElement || categoryInput.parentElement).appendChild(hint);
 
                 // Remove visual feedback after 3 seconds
                 setTimeout(() => {
@@ -4675,7 +4675,7 @@ function suggestCategoryFromItem() {
                         hint.id = 'categoryHint';
                         hint.className = 'text-xs text-yellow-700 mt-1 flex items-center gap-1';
                         hint.innerHTML = `<i class="fas fa-lightbulb"></i> Suggested based on similar item "${historicalItem}" (${Math.round(confidence)}% confidence)`;
-                        categoryInput.parentElement.appendChild(hint);
+                        (categoryInput.parentElement?.parentElement || categoryInput.parentElement).appendChild(hint);
 
                         setTimeout(() => {
                             categoryInput.style.backgroundColor = '';
@@ -8361,145 +8361,7 @@ function formatCurrency(amount) {
 function openReceiptTracker() {
     closeAllModalsExcept('receiptTrackerModal');
     document.getElementById('receiptTrackerModal').classList.add('active');
-    switchReceiptTab('scan');
-}
-
-
-function openOcrGeminiTest() {
-    closeAllModalsExcept('ocrGeminiTestModal');
-    const modal = document.getElementById('ocrGeminiTestModal');
-    if (!modal) return;
-
-    modal.classList.add('active');
-}
-
-function closeOcrGeminiTest() {
-    const modal = document.getElementById('ocrGeminiTestModal');
-    if (modal) modal.classList.remove('active');
-}
-
-function closeOcrGeminiTestResult() {
-    const modal = document.getElementById('ocrGeminiTestResultModal');
-    if (modal) modal.classList.remove('active');
-}
-
-async function loadOcrGeminiTestReceipts() {
-    try {
-        const listEl = document.getElementById('ocrGeminiTestList');
-        if (!listEl) return;
-
-        listEl.innerHTML = `
-            <div class="text-center py-12 text-gray-400">
-                <div class="loading mx-auto mb-4"></div>
-                <p>Loading receipts...</p>
-            </div>
-        `;
-
-        const selectCols = 'id,Item,Category,Year,Month,Day,Actual,has_receipt,receipt_processing_status,receipt_error';
-        const receipts = await supabaseGet(TABLE_NAME, { has_receipt: 'eq.true' }, 300, selectCols, 'Year.desc,Month.desc,Day.desc');
-
-        if (!receipts || receipts.length === 0) {
-            listEl.innerHTML = `
-                <div class="text-center py-12 text-gray-400">
-                    <i class="fas fa-inbox text-5xl mb-4"></i>
-                    <p class="text-lg font-semibold">No receipts found</p>
-                </div>
-            `;
-            return;
-        }
-
-        listEl.innerHTML = receipts.map(r => {
-            const date = `${r.Year || ''}-${String(r.Month || 1).padStart(2, '0')}-${String(r.Day || 1).padStart(2, '0')}`;
-            const amount = Number(r.Actual || 0);
-            const status = r.receipt_processing_status || (r.receipt_scanned ? 'completed' : 'unknown');
-            const statusClass = status === 'failed' ? 'text-red-600' : status === 'completed' ? 'text-green-600' : 'text-gray-500';
-            return `
-                <div class="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-between gap-4">
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2">
-                            <i class="fas fa-receipt text-gray-400"></i>
-                            <div class="min-w-0">
-                                <div class="font-semibold text-gray-800 truncate">${escapeHtml(r.Item || 'Expense')}</div>
-                                <div class="text-xs text-gray-500 mt-1">
-                                    <span>${escapeHtml(r.Category || '')}</span> •
-                                    <span>${date}</span> •
-                                    <span>$${amount.toFixed(2)}</span>
-                                </div>
-                                <div class="text-xs mt-1 ${statusClass}">
-                                    ${escapeHtml(String(status))}
-                                    ${r.receipt_error ? ` • ${escapeHtml(String(r.receipt_error).substring(0, 60))}` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex gap-2 flex-shrink-0">
-                        <button onclick="viewReceiptFromExpense('${r.id}')" class="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-semibold">
-                            <i class="fas fa-eye mr-2"></i>View
-                        </button>
-                        <button onclick="runOcrGeminiTest('${r.id}')" class="px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold">
-                            <i class="fas fa-vial mr-2"></i>Test
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-    } catch (error) {
-        console.error('loadOcrGeminiTestReceipts error:', error);
-        showNotification('Error loading receipts: ' + error.message, 'error');
-    }
-}
-
-function openOcrGeminiTestResultModal(parsed) {
-    const modal = document.getElementById('ocrGeminiTestResultModal');
-    if (!modal) return;
-
-    const storeEl = document.getElementById('ocrTestStore');
-    const dateEl = document.getElementById('ocrTestDate');
-    const totalEl = document.getElementById('ocrTestTotal');
-    const itemsEl = document.getElementById('ocrTestItemsList');
-
-    if (storeEl) storeEl.textContent = parsed?.store || '-';
-    if (dateEl) dateEl.textContent = parsed?.date || '-';
-    if (totalEl) {
-        const total = Number(parsed?.total || 0);
-        totalEl.textContent = isFinite(total) ? `$${total.toFixed(2)}` : '-';
-    }
-
-    if (itemsEl) {
-        const items = Array.isArray(parsed?.items) ? parsed.items : [];
-        if (items.length === 0) {
-            itemsEl.innerHTML = `
-                <tr>
-                    <td class="px-4 py-3 text-gray-400" colspan="3">No items extracted</td>
-                </tr>
-            `;
-        } else {
-            itemsEl.innerHTML = items.map(item => {
-                const normalized = String(item.description || item.raw_description || 'Item');
-                const raw = String(item.raw_description || '').trim();
-                const desc = escapeHtml(normalized);
-                const rawExtra = raw && raw !== normalized ? `<div class="text-xs text-gray-400 mt-1">${escapeHtml(raw)}</div>` : '';
-
-                const qty = Number(item.quantity || 1);
-                const unit = String(item.quantity_unit || item.unit || '').trim();
-                const qtyDisplay = unit && unit !== 'ea'
-                    ? `${isFinite(qty) ? qty : 1} ${escapeHtml(unit)}`
-                    : `${isFinite(qty) ? qty : 1}`;
-                const price = Number(item.total_price || item.unit_price || 0);
-                return `
-                    <tr>
-                        <td class="px-4 py-3 font-medium text-gray-800">${desc}${rawExtra}</td>
-                        <td class="px-4 py-3 text-right">${qtyDisplay}</td>
-                        <td class="px-4 py-3 text-right text-gray-700">$${isFinite(price) ? price.toFixed(2) : '0.00'}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-    }
-
-    closeAllModalsExcept('ocrGeminiTestResultModal');
-    modal.classList.add('active');
+    switchReceiptTab('search');
 }
 
 function parseReceiptDataUrlFromExpense(expense) {
@@ -8709,40 +8571,6 @@ async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
     }
 
     return data?.data || null;
-}
-
-async function runOcrGeminiTest(expenseId) {
-    showScanningSpinner('Loading receipt...');
-    try {
-        const expenses = await supabaseGet(TABLE_NAME, { 'id': `eq.${expenseId}` }, 1, 'id,Item,Category,Year,Month,Day,Actual');
-        const expense = expenses?.[0];
-        if (!expense) {
-            hideScanningSpinner();
-            showNotification('Expense not found', 'error');
-            return;
-        }
-
-        const receiptUrl = await getReceiptViewUrl(expenseId);
-        if (!receiptUrl) {
-            hideScanningSpinner();
-            showNotification('Could not extract receipt image', 'error');
-            return;
-        }
-
-        const parsed = await extractReceiptDataWithOcrSpaceAndGemini(receiptUrl);
-        hideScanningSpinner();
-
-        if (!parsed) {
-            showNotification('No data extracted', 'error');
-            return;
-        }
-
-        openOcrGeminiTestResultModal(parsed);
-    } catch (error) {
-        console.error('runOcrGeminiTest error:', error);
-        hideScanningSpinner();
-        showNotification('Test failed: ' + error.message, 'error');
-    }
 }
 
 function closeReceiptTracker() {
