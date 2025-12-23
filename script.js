@@ -376,7 +376,39 @@ async function ensureWebPushSubscription() {
     const lastVapidPublicKey = localStorage.getItem('push_vapid_public_key');
     let subscription = await registration.pushManager.getSubscription();
 
-    if (subscription && lastVapidPublicKey && lastVapidPublicKey !== vapidPublicKey) {
+    let subscriptionVapidPublicKey = '';
+    try {
+        const subKey = subscription?.options?.applicationServerKey;
+        if (subKey) {
+            if (subKey instanceof Uint8Array) {
+                subscriptionVapidPublicKey = uint8ArrayToBase64Url(subKey);
+            } else
+            if (subKey instanceof ArrayBuffer) {
+                subscriptionVapidPublicKey = uint8ArrayToBase64Url(new Uint8Array(subKey));
+            } else if (subKey?.buffer instanceof ArrayBuffer) {
+                // subKey might be a TypedArray view; only serialize the view bytes, not the full underlying buffer
+                const view = new Uint8Array(subKey);
+                subscriptionVapidPublicKey = uint8ArrayToBase64Url(view);
+            }
+        }
+    } catch (_e) {
+        subscriptionVapidPublicKey = '';
+    }
+
+    const shouldRotateExistingSubscription = Boolean(
+        subscription && (
+            (subscriptionVapidPublicKey && subscriptionVapidPublicKey !== vapidPublicKey) ||
+            (!subscriptionVapidPublicKey && lastVapidPublicKey && lastVapidPublicKey !== vapidPublicKey) ||
+            (!subscriptionVapidPublicKey && !lastVapidPublicKey)
+        )
+    );
+
+    if (shouldRotateExistingSubscription) {
+        console.log('🔄 Rotating Web Push subscription due to VAPID key mismatch', {
+            subscriptionVapidPublicKey: subscriptionVapidPublicKey || null,
+            lastVapidPublicKey: lastVapidPublicKey || null,
+            currentVapidPublicKey: vapidPublicKey
+        });
         try {
             await subscription.unsubscribe();
         } catch (_e) {
@@ -392,6 +424,7 @@ async function ensureWebPushSubscription() {
     }
 
     await registerPushSubscription(subscription);
+    console.log('✅ Web Push subscription ensured and registered', { endpoint: subscription?.endpoint || null });
     localStorage.setItem('push_vapid_public_key', vapidPublicKey);
 }
 
@@ -13181,6 +13214,15 @@ function urlBase64ToUint8Array(base64String) {
         outputArray[i] = rawData.charCodeAt(i);
     }
     return outputArray;
+}
+
+function uint8ArrayToBase64Url(bytes) {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = window.btoa(binary);
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
 // Update notification button state based on permission
