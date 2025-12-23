@@ -31,6 +31,31 @@ create policy "app_secrets_service_role_only"
   using (true)
   with check (true);
 
+create table if not exists public.push_subscriptions (
+  device_id text primary key,
+  endpoint text not null,
+  keys jsonb not null,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists trg_push_subscriptions_updated_at on public.push_subscriptions;
+create trigger trg_push_subscriptions_updated_at
+before update on public.push_subscriptions
+for each row
+execute function public.set_updated_at();
+
+alter table public.push_subscriptions enable row level security;
+
+drop policy if exists "push_subscriptions_service_role_only" on public.push_subscriptions;
+create policy "push_subscriptions_service_role_only"
+  on public.push_subscriptions
+  for all
+  to service_role
+  using (true)
+  with check (true);
+
 -- Optional: create the receipts bucket via SQL (works only with sufficient privileges).
 -- If this fails, create a private bucket named "receipts" in the Supabase dashboard.
 -- insert into storage.buckets (id, name, public)

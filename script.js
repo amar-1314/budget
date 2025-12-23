@@ -20,7 +20,6 @@ function updateAppVersionDisplay() {
     if (versionEl) {
         versionEl.textContent = `v${APP_VERSION}`;
     }
-    console.log(`📱 App Version: v${APP_VERSION}`);
 }
 
 function getEasternNowParts() {
@@ -321,6 +320,98 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
 // Realtime notification subscription
 let realtimeChannel = null;
 
+function getOrCreateDeviceId() {
+    let deviceId = localStorage.getItem('device_id');
+    if (!deviceId) {
+        deviceId = 'device_' + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('device_id', deviceId);
+    }
+    return deviceId;
+}
+
+let cachedVapidPublicKey = null;
+
+async function getVapidPublicKey() {
+    if (cachedVapidPublicKey) return cachedVapidPublicKey;
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/push-config`;
+    const resp = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        }
+    });
+
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `push-config failed: ${resp.status}`);
+    }
+
+    const publicKey = String(data?.publicKey || '').trim();
+    if (!publicKey) {
+        throw new Error('Missing VAPID public key');
+    }
+
+    cachedVapidPublicKey = publicKey;
+    return cachedVapidPublicKey;
+}
+
+async function registerPushSubscription(subscription) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+    const deviceId = getOrCreateDeviceId();
+    const endpoint = `${SUPABASE_URL}/functions/v1/push-subscribe`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+            deviceId,
+            subscription: subscription.toJSON(),
+            userAgent: navigator.userAgent
+        })
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `push-subscribe failed: ${resp.status}`);
+    }
+}
+
+async function broadcastExpensePush(expenseId, cleanFields) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+    const creatorDeviceId = getOrCreateDeviceId();
+    const endpoint = `${SUPABASE_URL}/functions/v1/push-expense`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+            creatorDeviceId,
+            expenseId,
+            item: String(cleanFields?.Item || 'Expense'),
+            amount: Number(cleanFields?.Actual || 0)
+        })
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `push-expense failed: ${resp.status}`);
+    }
+    return data;
+}
+
 async function initializeRealtimeNotifications() {
     // Only set up if notifications are enabled
     if (localStorage.getItem('notifications_enabled') !== 'true') {
@@ -344,12 +435,7 @@ async function initializeRealtimeNotifications() {
             return;
         }
 
-        // Generate a unique device ID for this browser/device
-        let deviceId = localStorage.getItem('device_id');
-        if (!deviceId) {
-            deviceId = 'device_' + Math.random().toString(36).substring(2, 15);
-            localStorage.setItem('device_id', deviceId);
-        }
+        const deviceId = getOrCreateDeviceId();
 
         console.log('📱 Setting up realtime notifications for device:', deviceId);
 
@@ -388,47 +474,8 @@ async function initializeRealtimeNotifications() {
                     }
 
                     if (lastExpenseDeviceId !== deviceId) {
-                        console.log('✅ Different device - triggering notification!');
-
-                        // Show notification
-                        if ('serviceWorker' in navigator && swRegistration) {
-                            console.log('📱 Using Service Worker notification');
-                            swRegistration.showNotification('💰 New Expense Added', {
-                                body: `${newExpense.Item || 'Expense'} - $${(newExpense.Actual || 0).toFixed(2)}`,
-                                icon: './icon-192.png',
-                                badge: './icon-192.png',
-                                tag: 'expense-notification',
-                                requireInteraction: false,
-                                vibrate: [200, 100, 200],
-                                data: {
-                                    url: './',
-                                    expenseId: newExpense.id
-                                }
-                            }).then(() => {
-                                console.log('✅ Notification shown successfully!');
-                            }).catch(err => {
-                                console.error('❌ Failed to show notification:', err);
-                            });
-                        } else if ('Notification' in window && Notification.permission === 'granted') {
-                            console.log('📱 Using basic Notification API');
-                            new Notification('💰 New Expense Added', {
-                                body: `${newExpense.Item || 'Expense'} - $${(newExpense.Actual || 0).toFixed(2)}`,
-                                icon: './icon-192.png',
-                                tag: 'expense-notification'
-                            });
-                        } else {
-                            console.warn('⚠️ Notification not available:', {
-                                hasServiceWorker: 'serviceWorker' in navigator,
-                                hasSwRegistration: !!swRegistration,
-                                hasNotification: 'Notification' in window,
-                                permission: Notification?.permission
-                            });
-                        }
-
-                        // Reload data to show the new expense
+                        console.log('✅ Different device - refreshing data');
                         loadData();
-                    } else {
-                        console.log('⏭️ Same device - skipping notification (self-prevention)');
                     }
                 }
             )
@@ -9130,16 +9177,19 @@ async function saveExpenseToSupabase(recordId, fields) {
             cleanFields.id = newId;
 
             // Mark this device/expense as the creator BEFORE insert to avoid realtime race/double-notify
-            if (localStorage.getItem('notifications_enabled') === 'true') {
-                const deviceId = localStorage.getItem('device_id');
-                if (deviceId) {
-                    sessionStorage.setItem('last_expense_device_id', deviceId);
-                }
-                sessionStorage.setItem('last_expense_id', newId);
-            }
+            const creatorDeviceId = getOrCreateDeviceId();
+            sessionStorage.setItem('last_expense_device_id', creatorDeviceId);
+            sessionStorage.setItem('last_expense_id', newId);
 
             const result = await supabasePost(TABLE_NAME, cleanFields);
             savedRecordId = result.id || newId;
+
+            // Broadcast background push to all other devices
+            try {
+                await broadcastExpensePush(savedRecordId, cleanFields);
+            } catch (e) {
+                console.warn('push-expense failed:', e?.message || e);
+            }
         }
 
         // Create payment entries for contributions
@@ -9178,14 +9228,6 @@ async function saveExpenseToSupabase(recordId, fields) {
         closeModal();
         await loadData();
         showNotification(recordId ? 'Updated!' : 'Added!', 'success');
-        
-        // Send push notification for new expenses
-        if (!recordId && localStorage.getItem('notifications_enabled') === 'true') {
-            sendPushNotification(
-                '💰 New Expense Added',
-                `${cleanFields.Item} - $${cleanFields.Actual.toFixed(2)}`
-            );
-        }
         
         // Return the saved record info for further processing
         return { id: savedRecordId, ...cleanFields };
@@ -13091,9 +13133,6 @@ if ('serviceWorker' in navigator) {
 // Push Notification Support
 let notificationPermission = 'default';
 
-// 🔑 VAPID PUBLIC KEY - GENERATE THIS AT https://vapidkeys.com/
-const VAPID_PUBLIC_KEY = 'BB-tvqN1nNlFENVRsimsxFg1w82bzjs00d5b04FsCiCCxaw7-ODInW8juWvPKrWjcRzsBdmSbJDy5em-lPblqBk'; 
-
 function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding)
@@ -13161,29 +13200,22 @@ async function requestNotificationPermission() {
             const registration = await navigator.serviceWorker.ready;
             
             // Subscribe to Web Push (if VAPID key is configured)
-            if (VAPID_PUBLIC_KEY && !VAPID_PUBLIC_KEY.includes('PASTE_YOUR')) {
+            const vapidPublicKey = await getVapidPublicKey();
+            if (vapidPublicKey && !vapidPublicKey.includes('PASTE_YOUR')) {
                 try {
                     console.log('📱 Subscribing to Web Push...');
-                    const subscription = await registration.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-                    });
+                    let subscription = await registration.pushManager.getSubscription();
+                    if (!subscription) {
+                        subscription = await registration.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+                        });
+                    }
                     
                     console.log('✅ Web Push Subscription:', subscription);
-                    
-                    // Save subscription to Supabase
-                    if (supabaseClient) {
-                        const { error } = await supabaseClient
-                            .from('subscriptions')
-                            .upsert({
-                                endpoint: subscription.endpoint,
-                                keys: subscription.toJSON().keys,
-                                user_agent: navigator.userAgent
-                            }, { onConflict: 'endpoint' });
-                            
-                        if (error) console.error('❌ Failed to save subscription:', error);
-                        else console.log('✅ Subscription saved to Supabase');
-                    }
+
+                    // Register subscription server-side (service_role writes)
+                    await registerPushSubscription(subscription);
                 } catch (subError) {
                     console.warn('⚠️ Web Push subscription failed:', subError);
                 }
@@ -13196,11 +13228,6 @@ async function requestNotificationPermission() {
             
             // Set up realtime notifications for cross-device alerts (while app is open)
             await initializeRealtimeNotifications();
-
-            // Test notification
-            setTimeout(() => {
-                sendPushNotification('🎉 Notifications Active', 'You will now receive alerts for new expenses!');
-            }, 1000);
         } else {
             showNotification('Push notifications denied', 'error');
             localStorage.setItem('notifications_enabled', 'false');
