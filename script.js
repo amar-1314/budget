@@ -490,6 +490,43 @@ async function broadcastExpensePush(expenseId, cleanFields) {
     return data;
 }
 
+async function triggerBudgetAlert(cleanFields) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        return;
+    }
+
+    const year = Number(cleanFields?.Year);
+    const month = String(cleanFields?.Month || '').padStart(2, '0');
+    const category = String(cleanFields?.Category || '').trim();
+
+    if (!Number.isFinite(year) || !month || !category) {
+        return;
+    }
+
+    const creatorDeviceId = getOrCreateDeviceId();
+    const endpoint = `${SUPABASE_URL}/functions/v1/push-budget-alert`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+            creatorDeviceId,
+            year,
+            month,
+            category
+        })
+    });
+
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `push-budget-alert failed: ${resp.status}`);
+    }
+    return data;
+}
+
 async function initializeRealtimeNotifications() {
     // Only set up if notifications are enabled
     if (localStorage.getItem('notifications_enabled') !== 'true') {
@@ -9267,6 +9304,13 @@ async function saveExpenseToSupabase(recordId, fields) {
                 await broadcastExpensePush(savedRecordId, cleanFields);
             } catch (e) {
                 console.warn('push-expense failed:', e?.message || e);
+            }
+
+            // Trigger budget threshold alert (non-blocking)
+            try {
+                await triggerBudgetAlert(cleanFields);
+            } catch (e) {
+                console.warn('push-budget-alert failed:', e?.message || e);
             }
         }
 

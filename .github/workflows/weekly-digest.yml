@@ -1,0 +1,25 @@
+name: Weekly Digest Push
+
+on:
+  schedule:
+    # Every Monday 13:05 UTC (~8:05am ET standard; ~9:05am ET daylight)
+    - cron: '5 13 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  send-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call push-weekly-digest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          CRON_SECRET: ${{ secrets.BUDGET_CRON_SECRET }}
+        run: |
+          curl -sS "$SUPABASE_URL/functions/v1/push-weekly-digest" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -d '{}' | cat
