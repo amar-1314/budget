@@ -328,6 +328,11 @@ async function initializeRealtimeNotifications() {
         return;
     }
 
+    if (realtimeChannel) {
+        console.log('📱 Realtime notifications already subscribed, skipping duplicate subscription');
+        return;
+    }
+
     try {
         // Create Supabase client if not exists
         if (!supabaseClient && SUPABASE_URL && SUPABASE_ANON_KEY) {
@@ -366,14 +371,22 @@ async function initializeRealtimeNotifications() {
 
                     // Check if this expense was created by this device
                     const lastExpenseDeviceId = sessionStorage.getItem('last_expense_device_id');
+                    const lastExpenseId = sessionStorage.getItem('last_expense_id');
 
                     console.log('🔍 Device check:', {
                         currentDevice: deviceId,
                         lastExpenseDevice: lastExpenseDeviceId,
+                        lastExpenseId: lastExpenseId,
+                        newExpenseId: newExpense?.id,
                         shouldNotify: lastExpenseDeviceId !== deviceId
                     });
 
                     // Only notify if it's from a different device/session
+                    if (newExpense?.id && lastExpenseId && newExpense.id === lastExpenseId) {
+                        console.log('⏭️ Same expense (self-created) - skipping notification');
+                        return;
+                    }
+
                     if (lastExpenseDeviceId !== deviceId) {
                         console.log('✅ Different device - triggering notification!');
 
@@ -9115,6 +9128,16 @@ async function saveExpenseToSupabase(recordId, fields) {
             // For new records, generate a UUID for the id
             const newId = 'rec' + Date.now() + Math.random().toString(36).substr(2, 9);
             cleanFields.id = newId;
+
+            // Mark this device/expense as the creator BEFORE insert to avoid realtime race/double-notify
+            if (localStorage.getItem('notifications_enabled') === 'true') {
+                const deviceId = localStorage.getItem('device_id');
+                if (deviceId) {
+                    sessionStorage.setItem('last_expense_device_id', deviceId);
+                }
+                sessionStorage.setItem('last_expense_id', newId);
+            }
+
             const result = await supabasePost(TABLE_NAME, cleanFields);
             savedRecordId = result.id || newId;
         }
@@ -9158,12 +9181,6 @@ async function saveExpenseToSupabase(recordId, fields) {
         
         // Send push notification for new expenses
         if (!recordId && localStorage.getItem('notifications_enabled') === 'true') {
-            // Mark this device as the creator to prevent self-notification
-            const deviceId = localStorage.getItem('device_id');
-            if (deviceId) {
-                sessionStorage.setItem('last_expense_device_id', deviceId);
-            }
-
             sendPushNotification(
                 '💰 New Expense Added',
                 `${cleanFields.Item} - $${cleanFields.Actual.toFixed(2)}`
