@@ -20,7 +20,6 @@ function updateAppVersionDisplay() {
     if (versionEl) {
         versionEl.textContent = `v${APP_VERSION}`;
     }
-    console.log(`📱 App Version: v${APP_VERSION}`);
 }
 
 function getEasternNowParts() {
@@ -321,10 +320,107 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
 // Realtime notification subscription
 let realtimeChannel = null;
 
+function getOrCreateDeviceId() {
+    let deviceId = localStorage.getItem('device_id');
+    if (!deviceId) {
+        deviceId = 'device_' + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('device_id', deviceId);
+    }
+    return deviceId;
+}
+
+let cachedVapidPublicKey = null;
+
+async function getVapidPublicKey() {
+    if (cachedVapidPublicKey) return cachedVapidPublicKey;
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/push-config`;
+    const resp = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        }
+    });
+
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `push-config failed: ${resp.status}`);
+    }
+
+    const publicKey = String(data?.publicKey || '').trim();
+    if (!publicKey) {
+        throw new Error('Missing VAPID public key');
+    }
+
+    cachedVapidPublicKey = publicKey;
+    return cachedVapidPublicKey;
+}
+
+async function registerPushSubscription(subscription) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+    const deviceId = getOrCreateDeviceId();
+    const endpoint = `${SUPABASE_URL}/functions/v1/push-subscribe`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+            deviceId,
+            subscription: subscription.toJSON(),
+            userAgent: navigator.userAgent
+        })
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `push-subscribe failed: ${resp.status}`);
+    }
+}
+
+async function broadcastExpensePush(expenseId, cleanFields) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+    const creatorDeviceId = getOrCreateDeviceId();
+    const endpoint = `${SUPABASE_URL}/functions/v1/push-expense`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+            creatorDeviceId,
+            expenseId,
+            item: String(cleanFields?.Item || 'Expense'),
+            amount: Number(cleanFields?.Actual || 0)
+        })
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `push-expense failed: ${resp.status}`);
+    }
+    return data;
+}
+
 async function initializeRealtimeNotifications() {
     // Only set up if notifications are enabled
     if (localStorage.getItem('notifications_enabled') !== 'true') {
         console.log('📱 Notifications not enabled, skipping realtime setup');
+        return;
+    }
+
+    if (realtimeChannel) {
+        console.log('📱 Realtime notifications already subscribed, skipping duplicate subscription');
         return;
     }
 
@@ -339,12 +435,7 @@ async function initializeRealtimeNotifications() {
             return;
         }
 
-        // Generate a unique device ID for this browser/device
-        let deviceId = localStorage.getItem('device_id');
-        if (!deviceId) {
-            deviceId = 'device_' + Math.random().toString(36).substring(2, 15);
-            localStorage.setItem('device_id', deviceId);
-        }
+        const deviceId = getOrCreateDeviceId();
 
         console.log('📱 Setting up realtime notifications for device:', deviceId);
 
@@ -366,56 +457,25 @@ async function initializeRealtimeNotifications() {
 
                     // Check if this expense was created by this device
                     const lastExpenseDeviceId = sessionStorage.getItem('last_expense_device_id');
+                    const lastExpenseId = sessionStorage.getItem('last_expense_id');
 
                     console.log('🔍 Device check:', {
                         currentDevice: deviceId,
                         lastExpenseDevice: lastExpenseDeviceId,
+                        lastExpenseId: lastExpenseId,
+                        newExpenseId: newExpense?.id,
                         shouldNotify: lastExpenseDeviceId !== deviceId
                     });
 
                     // Only notify if it's from a different device/session
+                    if (newExpense?.id && lastExpenseId && newExpense.id === lastExpenseId) {
+                        console.log('⏭️ Same expense (self-created) - skipping notification');
+                        return;
+                    }
+
                     if (lastExpenseDeviceId !== deviceId) {
-                        console.log('✅ Different device - triggering notification!');
-
-                        // Show notification
-                        if ('serviceWorker' in navigator && swRegistration) {
-                            console.log('📱 Using Service Worker notification');
-                            swRegistration.showNotification('💰 New Expense Added', {
-                                body: `${newExpense.Item || 'Expense'} - $${(newExpense.Actual || 0).toFixed(2)}`,
-                                icon: './icon-192.png',
-                                badge: './icon-192.png',
-                                tag: 'expense-notification',
-                                requireInteraction: false,
-                                vibrate: [200, 100, 200],
-                                data: {
-                                    url: './',
-                                    expenseId: newExpense.id
-                                }
-                            }).then(() => {
-                                console.log('✅ Notification shown successfully!');
-                            }).catch(err => {
-                                console.error('❌ Failed to show notification:', err);
-                            });
-                        } else if ('Notification' in window && Notification.permission === 'granted') {
-                            console.log('📱 Using basic Notification API');
-                            new Notification('💰 New Expense Added', {
-                                body: `${newExpense.Item || 'Expense'} - $${(newExpense.Actual || 0).toFixed(2)}`,
-                                icon: './icon-192.png',
-                                tag: 'expense-notification'
-                            });
-                        } else {
-                            console.warn('⚠️ Notification not available:', {
-                                hasServiceWorker: 'serviceWorker' in navigator,
-                                hasSwRegistration: !!swRegistration,
-                                hasNotification: 'Notification' in window,
-                                permission: Notification?.permission
-                            });
-                        }
-
-                        // Reload data to show the new expense
+                        console.log('✅ Different device - refreshing data');
                         loadData();
-                    } else {
-                        console.log('⏭️ Same device - skipping notification (self-prevention)');
                     }
                 }
             )
@@ -4631,7 +4691,7 @@ function suggestCategoryFromItem() {
                 hint.id = 'categoryHint';
                 hint.className = 'text-xs text-green-600 mt-1 flex items-center gap-1';
                 hint.innerHTML = `<i class="fas fa-magic"></i> Auto-suggested based on ${maxCount} previous entries (${Math.round(confidence)}% confidence)`;
-                categoryInput.parentElement.appendChild(hint);
+                (categoryInput.parentElement?.parentElement || categoryInput.parentElement).appendChild(hint);
 
                 // Remove visual feedback after 3 seconds
                 setTimeout(() => {
@@ -4675,7 +4735,7 @@ function suggestCategoryFromItem() {
                         hint.id = 'categoryHint';
                         hint.className = 'text-xs text-yellow-700 mt-1 flex items-center gap-1';
                         hint.innerHTML = `<i class="fas fa-lightbulb"></i> Suggested based on similar item "${historicalItem}" (${Math.round(confidence)}% confidence)`;
-                        categoryInput.parentElement.appendChild(hint);
+                        (categoryInput.parentElement?.parentElement || categoryInput.parentElement).appendChild(hint);
 
                         setTimeout(() => {
                             categoryInput.style.backgroundColor = '';
@@ -8361,145 +8421,7 @@ function formatCurrency(amount) {
 function openReceiptTracker() {
     closeAllModalsExcept('receiptTrackerModal');
     document.getElementById('receiptTrackerModal').classList.add('active');
-    switchReceiptTab('scan');
-}
-
-
-function openOcrGeminiTest() {
-    closeAllModalsExcept('ocrGeminiTestModal');
-    const modal = document.getElementById('ocrGeminiTestModal');
-    if (!modal) return;
-
-    modal.classList.add('active');
-}
-
-function closeOcrGeminiTest() {
-    const modal = document.getElementById('ocrGeminiTestModal');
-    if (modal) modal.classList.remove('active');
-}
-
-function closeOcrGeminiTestResult() {
-    const modal = document.getElementById('ocrGeminiTestResultModal');
-    if (modal) modal.classList.remove('active');
-}
-
-async function loadOcrGeminiTestReceipts() {
-    try {
-        const listEl = document.getElementById('ocrGeminiTestList');
-        if (!listEl) return;
-
-        listEl.innerHTML = `
-            <div class="text-center py-12 text-gray-400">
-                <div class="loading mx-auto mb-4"></div>
-                <p>Loading receipts...</p>
-            </div>
-        `;
-
-        const selectCols = 'id,Item,Category,Year,Month,Day,Actual,has_receipt,receipt_processing_status,receipt_error';
-        const receipts = await supabaseGet(TABLE_NAME, { has_receipt: 'eq.true' }, 300, selectCols, 'Year.desc,Month.desc,Day.desc');
-
-        if (!receipts || receipts.length === 0) {
-            listEl.innerHTML = `
-                <div class="text-center py-12 text-gray-400">
-                    <i class="fas fa-inbox text-5xl mb-4"></i>
-                    <p class="text-lg font-semibold">No receipts found</p>
-                </div>
-            `;
-            return;
-        }
-
-        listEl.innerHTML = receipts.map(r => {
-            const date = `${r.Year || ''}-${String(r.Month || 1).padStart(2, '0')}-${String(r.Day || 1).padStart(2, '0')}`;
-            const amount = Number(r.Actual || 0);
-            const status = r.receipt_processing_status || (r.receipt_scanned ? 'completed' : 'unknown');
-            const statusClass = status === 'failed' ? 'text-red-600' : status === 'completed' ? 'text-green-600' : 'text-gray-500';
-            return `
-                <div class="bg-white rounded-lg p-4 border border-gray-200 flex items-center justify-between gap-4">
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2">
-                            <i class="fas fa-receipt text-gray-400"></i>
-                            <div class="min-w-0">
-                                <div class="font-semibold text-gray-800 truncate">${escapeHtml(r.Item || 'Expense')}</div>
-                                <div class="text-xs text-gray-500 mt-1">
-                                    <span>${escapeHtml(r.Category || '')}</span> •
-                                    <span>${date}</span> •
-                                    <span>$${amount.toFixed(2)}</span>
-                                </div>
-                                <div class="text-xs mt-1 ${statusClass}">
-                                    ${escapeHtml(String(status))}
-                                    ${r.receipt_error ? ` • ${escapeHtml(String(r.receipt_error).substring(0, 60))}` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex gap-2 flex-shrink-0">
-                        <button onclick="viewReceiptFromExpense('${r.id}')" class="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-semibold">
-                            <i class="fas fa-eye mr-2"></i>View
-                        </button>
-                        <button onclick="runOcrGeminiTest('${r.id}')" class="px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-semibold">
-                            <i class="fas fa-vial mr-2"></i>Test
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-    } catch (error) {
-        console.error('loadOcrGeminiTestReceipts error:', error);
-        showNotification('Error loading receipts: ' + error.message, 'error');
-    }
-}
-
-function openOcrGeminiTestResultModal(parsed) {
-    const modal = document.getElementById('ocrGeminiTestResultModal');
-    if (!modal) return;
-
-    const storeEl = document.getElementById('ocrTestStore');
-    const dateEl = document.getElementById('ocrTestDate');
-    const totalEl = document.getElementById('ocrTestTotal');
-    const itemsEl = document.getElementById('ocrTestItemsList');
-
-    if (storeEl) storeEl.textContent = parsed?.store || '-';
-    if (dateEl) dateEl.textContent = parsed?.date || '-';
-    if (totalEl) {
-        const total = Number(parsed?.total || 0);
-        totalEl.textContent = isFinite(total) ? `$${total.toFixed(2)}` : '-';
-    }
-
-    if (itemsEl) {
-        const items = Array.isArray(parsed?.items) ? parsed.items : [];
-        if (items.length === 0) {
-            itemsEl.innerHTML = `
-                <tr>
-                    <td class="px-4 py-3 text-gray-400" colspan="3">No items extracted</td>
-                </tr>
-            `;
-        } else {
-            itemsEl.innerHTML = items.map(item => {
-                const normalized = String(item.description || item.raw_description || 'Item');
-                const raw = String(item.raw_description || '').trim();
-                const desc = escapeHtml(normalized);
-                const rawExtra = raw && raw !== normalized ? `<div class="text-xs text-gray-400 mt-1">${escapeHtml(raw)}</div>` : '';
-
-                const qty = Number(item.quantity || 1);
-                const unit = String(item.quantity_unit || item.unit || '').trim();
-                const qtyDisplay = unit && unit !== 'ea'
-                    ? `${isFinite(qty) ? qty : 1} ${escapeHtml(unit)}`
-                    : `${isFinite(qty) ? qty : 1}`;
-                const price = Number(item.total_price || item.unit_price || 0);
-                return `
-                    <tr>
-                        <td class="px-4 py-3 font-medium text-gray-800">${desc}${rawExtra}</td>
-                        <td class="px-4 py-3 text-right">${qtyDisplay}</td>
-                        <td class="px-4 py-3 text-right text-gray-700">$${isFinite(price) ? price.toFixed(2) : '0.00'}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-    }
-
-    closeAllModalsExcept('ocrGeminiTestResultModal');
-    modal.classList.add('active');
+    switchReceiptTab('search');
 }
 
 function parseReceiptDataUrlFromExpense(expense) {
@@ -8709,40 +8631,6 @@ async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
     }
 
     return data?.data || null;
-}
-
-async function runOcrGeminiTest(expenseId) {
-    showScanningSpinner('Loading receipt...');
-    try {
-        const expenses = await supabaseGet(TABLE_NAME, { 'id': `eq.${expenseId}` }, 1, 'id,Item,Category,Year,Month,Day,Actual');
-        const expense = expenses?.[0];
-        if (!expense) {
-            hideScanningSpinner();
-            showNotification('Expense not found', 'error');
-            return;
-        }
-
-        const receiptUrl = await getReceiptViewUrl(expenseId);
-        if (!receiptUrl) {
-            hideScanningSpinner();
-            showNotification('Could not extract receipt image', 'error');
-            return;
-        }
-
-        const parsed = await extractReceiptDataWithOcrSpaceAndGemini(receiptUrl);
-        hideScanningSpinner();
-
-        if (!parsed) {
-            showNotification('No data extracted', 'error');
-            return;
-        }
-
-        openOcrGeminiTestResultModal(parsed);
-    } catch (error) {
-        console.error('runOcrGeminiTest error:', error);
-        hideScanningSpinner();
-        showNotification('Test failed: ' + error.message, 'error');
-    }
 }
 
 function closeReceiptTracker() {
@@ -9287,8 +9175,21 @@ async function saveExpenseToSupabase(recordId, fields) {
             // For new records, generate a UUID for the id
             const newId = 'rec' + Date.now() + Math.random().toString(36).substr(2, 9);
             cleanFields.id = newId;
+
+            // Mark this device/expense as the creator BEFORE insert to avoid realtime race/double-notify
+            const creatorDeviceId = getOrCreateDeviceId();
+            sessionStorage.setItem('last_expense_device_id', creatorDeviceId);
+            sessionStorage.setItem('last_expense_id', newId);
+
             const result = await supabasePost(TABLE_NAME, cleanFields);
             savedRecordId = result.id || newId;
+
+            // Broadcast background push to all other devices
+            try {
+                await broadcastExpensePush(savedRecordId, cleanFields);
+            } catch (e) {
+                console.warn('push-expense failed:', e?.message || e);
+            }
         }
 
         // Create payment entries for contributions
@@ -9327,20 +9228,6 @@ async function saveExpenseToSupabase(recordId, fields) {
         closeModal();
         await loadData();
         showNotification(recordId ? 'Updated!' : 'Added!', 'success');
-        
-        // Send push notification for new expenses
-        if (!recordId && localStorage.getItem('notifications_enabled') === 'true') {
-            // Mark this device as the creator to prevent self-notification
-            const deviceId = localStorage.getItem('device_id');
-            if (deviceId) {
-                sessionStorage.setItem('last_expense_device_id', deviceId);
-            }
-
-            sendPushNotification(
-                '💰 New Expense Added',
-                `${cleanFields.Item} - $${cleanFields.Actual.toFixed(2)}`
-            );
-        }
         
         // Return the saved record info for further processing
         return { id: savedRecordId, ...cleanFields };
@@ -13246,9 +13133,6 @@ if ('serviceWorker' in navigator) {
 // Push Notification Support
 let notificationPermission = 'default';
 
-// 🔑 VAPID PUBLIC KEY - GENERATE THIS AT https://vapidkeys.com/
-const VAPID_PUBLIC_KEY = 'BB-tvqN1nNlFENVRsimsxFg1w82bzjs00d5b04FsCiCCxaw7-ODInW8juWvPKrWjcRzsBdmSbJDy5em-lPblqBk'; 
-
 function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding)
@@ -13316,29 +13200,22 @@ async function requestNotificationPermission() {
             const registration = await navigator.serviceWorker.ready;
             
             // Subscribe to Web Push (if VAPID key is configured)
-            if (VAPID_PUBLIC_KEY && !VAPID_PUBLIC_KEY.includes('PASTE_YOUR')) {
+            const vapidPublicKey = await getVapidPublicKey();
+            if (vapidPublicKey && !vapidPublicKey.includes('PASTE_YOUR')) {
                 try {
                     console.log('📱 Subscribing to Web Push...');
-                    const subscription = await registration.pushManager.subscribe({
-                        userVisibleOnly: true,
-                        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-                    });
+                    let subscription = await registration.pushManager.getSubscription();
+                    if (!subscription) {
+                        subscription = await registration.pushManager.subscribe({
+                            userVisibleOnly: true,
+                            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+                        });
+                    }
                     
                     console.log('✅ Web Push Subscription:', subscription);
-                    
-                    // Save subscription to Supabase
-                    if (supabaseClient) {
-                        const { error } = await supabaseClient
-                            .from('subscriptions')
-                            .upsert({
-                                endpoint: subscription.endpoint,
-                                keys: subscription.toJSON().keys,
-                                user_agent: navigator.userAgent
-                            }, { onConflict: 'endpoint' });
-                            
-                        if (error) console.error('❌ Failed to save subscription:', error);
-                        else console.log('✅ Subscription saved to Supabase');
-                    }
+
+                    // Register subscription server-side (service_role writes)
+                    await registerPushSubscription(subscription);
                 } catch (subError) {
                     console.warn('⚠️ Web Push subscription failed:', subError);
                 }
@@ -13351,11 +13228,6 @@ async function requestNotificationPermission() {
             
             // Set up realtime notifications for cross-device alerts (while app is open)
             await initializeRealtimeNotifications();
-
-            // Test notification
-            setTimeout(() => {
-                sendPushNotification('🎉 Notifications Active', 'You will now receive alerts for new expenses!');
-            }, 1000);
         } else {
             showNotification('Push notifications denied', 'error');
             localStorage.setItem('notifications_enabled', 'false');
