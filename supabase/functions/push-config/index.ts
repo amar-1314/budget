@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { encodeBase64Url } from "https://deno.land/std@0.224.0/encoding/base64url.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import * as webpush from "https://raw.githubusercontent.com/negrel/webpush/0.3.0/mod.ts";
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -39,8 +41,16 @@ serve(async (req: Request) => {
   });
 
   try {
+    const jwkJson = await getSecret(supabase, "PUSH_VAPID_KEYS_JWK");
+    if (jwkJson) {
+      const vapidKeys = await webpush.importVapidKeys(JSON.parse(jwkJson), { extractable: false });
+      const raw = new Uint8Array(await crypto.subtle.exportKey("raw", vapidKeys.publicKey));
+      const publicKey = encodeBase64Url(raw);
+      return jsonResponse({ publicKey }, 200);
+    }
+
     const publicKey = await getSecret(supabase, "PUSH_VAPID_PUBLIC_KEY");
-    if (!publicKey) return jsonResponse({ error: "Missing PUSH_VAPID_PUBLIC_KEY in app_secrets" }, 500);
+    if (!publicKey) return jsonResponse({ error: "Missing PUSH_VAPID_KEYS_JWK or PUSH_VAPID_PUBLIC_KEY in app_secrets" }, 500);
     return jsonResponse({ publicKey }, 200);
   } catch (e: any) {
     return jsonResponse({ error: String(e?.message || e) }, 500);

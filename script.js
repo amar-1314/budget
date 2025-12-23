@@ -313,6 +313,10 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
 
     // Initialize Supabase Realtime for cross-device notifications
     initializeRealtimeNotifications();
+
+    if ('Notification' in window && Notification.permission === 'granted' && localStorage.getItem('notifications_enabled') === 'true') {
+        ensureWebPushSubscription().catch(e => console.warn('ensureWebPushSubscription failed:', e?.message || e));
+    }
 } else {
     console.error('❌ Supabase credentials not configured!');
 }
@@ -358,6 +362,37 @@ async function getVapidPublicKey() {
 
     cachedVapidPublicKey = publicKey;
     return cachedVapidPublicKey;
+}
+
+async function ensureWebPushSubscription() {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (!('serviceWorker' in navigator)) return;
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+
+    const registration = await navigator.serviceWorker.ready;
+    const vapidPublicKey = await getVapidPublicKey();
+    if (!vapidPublicKey || vapidPublicKey.includes('PASTE_YOUR')) return;
+
+    const lastVapidPublicKey = localStorage.getItem('push_vapid_public_key');
+    let subscription = await registration.pushManager.getSubscription();
+
+    if (subscription && lastVapidPublicKey && lastVapidPublicKey !== vapidPublicKey) {
+        try {
+            await subscription.unsubscribe();
+        } catch (_e) {
+        }
+        subscription = null;
+    }
+
+    if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+        });
+    }
+
+    await registerPushSubscription(subscription);
+    localStorage.setItem('push_vapid_public_key', vapidPublicKey);
 }
 
 async function registerPushSubscription(subscription) {
@@ -13203,19 +13238,8 @@ async function requestNotificationPermission() {
             const vapidPublicKey = await getVapidPublicKey();
             if (vapidPublicKey && !vapidPublicKey.includes('PASTE_YOUR')) {
                 try {
-                    console.log('📱 Subscribing to Web Push...');
-                    let subscription = await registration.pushManager.getSubscription();
-                    if (!subscription) {
-                        subscription = await registration.pushManager.subscribe({
-                            userVisibleOnly: true,
-                            applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
-                        });
-                    }
-                    
-                    console.log('✅ Web Push Subscription:', subscription);
-
-                    // Register subscription server-side (service_role writes)
-                    await registerPushSubscription(subscription);
+                    console.log('📱 Ensuring Web Push subscription...');
+                    await ensureWebPushSubscription();
                 } catch (subError) {
                     console.warn('⚠️ Web Push subscription failed:', subError);
                 }
