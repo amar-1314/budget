@@ -364,7 +364,7 @@ async function getVapidPublicKey() {
     return cachedVapidPublicKey;
 }
 
-async function ensureWebPushSubscription() {
+async function ensureWebPushSubscription(options = {}) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     if (!('serviceWorker' in navigator)) return;
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
@@ -375,6 +375,16 @@ async function ensureWebPushSubscription() {
 
     const lastVapidPublicKey = localStorage.getItem('push_vapid_public_key');
     let subscription = await registration.pushManager.getSubscription();
+
+    const forceRotate = Boolean(options?.forceRotate);
+    if (forceRotate && subscription) {
+        console.log('🔄 Forcing Web Push subscription re-create');
+        try {
+            await subscription.unsubscribe();
+        } catch (_e) {
+        }
+        subscription = null;
+    }
 
     let subscriptionVapidPublicKey = '';
     try {
@@ -13281,7 +13291,7 @@ async function requestNotificationPermission() {
             if (vapidPublicKey && !vapidPublicKey.includes('PASTE_YOUR')) {
                 try {
                     console.log('📱 Ensuring Web Push subscription...');
-                    await ensureWebPushSubscription();
+                    await ensureWebPushSubscription({ forceRotate: true });
                 } catch (subError) {
                     console.warn('⚠️ Web Push subscription failed:', subError);
                 }
