@@ -314,7 +314,7 @@ if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     // Initialize Supabase Realtime for cross-device notifications
     initializeRealtimeNotifications();
 
-    if ('Notification' in window && Notification.permission === 'granted' && localStorage.getItem('notifications_enabled') === 'true') {
+    if ('Notification' in window && Notification.permission === 'granted') {
         ensureWebPushSubscription().catch(e => console.warn('ensureWebPushSubscription failed:', e?.message || e));
     }
 } else {
@@ -528,12 +528,6 @@ async function triggerBudgetAlert(cleanFields) {
 }
 
 async function initializeRealtimeNotifications() {
-    // Only set up if notifications are enabled
-    if (localStorage.getItem('notifications_enabled') !== 'true') {
-        console.log('📱 Notifications not enabled, skipping realtime setup');
-        return;
-    }
-
     if (realtimeChannel) {
         console.log('📱 Realtime notifications already subscribed, skipping duplicate subscription');
         return;
@@ -13344,13 +13338,11 @@ async function requestNotificationPermission() {
             }
             
             showNotification('✅ Push notifications enabled!', 'success');
-            localStorage.setItem('notifications_enabled', 'true');
             
             // Set up realtime notifications for cross-device alerts (while app is open)
             await initializeRealtimeNotifications();
         } else {
             showNotification('Push notifications denied', 'error');
-            localStorage.setItem('notifications_enabled', 'false');
         }
     } catch (error) {
         console.error('Error requesting notification permission:', error);
