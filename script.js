@@ -2,6 +2,95 @@
 const BUILD_TIMESTAMP = '2025-12-25T22:53:01Z'; // Auto-updated on deployment
 const APP_VERSION = '25.52.16'; // Auto-updated on deployment
 
+const SESSION_LOGS_KEY = 'session_logs_v1';
+const SESSION_LOGS_MAX = 800;
+
+function getSessionLogs() {
+    try {
+        const raw = sessionStorage.getItem(SESSION_LOGS_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_e) {
+        return [];
+    }
+}
+
+function setSessionLogs(logs) {
+    try {
+        sessionStorage.setItem(SESSION_LOGS_KEY, JSON.stringify(logs));
+    } catch (_e) {
+    }
+}
+
+function appendSessionLog(level, args) {
+    try {
+        const logs = getSessionLogs();
+        const msg = args
+            .map(a => {
+                if (a instanceof Error) return a.stack || a.message || String(a);
+                if (typeof a === 'string') return a;
+                try {
+                    return JSON.stringify(a);
+                } catch (_e) {
+                    return String(a);
+                }
+            })
+            .join(' ');
+
+        logs.push({
+            ts: new Date().toISOString(),
+            level,
+            msg
+        });
+
+        if (logs.length > SESSION_LOGS_MAX) {
+            logs.splice(0, logs.length - SESSION_LOGS_MAX);
+        }
+
+        setSessionLogs(logs);
+    } catch (_e) {
+    }
+}
+
+function initSessionLogger() {
+    try {
+        const original = {
+            log: console.log.bind(console),
+            info: console.info.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console)
+        };
+
+        console.log = (...args) => {
+            appendSessionLog('log', args);
+            original.log(...args);
+        };
+        console.info = (...args) => {
+            appendSessionLog('info', args);
+            original.info(...args);
+        };
+        console.warn = (...args) => {
+            appendSessionLog('warn', args);
+            original.warn(...args);
+        };
+        console.error = (...args) => {
+            appendSessionLog('error', args);
+            original.error(...args);
+        };
+
+        window.addEventListener('error', (e) => {
+            appendSessionLog('error', [e?.message || 'window.error', e?.filename || '', e?.lineno || '', e?.colno || '']);
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+            appendSessionLog('error', ['unhandledrejection', e?.reason || '']);
+        });
+    } catch (_e) {
+    }
+}
+
+initSessionLogger();
+
 console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
 console.log(`🕐 Build: ${BUILD_TIMESTAMP}`);
@@ -8424,8 +8513,15 @@ async function scanReceiptWithRetries(expenseId, base64DataUrl, expenseFields, m
         try {
             updateScanningSpinner('Scanning receipt...', `Attempt ${attempt}/${maxRetries}`);
             console.log(`Receipt scan attempt ${attempt}/${maxRetries} for expense ${expenseId}`);
-            
-            const extractedData = await extractReceiptDataWithOcrSpaceAndGemini(base64DataUrl);
+
+            let extractedData;
+            if (attempt === 1) {
+                extractedData = await extractReceiptDataWithOcrSpaceAndGemini(base64DataUrl);
+            } else {
+                updateScanningSpinner('Extracting items...', 'Sending image to Gemini');
+                const imgDataUrl = await compressReceiptImageToDataUrl(base64DataUrl);
+                extractedData = await extractReceiptDataWithGeminiFromImage(imgDataUrl);
+            }
             
             if (extractedData && extractedData.items && extractedData.items.length > 0) {
                 // Success! Save items to database
@@ -8734,9 +8830,41 @@ async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
         body: JSON.stringify({ ocrText })
     });
 
-    const data = await resp.json().catch(() => null);
+    const rawText = await resp.text().catch(() => '');
+    const data = rawText ? safeJsonParse(rawText) : null;
     if (!resp.ok) {
-        throw new Error(data?.error || `Gemini parse failed: ${resp.status}`);
+        const errMsg = data?.error || `Gemini parse failed: ${resp.status}`;
+        const snippet = data?.geminiText ? `\nGemini output (first 500 chars):\n${String(data.geminiText).slice(0, 500)}` : '';
+        const bodySnippet = !data && rawText ? `\nResponse body (first 500 chars):\n${String(rawText).slice(0, 500)}` : '';
+        throw new Error(`${errMsg}${snippet}${bodySnippet}`);
+    }
+
+    return data?.data || null;
+}
+
+async function extractReceiptDataWithGeminiFromImage(imageDataUrl) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/gemini-parse`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ imageDataUrl })
+    });
+
+    const rawText = await resp.text().catch(() => '');
+    const data = rawText ? safeJsonParse(rawText) : null;
+    if (!resp.ok) {
+        const errMsg = data?.error || `Gemini parse failed: ${resp.status}`;
+        const snippet = data?.geminiText ? `\nGemini output (first 500 chars):\n${String(data.geminiText).slice(0, 500)}` : '';
+        const bodySnippet = !data && rawText ? `\nResponse body (first 500 chars):\n${String(rawText).slice(0, 500)}` : '';
+        throw new Error(`${errMsg}${snippet}${bodySnippet}`);
     }
 
     return data?.data || null;
@@ -8806,7 +8934,15 @@ async function processReceiptWithGemini() {
         }
 
         showScanningSpinner('Processing receipt...');
-        const receiptData = await extractReceiptDataWithOcrSpaceAndGemini(dataUrl);
+        let receiptData;
+        try {
+            receiptData = await extractReceiptDataWithOcrSpaceAndGemini(dataUrl);
+        } catch (e) {
+            console.warn('OCR+Gemini failed, retrying with image parsing:', e?.message || e);
+            updateScanningSpinner('Retrying...', 'Sending image to Gemini');
+            const imgDataUrl = await compressReceiptImageToDataUrl(dataUrl);
+            receiptData = await extractReceiptDataWithGeminiFromImage(imgDataUrl);
+        }
         hideScanningSpinner();
 
         const store = receiptData?.store || 'Unknown Store';
@@ -12995,6 +13131,46 @@ function openSettings() {
 
 function closeSettingsModal() {
     document.getElementById('settingsModal').classList.remove('active');
+}
+
+function openLogsModal() {
+    closeAllModalsExcept('logsModal');
+    const modal = document.getElementById('logsModal');
+    if (modal) modal.classList.add('active');
+    renderSessionLogs();
+}
+
+function closeLogsModal() {
+    const modal = document.getElementById('logsModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function clearSessionLogs() {
+    try {
+        sessionStorage.removeItem(SESSION_LOGS_KEY);
+    } catch (_e) {
+    }
+    renderSessionLogs();
+}
+
+function renderSessionLogs() {
+    const el = document.getElementById('sessionLogsContent');
+    if (!el) return;
+    const logs = getSessionLogs();
+    const text = logs
+        .map(l => `[${l.ts}] ${String(l.level || '').toUpperCase()} ${l.msg || ''}`)
+        .join('\n');
+    el.value = text;
+    const countEl = document.getElementById('sessionLogsCount');
+    if (countEl) countEl.textContent = String(logs.length);
+}
+
+function safeJsonParse(rawText) {
+    try {
+        return JSON.parse(rawText);
+    } catch (_e) {
+        return null;
+    }
 }
 
 function toggleSupabaseConfig() {

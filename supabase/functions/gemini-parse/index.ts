@@ -29,7 +29,7 @@ async function getSecret(supabaseUrl: string, serviceRoleKey: string, name: stri
   return String(data.value);
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
@@ -53,14 +53,17 @@ serve(async (req) => {
       return jsonResponse({ error: "Supabase service credentials not configured" }, 500);
     }
 
-    const { ocrText } = await req.json().catch(() => ({}));
-    if (!ocrText || typeof ocrText !== "string") {
-      return jsonResponse({ error: "Missing ocrText" }, 400);
+    const { ocrText, imageDataUrl } = await req.json().catch(() => ({}));
+    const hasOcrText = Boolean(ocrText && typeof ocrText === "string");
+    const hasImage = Boolean(imageDataUrl && typeof imageDataUrl === "string");
+    if (!hasOcrText && !hasImage) {
+      return jsonResponse({ error: "Missing ocrText or imageDataUrl" }, 400);
     }
 
     const GEMINI_API_KEY = await getSecret(SUPABASE_URL, SERVICE_ROLE_KEY, "GEMINI_API_KEY");
 
-    const prompt = `You are given OCR text extracted from a grocery receipt. Extract receipt data and return ONLY valid JSON.
+    const prompt = hasOcrText
+      ? `You are given OCR text extracted from a grocery receipt. Extract receipt data and return ONLY valid JSON.
 
 Return JSON in this exact schema:
 {
@@ -89,10 +92,51 @@ Rules:
 - Prices should be numbers without currency symbols
 
 OCR TEXT:
-${ocrText}`;
+${ocrText}`
+      : `You are given an image of a grocery receipt. Extract receipt data and return ONLY valid JSON.
+
+Return JSON in this exact schema:
+{
+  "store": "store/merchant name",
+  "date": "YYYY-MM-DD format",
+  "total": number,
+  "items": [
+    {
+      "raw_description": "exact line item text from receipt",
+      "description": "cleaned, normalized grocery item name",
+      "quantity": number,
+      "quantity_unit": "lb|kg|oz|g|ct|ea|gal|qt|pt|l|ml",
+      "unit_price": number,
+      "total_price": number
+    }
+  ]
+}
+
+Rules:
+- Return ONLY JSON (no markdown)
+- Normalize items: remove store codes, abbreviations, and extra whitespace
+- Keep brand if it's important for identifying the item
+- quantity_unit must be one of the allowed values (default "ea")
+- If weight-based item is detected (e.g. "0.66 lb"), set quantity=0.66 and quantity_unit="lb"
+- For non-weight items, quantity=1 and quantity_unit="ea" unless explicit
+- Prices should be numbers without currency symbols`;
+
+    const parts: Array<Record<string, unknown>> = [{ text: prompt }];
+    if (hasImage) {
+      const m = String(imageDataUrl).match(/^data:([^;]+);base64,(.+)$/i);
+      if (!m) {
+        return jsonResponse({ error: "Invalid imageDataUrl (expected data:<mime>;base64,...)" }, 400);
+      }
+      parts.push({
+        inline_data: {
+          mime_type: m[1],
+          data: m[2],
+        },
+      });
+    }
 
     const requestBody = {
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
       generationConfig: {
         temperature: 0.1,
         maxOutputTokens: 4096,
@@ -129,9 +173,28 @@ ${ocrText}`;
     if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
     jsonStr = jsonStr.trim();
 
-    const parsed = JSON.parse(jsonStr);
-    return jsonResponse({ data: parsed });
+    const firstObj = jsonStr.indexOf("{");
+    const lastObj = jsonStr.lastIndexOf("}");
+    if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
+      jsonStr = jsonStr.slice(firstObj, lastObj + 1);
+    }
+    jsonStr = jsonStr.replace(/,\s*([}\]])/g, "$1").trim();
+
+    try {
+      const parsed = JSON.parse(jsonStr);
+      return jsonResponse({ data: parsed });
+    } catch (parseErr) {
+      const err = parseErr as Error;
+      return jsonResponse(
+        {
+          error: `Failed to parse Gemini JSON: ${err?.message || String(err)}`,
+          geminiText: String(textResponse).slice(0, 1200),
+        },
+        422,
+      );
+    }
   } catch (e) {
-    return jsonResponse({ error: e?.message || String(e) }, 500);
+    const err = e as Error;
+    return jsonResponse({ error: err?.message || String(err) }, 500);
   }
 });
