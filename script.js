@@ -7293,6 +7293,28 @@ function showCategorySimilarityDialog(newCategory, similarCategories) {
 // Flag to prevent duplicate submissions
 let isSavingExpense = false;
 
+const CLIENT_RECEIPT_SCAN_ENABLED_KEY = 'client_receipt_scan_enabled';
+
+function isClientReceiptScanningEnabled() {
+    return localStorage.getItem(CLIENT_RECEIPT_SCAN_ENABLED_KEY) !== 'false';
+}
+
+function toggleClientReceiptScanning(enabled) {
+    localStorage.setItem(CLIENT_RECEIPT_SCAN_ENABLED_KEY, enabled ? 'true' : 'false');
+    console.log(`🧾 Client receipt scanning ${enabled ? 'enabled' : 'disabled'}`);
+    showNotification(
+        enabled ? '✅ Client receipt scanning enabled' : '⏸️ Client receipt scanning disabled (backend-only)',
+        'success'
+    );
+}
+
+function loadClientReceiptScanningState() {
+    const toggle = document.getElementById('clientReceiptScanToggle');
+    if (toggle) {
+        toggle.checked = isClientReceiptScanningEnabled();
+    }
+}
+
 // Helper function to format tags: lowercase and replace spaces with hyphens
 function formatTags(tags) {
     if (!tags) return '';
@@ -7319,6 +7341,60 @@ function formatCategory(category) {
         .split(/[-\s]+/) // Split by hyphens or spaces
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
+}
+
+function showMissingReceiptWarning() {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal active';
+        modal.style.zIndex = '10003';
+
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 520px;">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-orange-600 flex items-center gap-2">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Receipt Missing
+                    </h2>
+                </div>
+
+                <div class="bg-orange-50 border-l-4 border-orange-500 p-4 mb-5">
+                    <p class="text-sm text-orange-800">
+                        <i class="fas fa-info-circle mr-2"></i>
+                        No receipt is attached for this expense. Did you miss it, or do you want to save without a receipt?
+                    </p>
+                </div>
+
+                <div class="flex gap-3">
+                    <button id="missingReceiptAttachBtn" class="btn-secondary flex-1">
+                        <i class="fas fa-paperclip mr-2"></i>Attach Receipt
+                    </button>
+                    <button id="missingReceiptSaveBtn" class="btn-primary flex-1" style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);">
+                        <i class="fas fa-check mr-2"></i>Save Without Receipt
+                    </button>
+                </div>
+
+                <button id="missingReceiptCancelBtn" class="w-full mt-4 btn-secondary">
+                    <i class="fas fa-times mr-2"></i>Cancel
+                </button>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const cleanup = (result) => {
+            try { document.body.removeChild(modal); } catch (_e) {}
+            resolve(result);
+        };
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) cleanup('cancel');
+        });
+
+        document.getElementById('missingReceiptAttachBtn').onclick = () => cleanup('attach');
+        document.getElementById('missingReceiptSaveBtn').onclick = () => cleanup('proceed');
+        document.getElementById('missingReceiptCancelBtn').onclick = () => cleanup('cancel');
+    });
 }
 
 async function saveExpense(event) {
@@ -7473,6 +7549,15 @@ async function saveExpense(event) {
             await saveExpenseToSupabase(recordId, fields);
         } else {
             // No receipt
+            const choice = await showMissingReceiptWarning();
+            if (choice === 'attach') {
+                const el = document.getElementById('receiptFile');
+                if (el) el.click();
+                return;
+            }
+            if (choice === 'cancel') {
+                return;
+            }
             await saveExpenseToSupabase(recordId, fields);
         }
     } catch (error) {
@@ -8092,12 +8177,20 @@ async function uploadReceiptAndSave(recordId, fields, file) {
         // Check if category contains "grocery" (case-insensitive)
         const category = (fields.Category || '').toLowerCase();
         const isGrocery = category.includes('grocery') || category.includes('groceries');
+        const clientScanEnabled = isClientReceiptScanningEnabled();
         
         if (isGrocery) {
-            // Mark as not scanned yet - will be scanned client-side immediately
-            fields.receipt_scanned = false;
-            fields.receipt_processing_status = 'processing';
-            console.log('Grocery receipt - will be scanned client-side');
+            if (clientScanEnabled) {
+                // Client-side scan
+                fields.receipt_scanned = false;
+                fields.receipt_processing_status = 'processing';
+                console.log('Grocery receipt - will be scanned client-side');
+            } else {
+                // Backend scan
+                fields.receipt_scanned = false;
+                fields.receipt_processing_status = 'pending';
+                console.log('Grocery receipt - will be scanned server-side');
+            }
         } else {
             // Non-grocery receipts: mark as already scanned (won't be processed)
             fields.receipt_scanned = true;
@@ -8123,27 +8216,35 @@ async function uploadReceiptAndSave(recordId, fields, file) {
             console.log('Receipt saved - not a grocery category, skipping item extraction');
             return;
         }
-        
-        // For grocery receipts: Start client-side scanning with spinner
-        showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB) - Scanning items...`, 'success');
-        showScanningSpinner('Scanning receipt...');
-        
-        // Scan receipt with 3 retries (runs async but spinner shows progress)
-        const scanResult = await scanReceiptWithRetries(expenseId, receiptDataUrl, fields, 3);
-        
-        hideScanningSpinner();
-        
-        if (scanResult.success) {
-            if (scanResult.itemCount > 0) {
-                showNotification(`✓ Extracted ${scanResult.itemCount} items from receipt!`, 'success');
+
+        if (clientScanEnabled) {
+            showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB) - Scanning items...`, 'success');
+            showScanningSpinner('Scanning receipt...');
+
+            const scanResult = await scanReceiptWithRetries(expenseId, receiptDataUrl, fields, 3);
+            hideScanningSpinner();
+
+            if (scanResult.success) {
+                if (scanResult.itemCount > 0) {
+                    showNotification(`✓ Extracted ${scanResult.itemCount} items from receipt!`, 'success');
+                } else {
+                    showNotification('Receipt scanned but no items found', 'info');
+                }
             } else {
-                showNotification('Receipt scanned but no items found', 'info');
+                console.error('Receipt scan failed after 3 retries:', scanResult.error);
+                await markScanAsFailed(expenseId, scanResult.error);
+                showNotification('Receipt saved but scan failed. Check Receipt Tracker to retry.', 'warning');
             }
         } else {
-            // Scan failed after all retries - mark as failed in database
-            console.error('Receipt scan failed after 3 retries:', scanResult.error);
-            await markScanAsFailed(expenseId, scanResult.error);
-            showNotification('Receipt saved but scan failed. Check Receipt Tracker to retry.', 'warning');
+            // Grocery receipt: backend will scan asynchronously.
+            showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB) - Scanning in background...`, 'success');
+
+            // Best-effort kick to backend processor (safe if webhook is also configured)
+            try {
+                await kickoffBackendReceiptProcessing(expenseId);
+            } catch (e) {
+                console.warn('Backend receipt processing kickoff failed:', e?.message || e);
+            }
         }
         
     } catch (error) {
@@ -8151,6 +8252,22 @@ async function uploadReceiptAndSave(recordId, fields, file) {
         hideScanningSpinner();
         showNotification('Error: ' + error.message, 'error');
     }
+}
+
+async function kickoffBackendReceiptProcessing(expenseId) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return;
+    if (!expenseId) return;
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/process-receipt`;
+    await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ expenseId })
+    }).catch(() => null);
 }
 
 // Auto-extract items from a newly uploaded receipt (runs in background)
@@ -8395,32 +8512,51 @@ async function retryFailedScan(expenseId) {
             return;
         }
         
-        updateScanningSpinner('Retrying scan...', 'Starting...');
-        
-        const result = await scanReceiptWithRetries(
-            expenseId, 
-            receiptUrl,
-            expense, 
-            3
-        );
-        
-        hideScanningSpinner();
-        
-        if (result.success) {
-            if (result.itemCount > 0) {
-                showNotification(`✓ Extracted ${result.itemCount} items!`, 'success');
-            } else {
-                showNotification('Scanned but no items found', 'info');
-            }
-            await renderFailedScansList();
-            // Always refresh items list (pass empty string to show all recent items)
-            const searchInput = document.getElementById('itemSearchInput');
-            await searchReceiptItems(searchInput?.value || '');
-        } else {
-            showNotification('Scan failed again: ' + (result.error || 'Unknown error'), 'error');
-            await renderFailedScansList();
+        updateScanningSpinner('Manual retry...', 'Sending image to Gemini');
+
+        const imgDataUrl = await compressReceiptImageToDataUrl(receiptUrl);
+        const extractedData = normalizeReceiptExtractedData(await extractReceiptDataWithGeminiFromImage(imgDataUrl));
+
+        if (!extractedData?.items || extractedData.items.length === 0) {
+            throw new Error('No items found in receipt');
         }
-        
+
+        updateScanningSpinner('Saving items...', `Found ${extractedData.items.length} items`);
+
+        // Save items to ReceiptItems table
+        const year = expense.Year || new Date().getFullYear();
+        const month = String(expense.Month || 1).padStart(2, '0');
+        const day = String(expense.Day || 1).padStart(2, '0');
+        const purchaseDate = extractedData.date || `${year}-${month}-${day}`;
+
+        for (const item of extractedData.items) {
+            const unit = String(item.quantity_unit || '').trim();
+            const baseName = String(item.description || item.raw_description || 'Unknown Item').trim() || 'Unknown Item';
+            const itemName = unit && unit !== 'ea' ? `${baseName} (${unit})` : baseName;
+
+            await supabasePost(RECEIPT_ITEMS_TABLE, {
+                expense_id: expenseId,
+                item_name: itemName,
+                quantity: isFinite(parseNumberLoose(item.quantity)) ? parseNumberLoose(item.quantity) : 1,
+                unit_price: isFinite(parseNumberLoose(item.unit_price)) ? parseNumberLoose(item.unit_price) : 0,
+                total_price: isFinite(parseNumberLoose(item.total_price)) ? parseNumberLoose(item.total_price) : 0,
+                store: extractedData.store || expense.Item || 'Unknown',
+                purchase_date: purchaseDate
+            });
+        }
+
+        await supabasePatch(TABLE_NAME, expenseId, {
+            receipt_scanned: true,
+            receipt_processing_status: 'completed',
+            receipt_error: null
+        });
+
+        hideScanningSpinner();
+        showNotification(`✓ Extracted ${extractedData.items.length} items!`, 'success');
+        await renderFailedScansList();
+        const searchInput = document.getElementById('itemSearchInput');
+        await searchReceiptItems(searchInput?.value || '');
+
     } catch (error) {
         hideScanningSpinner();
         showNotification('Error retrying scan: ' + error.message, 'error');
@@ -8523,6 +8659,8 @@ async function scanReceiptWithRetries(expenseId, base64DataUrl, expenseFields, m
                 extractedData = await extractReceiptDataWithGeminiFromImage(imgDataUrl);
             }
             
+            extractedData = normalizeReceiptExtractedData(extractedData);
+
             if (extractedData && extractedData.items && extractedData.items.length > 0) {
                 // Success! Save items to database
                 updateScanningSpinner('Saving items...', `Found ${extractedData.items.length} items`);
@@ -8545,9 +8683,9 @@ async function scanReceiptWithRetries(expenseId, base64DataUrl, expenseFields, m
                     await supabasePost(RECEIPT_ITEMS_TABLE, {
                         expense_id: expenseId,
                         item_name: itemName,
-                        quantity: item.quantity || 1,
-                        unit_price: item.unit_price || 0,
-                        total_price: item.total_price || 0,
+                        quantity: isFinite(parseNumberLoose(item.quantity)) ? parseNumberLoose(item.quantity) : 1,
+                        unit_price: isFinite(parseNumberLoose(item.unit_price)) ? parseNumberLoose(item.unit_price) : 0,
+                        total_price: isFinite(parseNumberLoose(item.total_price)) ? parseNumberLoose(item.total_price) : 0,
                         store: extractedData.store || expenseFields?.Item || 'Unknown',
                         purchase_date: purchaseDate
                     });
@@ -8720,6 +8858,115 @@ function estimateDataUrlBytes(dataUrl) {
     if (base64Index === -1) return String(dataUrl).length;
     const base64 = String(dataUrl).slice(base64Index + 7);
     return Math.floor(base64.length * 0.75);
+}
+
+function parseNumberLoose(value) {
+    if (value === null || value === undefined) return NaN;
+    if (typeof value === 'number') return value;
+    const s = String(value);
+    const m = s.match(/-?\d+(?:\.\d+)?/);
+    if (!m) return NaN;
+    return parseFloat(m[0]);
+}
+
+function parseWeightDetailLine(rawDesc) {
+    const s = String(rawDesc || '').trim();
+    if (!s) return null;
+
+    // Must look like a weight pricing detail line (Walmart-style): contains '@' or a per-unit slash segment
+    if (!s.includes('@') && !s.includes('/')) return null;
+
+    const qtyUnitMatch = s.match(/(\d+(?:\.\d+)?)\s*(lb|kg|oz|g)\b/i);
+    if (!qtyUnitMatch) return null;
+    const quantity = parseFloat(qtyUnitMatch[1]);
+    const unit = String(qtyUnitMatch[2]).toLowerCase();
+
+    let unitPrice = NaN;
+    const slashMatches = [...s.matchAll(/\/\s*(?:\$\s*)?(\d+(?:\.\d+)?)/g)];
+    if (slashMatches.length > 0) {
+        unitPrice = parseFloat(slashMatches[slashMatches.length - 1][1]);
+    } else {
+        const atMatch = s.match(/@\s*(?:\$\s*)?(\d+(?:\.\d+)?)/i);
+        if (atMatch) unitPrice = parseFloat(atMatch[1]);
+    }
+
+    if (!isFinite(unitPrice)) return null;
+
+    // Try to capture an explicit line total (often last number on the line)
+    let lineTotal = NaN;
+    const nums = [...s.matchAll(/\d+(?:\.\d+)?/g)].map(m => parseFloat(m[0]));
+    if (nums.length >= 2) {
+        const last = nums[nums.length - 1];
+        if (isFinite(last) && last >= 0 && isFinite(unitPrice) && Math.abs(last - unitPrice) > 0.001) {
+            lineTotal = last;
+        }
+    }
+
+    if (!isFinite(quantity) || quantity <= 0) return null;
+    return { quantity, unit, unitPrice, lineTotal };
+}
+
+function normalizeReceiptExtractedData(extracted) {
+    if (!extracted || !Array.isArray(extracted.items)) return extracted;
+
+    const normalizedItems = [];
+    const weightLineRegex = /(\d+(?:\.\d+)?)\s*(lb|kg|oz|g)\b/i;
+
+    for (const rawItem of extracted.items) {
+        const item = rawItem && typeof rawItem === 'object' ? { ...rawItem } : {};
+        const rawDesc = String(item.raw_description || item.description || '').trim();
+        const descLower = rawDesc.toLowerCase();
+
+        const qty = parseNumberLoose(item.quantity);
+        const unitPrice = parseNumberLoose(item.unit_price);
+        const totalPrice = parseNumberLoose(item.total_price);
+
+        const isLikelyWeightLine =
+            Boolean(rawDesc) &&
+            Boolean(rawDesc.match(weightLineRegex)) &&
+            (descLower.includes('lb') || descLower.includes('kg') || descLower.includes('oz') || descLower.includes(' g'));
+
+        if (isLikelyWeightLine && normalizedItems.length > 0) {
+            const parsed = parseWeightDetailLine(rawDesc);
+            if (parsed) {
+                const wQty = parsed.quantity;
+                const wUnit = parsed.unit;
+                const wUnitPrice = parsed.unitPrice;
+                const wTotal = parsed.lineTotal;
+                const prev = normalizedItems[normalizedItems.length - 1];
+
+                prev.quantity = isFinite(wQty) && wQty > 0 ? wQty : (isFinite(prev.quantity) ? prev.quantity : 1);
+                prev.quantity_unit = wUnit || prev.quantity_unit || 'ea';
+                prev.unit_price = isFinite(wUnitPrice) && wUnitPrice >= 0 ? wUnitPrice : (isFinite(prev.unit_price) ? prev.unit_price : 0);
+
+                if (isFinite(wTotal) && wTotal >= 0) {
+                    prev.total_price = Math.round(wTotal * 100) / 100;
+                } else if (!isFinite(prev.total_price) || prev.total_price === 0) {
+                    const computed = prev.quantity * prev.unit_price;
+                    prev.total_price = isFinite(computed) ? Math.round(computed * 100) / 100 : 0;
+                }
+                continue;
+            }
+        }
+
+        item.quantity = isFinite(qty) && qty > 0 ? qty : 1;
+        item.unit_price = isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : 0;
+        item.total_price = isFinite(totalPrice) && totalPrice >= 0 ? totalPrice : 0;
+        item.quantity_unit = String(item.quantity_unit || '').trim() || 'ea';
+
+        if ((!item.total_price || item.total_price === 0) && item.unit_price && item.quantity) {
+            const computed = item.quantity * item.unit_price;
+            item.total_price = isFinite(computed) ? Math.round(computed * 100) / 100 : 0;
+        }
+        if ((!item.unit_price || item.unit_price === 0) && item.total_price && item.quantity) {
+            const computed = item.total_price / (item.quantity || 1);
+            item.unit_price = isFinite(computed) ? Math.round(computed * 100) / 100 : item.unit_price;
+        }
+
+        normalizedItems.push(item);
+    }
+
+    return { ...extracted, items: normalizedItems };
 }
 
 async function runOcrSpace(receiptDataUrlOrUrl) {
@@ -8950,9 +9197,9 @@ async function processReceiptWithGemini() {
         const total = parseFloat(receiptData?.total) || 0;
         const items = (receiptData?.items || []).map(item => ({
             description: item.description || item.raw_description || 'Unknown Item',
-            quantity: parseFloat(item.quantity) || 1,
-            unit_price: parseFloat(item.unit_price) || 0,
-            total_amount: parseFloat(item.total_price) || 0
+            quantity: isFinite(parseNumberLoose(item.quantity)) ? parseNumberLoose(item.quantity) : 1,
+            unit_price: isFinite(parseNumberLoose(item.unit_price)) ? parseNumberLoose(item.unit_price) : 0,
+            total_amount: isFinite(parseNumberLoose(item.total_price)) ? parseNumberLoose(item.total_price) : 0
         }));
 
         currentScannedReceipt = {
@@ -9097,7 +9344,13 @@ async function searchReceiptItems(query) {
                 <div class="text-right flex items-center gap-3">
                     <div>
                         <div class="font-bold text-purple-600">${formatCurrency(r.total_price)}</div>
-                        ${r.quantity > 1 ? `<div class="text-xs text-gray-400">Qty: ${r.quantity}</div>` : ''}
+                        ${(() => {
+                            const q = parseNumberLoose(r.quantity);
+                            if (!isFinite(q) || q <= 0) return '';
+                            if (Math.abs(q - 1) <= 0.001) return '';
+                            const display = q < 1 ? q.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') : q;
+                            return `<div class="text-xs text-gray-400">Qty: ${display}</div>`;
+                        })()}
                     </div>
                     ${r.expense_id ? `
                         <button onclick="viewReceiptFromExpense('${r.expense_id}')" 
@@ -13122,6 +13375,9 @@ function openSettings() {
     
     // Load auto-refresh toggle state
     loadAutoRefreshState();
+
+    // Load client receipt scanning toggle state
+    loadClientReceiptScanningState();
     
     // Update last refresh time display
     updateLastRefreshTime();
@@ -13545,6 +13801,7 @@ function scheduleDailyRefresh() {
 // Start the scheduler when page loads
 document.addEventListener('DOMContentLoaded', () => {
     loadAutoRefreshState();
+    loadClientReceiptScanningState();
     scheduleDailyRefresh();
 });
 

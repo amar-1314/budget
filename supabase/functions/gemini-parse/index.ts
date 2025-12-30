@@ -13,6 +13,105 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function parseNumberLoose(value: unknown): number {
+  if (value === null || value === undefined) return Number.NaN;
+  if (typeof value === "number") return value;
+  const s = String(value);
+  const m = s.match(/-?\d+(?:\.\d+)?/);
+  if (!m) return Number.NaN;
+  return parseFloat(m[0]);
+}
+
+function parseWeightDetailLine(rawDesc: string) {
+  const s = String(rawDesc || "").trim();
+  if (!s) return null;
+
+  // Must look like a pricing detail line (e.g., "0.690 lb @ 1 lb /0.50")
+  if (!s.includes("@") && !s.includes("/")) return null;
+
+  const qtyUnitMatch = s.match(/(\d+(?:\.\d+)?)\s*(lb|kg|oz|g)\b/i);
+  if (!qtyUnitMatch) return null;
+  const quantity = parseFloat(qtyUnitMatch[1]);
+  const unit = String(qtyUnitMatch[2]).toLowerCase();
+
+  let unitPrice = Number.NaN;
+  const slashMatches = [...s.matchAll(/\/\s*(?:\$\s*)?(\d+(?:\.\d+)?)/g)];
+  if (slashMatches.length > 0) {
+    unitPrice = parseFloat(slashMatches[slashMatches.length - 1][1]);
+  } else {
+    const atMatch = s.match(/@\s*(?:\$\s*)?(\d+(?:\.\d+)?)/i);
+    if (atMatch) unitPrice = parseFloat(atMatch[1]);
+  }
+
+  if (!Number.isFinite(unitPrice)) return null;
+
+  let lineTotal = Number.NaN;
+  const nums = [...s.matchAll(/\d+(?:\.\d+)?/g)].map((m) => parseFloat(m[0]));
+  if (nums.length >= 2) {
+    const last = nums[nums.length - 1];
+    if (Number.isFinite(last) && last >= 0 && Number.isFinite(unitPrice) && Math.abs(last - unitPrice) > 0.001) {
+      lineTotal = last;
+    }
+  }
+
+  if (!Number.isFinite(quantity) || quantity <= 0) return null;
+  return { quantity, unit, unitPrice, lineTotal };
+}
+
+function normalizeParsedReceipt(parsed: any) {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  const items = Array.isArray(parsed.items) ? parsed.items : [];
+  const out: any[] = [];
+
+  for (const rawItem of items) {
+    const item = rawItem && typeof rawItem === "object" ? { ...rawItem } : {};
+    const rawDesc = String(item.raw_description || item.description || "").trim();
+    const lower = rawDesc.toLowerCase();
+    const looksLikeWeightLine = Boolean(rawDesc) && (lower.includes("lb") || lower.includes("kg") || lower.includes("oz") || lower.includes(" g"));
+
+    if (looksLikeWeightLine && out.length > 0) {
+      const parsedWeight = parseWeightDetailLine(rawDesc);
+      if (parsedWeight) {
+        const prev = out[out.length - 1];
+        prev.quantity = parsedWeight.quantity;
+        prev.quantity_unit = parsedWeight.unit || prev.quantity_unit || "ea";
+        if (Number.isFinite(parsedWeight.unitPrice) && parsedWeight.unitPrice >= 0) {
+          prev.unit_price = parsedWeight.unitPrice;
+        }
+        if (Number.isFinite(parsedWeight.lineTotal) && parsedWeight.lineTotal >= 0) {
+          prev.total_price = Math.round(parsedWeight.lineTotal * 100) / 100;
+        } else if (!Number.isFinite(parseNumberLoose(prev.total_price)) || parseNumberLoose(prev.total_price) === 0) {
+          const computed = parseNumberLoose(prev.quantity) * parseNumberLoose(prev.unit_price);
+          prev.total_price = Number.isFinite(computed) ? Math.round(computed * 100) / 100 : 0;
+        }
+        continue;
+      }
+    }
+
+    const qty = parseNumberLoose(item.quantity);
+    const unitPrice = parseNumberLoose(item.unit_price);
+    const totalPrice = parseNumberLoose(item.total_price);
+
+    item.quantity = Number.isFinite(qty) && qty > 0 ? qty : 1;
+    item.quantity_unit = String(item.quantity_unit || "").trim() || "ea";
+    item.unit_price = Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : 0;
+    item.total_price = Number.isFinite(totalPrice) && totalPrice >= 0 ? totalPrice : 0;
+
+    if ((!item.total_price || item.total_price === 0) && item.unit_price && item.quantity) {
+      const computed = item.quantity * item.unit_price;
+      item.total_price = Number.isFinite(computed) ? Math.round(computed * 100) / 100 : 0;
+    }
+    if ((!item.unit_price || item.unit_price === 0) && item.total_price && item.quantity) {
+      const computed = item.total_price / (item.quantity || 1);
+      item.unit_price = Number.isFinite(computed) ? Math.round(computed * 100) / 100 : item.unit_price;
+    }
+
+    out.push(item);
+  }
+
+  return { ...parsed, items: out };
+}
+
 async function getSecret(supabaseUrl: string, serviceRoleKey: string, name: string) {
   const supabase = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
@@ -182,7 +281,8 @@ Rules:
 
     try {
       const parsed = JSON.parse(jsonStr);
-      return jsonResponse({ data: parsed });
+      const normalized = normalizeParsedReceipt(parsed);
+      return jsonResponse({ data: normalized });
     } catch (parseErr) {
       const err = parseErr as Error;
       return jsonResponse(
