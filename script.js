@@ -12938,15 +12938,232 @@ function openSmartSearch() {
     closeAllModalsExcept('smartSearchModal');
     document.getElementById('smartSearchModal').classList.add('active');
 
-    // Populate category dropdown
-    const categories = [...new Set(allExpenses.map(e => e.fields.Category).filter(c => c))];
-    const categorySelect = document.getElementById('searchCategory');
-    categorySelect.innerHTML = '<option value="">All Categories</option>' +
-        categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+    // Initialize LLM chat UI (fallback to legacy UI if an older cached HTML is still present)
+    const chatEl = document.getElementById('smartSearchChat');
+    const queryInputEl = document.getElementById('smartSearchQueryInput');
+    if (chatEl && queryInputEl) {
+        initSmartSearchChat();
+        return;
+    }
+
+    // Legacy Smart Search UI
+    try {
+        const categories = [...new Set(allExpenses.map(e => e.fields.Category).filter(c => c))];
+        const categorySelect = document.getElementById('searchCategory');
+        if (categorySelect) {
+            categorySelect.innerHTML = '<option value="">All Categories</option>' +
+                categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+        }
+    } catch (_e) {
+        // ignore
+    }
 }
 
 function closeSmartSearch() {
     document.getElementById('smartSearchModal').classList.remove('active');
+}
+
+const SMART_SEARCH_HISTORY_KEY = 'smart_search_chat_history_v1';
+
+function getSmartSearchHistory() {
+    try {
+        const raw = sessionStorage.getItem(SMART_SEARCH_HISTORY_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_e) {
+        return [];
+    }
+}
+
+function setSmartSearchHistory(history) {
+    try {
+        sessionStorage.setItem(SMART_SEARCH_HISTORY_KEY, JSON.stringify(history || []));
+    } catch (_e) {
+        // ignore
+    }
+}
+
+function renderSmartSearchMessage(role, content) {
+    const container = document.getElementById('smartSearchChat');
+    if (!container) return;
+
+    const isUser = role === 'user';
+    const wrapper = document.createElement('div');
+    wrapper.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = `${isUser ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-800'} rounded-lg px-4 py-3 max-w-[85%] shadow-sm`;
+    bubble.style.whiteSpace = 'pre-wrap';
+    bubble.innerHTML = escapeHtml(String(content || '')).replace(/\n/g, '<br>');
+
+    wrapper.appendChild(bubble);
+    container.appendChild(wrapper);
+    container.scrollTop = container.scrollHeight;
+}
+
+function renderSmartSearchAssistantResult(result) {
+    const container = document.getElementById('smartSearchChat');
+    if (!container) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'flex justify-start';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bg-gray-100 text-gray-800 rounded-lg px-4 py-3 max-w-[85%] shadow-sm';
+
+    const parts = [];
+    const answer = String(result?.answer_markdown || '').trim();
+    if (answer) {
+        parts.push(`<div style="white-space: pre-wrap;">${escapeHtml(answer)}</div>`);
+    }
+
+    const tables = Array.isArray(result?.tables) ? result.tables : [];
+    for (const t of tables) {
+        const title = String(t?.title || '').trim();
+        const columns = Array.isArray(t?.columns) ? t.columns : [];
+        const rows = Array.isArray(t?.rows) ? t.rows : [];
+
+        const head = columns.map(c => `<th class="text-left text-xs font-semibold text-gray-600 px-2 py-1 border-b border-gray-200">${escapeHtml(String(c))}</th>`).join('');
+        const body = rows.slice(0, 200).map(r => {
+            const cells = (Array.isArray(r) ? r : []).map(cell => `<td class="text-sm px-2 py-1 border-b border-gray-100">${escapeHtml(String(cell))}</td>`).join('');
+            return `<tr>${cells}</tr>`;
+        }).join('');
+
+        parts.push(`
+            <div class="mt-3">
+                ${title ? `<div class="text-sm font-semibold text-gray-700 mb-1">${escapeHtml(title)}</div>` : ''}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead><tr>${head}</tr></thead>
+                        <tbody>${body}</tbody>
+                    </table>
+                </div>
+            </div>
+        `);
+    }
+
+    const followups = Array.isArray(result?.followups) ? result.followups : [];
+    if (followups.length > 0) {
+        const chips = followups.slice(0, 6).map(f => {
+            const label = String(f || '').trim();
+            if (!label) return '';
+            const encoded = encodeURIComponent(label);
+            return `<button class="px-3 py-1 bg-white border border-gray-200 rounded-full text-xs text-gray-700 hover:bg-gray-50" onclick="applySmartSearchFollowup('${encoded}')">${escapeHtml(label)}</button>`;
+        }).join('');
+        parts.push(`<div class="mt-3 flex flex-wrap gap-2">${chips}</div>`);
+    }
+
+    bubble.innerHTML = parts.join('');
+    wrapper.appendChild(bubble);
+    container.appendChild(wrapper);
+    container.scrollTop = container.scrollHeight;
+}
+
+function applySmartSearchFollowup(encoded) {
+    const input = document.getElementById('smartSearchQueryInput');
+    if (!input) return;
+    input.value = decodeURIComponent(String(encoded || ''));
+    input.focus();
+}
+
+function initSmartSearchChat() {
+    const chat = document.getElementById('smartSearchChat');
+    const input = document.getElementById('smartSearchQueryInput');
+    const btn = document.getElementById('smartSearchSendBtn');
+    if (!chat || !input || !btn) return;
+
+    chat.innerHTML = '';
+
+    const history = getSmartSearchHistory();
+    if (history.length === 0) {
+        renderSmartSearchMessage('assistant', 'Ask me anything about your budgets and spending.\n\nExamples:\n- What months exceeded grocery budget?\n- What is my average monthly spend on health over the last 6 months?\n- Suggest an optimal budget for health based on the last 6 months');
+    } else {
+        for (const msg of history) {
+            const role = String(msg?.role || '').trim();
+            const content = String(msg?.content || '');
+            if (role === 'user' || role === 'assistant') {
+                renderSmartSearchMessage(role, content);
+            }
+        }
+    }
+
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendSmartSearchQuery();
+        }
+    };
+
+    setTimeout(() => input.focus(), 0);
+}
+
+async function sendSmartSearchQuery() {
+    const input = document.getElementById('smartSearchQueryInput');
+    const btn = document.getElementById('smartSearchSendBtn');
+    if (!input || !btn) return;
+
+    const query = String(input.value || '').trim();
+    if (!query) {
+        showNotification('Please enter a question', 'error');
+        return;
+    }
+
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        showNotification('Supabase is not configured in Settings', 'error');
+        return;
+    }
+
+    const history = getSmartSearchHistory();
+    renderSmartSearchMessage('user', query);
+    history.push({ role: 'user', content: query });
+    setSmartSearchHistory(history.slice(-20));
+
+    input.value = '';
+    btn.disabled = true;
+    btn.classList.add('opacity-60');
+
+    try {
+        const endpoint = `${SUPABASE_URL}/functions/v1/deepseek-smart-search`;
+        const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            },
+            body: JSON.stringify({
+                query,
+                history: history.slice(-8)
+            })
+        });
+
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok) {
+            throw new Error(data?.error || `AI search failed: ${resp.status}`);
+        }
+
+        const result = data?.result;
+        renderSmartSearchAssistantResult(result);
+
+        const assistantContent = String(result?.answer_markdown || '').trim() || 'Done.';
+        history.push({ role: 'assistant', content: assistantContent });
+        setSmartSearchHistory(history.slice(-20));
+
+    } catch (e) {
+        console.error('Smart search failed:', e);
+        renderSmartSearchMessage('assistant', `Error: ${String(e?.message || e)}`);
+        showNotification('AI Smart Search error: ' + String(e?.message || e), 'error');
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-60');
+    }
+}
+
+function clearSmartSearchChat() {
+    const chat = document.getElementById('smartSearchChat');
+    if (chat) chat.innerHTML = '';
+    setSmartSearchHistory([]);
+    renderSmartSearchMessage('assistant', 'Chat cleared. Ask a new question anytime.');
 }
 
 function performNaturalSearch() {

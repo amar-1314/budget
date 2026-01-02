@@ -1910,103 +1910,33 @@
                 </button>
             </div>
 
-            <!-- Natural Language Search -->
-            <div class="mb-6">
-                <label class="block text-sm font-semibold text-gray-700 mb-2">
-                    <i class="fas fa-magic mr-2 text-purple-500"></i>Natural Language Search
-                </label>
-                <div class="flex gap-2">
-                    <input type="text" id="naturalSearchInput" class="input-field flex-1"
-                        placeholder='Try: "grocery over $100 last month" or "dining in October"'>
-                    <button onclick="performNaturalSearch()" class="btn-primary">
-                        <i class="fas fa-search mr-2"></i>Search
-                    </button>
-                </div>
-                <p class="text-xs text-gray-500 mt-2">
-                    <i class="fas fa-lightbulb mr-1"></i>
-                    Examples: "mortgage in 2025", "expenses over $500", "gas last 3 months"
-                </p>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+                <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Ask anything about your budgets and spending in natural language. This uses an LLM and your real data.</p>
             </div>
 
-            <!-- Quick Filters -->
-            <div class="mb-6">
-                <label class="block text-sm font-semibold text-gray-700 mb-3">
-                    <i class="fas fa-bolt mr-2 text-yellow-500"></i>Quick Filters
-                </label>
-                <div class="flex flex-wrap gap-2">
-                    <button onclick="applyQuickFilter('dining')"
-                        class="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 text-sm font-semibold">
-                        <i class="fas fa-utensils mr-1"></i>Dining
-                    </button>
-                    <button onclick="applyQuickFilter('shopping')"
-                        class="px-4 py-2 bg-pink-100 text-pink-700 rounded-lg hover:bg-pink-200 text-sm font-semibold">
-                        <i class="fas fa-shopping-bag mr-1"></i>Shopping
-                    </button>
-                    <button onclick="applyQuickFilter('misc')"
-                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-semibold">
-                        <i class="fas fa-ellipsis-h mr-1"></i>Misc
-                    </button>
-                    <button onclick="applyQuickFilter('over100')"
-                        class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">
-                        Over $100
-                    </button>
-                    <button onclick="applyQuickFilter('over500')"
-                        class="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 text-sm font-semibold">
-                        Over $500
-                    </button>
-                    <button onclick="applyQuickFilter('llcOnly')"
-                        class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 text-sm font-semibold">
-                        LLC Expenses
-                    </button>
-                </div>
-            </div>
+            <div class="card p-4 mb-4" style="height: 55vh; display: flex; flex-direction: column;">
+                <div id="smartSearchChat" class="flex-1 overflow-y-auto space-y-3" style="min-height: 0;"></div>
 
-            <!-- Advanced Filters -->
-            <div class="card p-6 mb-6">
-                <h3 class="text-lg font-bold mb-4">Advanced Filters</h3>
-                <div class="grid grid-cols-1 gap-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">Amount Range</label>
-                            <div class="flex gap-2">
-                                <input type="tel" id="filterMinAmount" class="input-field" placeholder="Min $">
-                                <input type="tel" id="filterMaxAmount" class="input-field" placeholder="Max $">
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
-                            <select id="searchCategory" class="input-field">
-                                <option value="">All Categories</option>
-                            </select>
-                        </div>
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <div class="flex gap-2">
+                        <input type="text" id="smartSearchQueryInput" class="input-field flex-1" placeholder='e.g. "What months exceeded grocery budget?"'>
+                        <button onclick="sendSmartSearchQuery()" id="smartSearchSendBtn" class="btn-primary">
+                            <i class="fas fa-paper-plane mr-2"></i>Ask
+                        </button>
                     </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Date Range</label>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <input type="date" id="startDate" class="input-field" placeholder="Start Date">
-                            <input type="date" id="endDate" class="input-field" placeholder="End Date">
-                        </div>
+                    <div class="flex justify-between items-center mt-2">
+                        <p class="text-xs text-gray-500">
+                            <i class="fas fa-lightbulb mr-1"></i>
+                            Try: "Optimal health budget based on last 6 months" or "Top overspend categories this year"
+                        </p>
+                        <button onclick="clearSmartSearchChat()" class="text-xs text-gray-500 hover:text-gray-700">
+                            <i class="fas fa-trash mr-1"></i>Clear
+                        </button>
                     </div>
-                </div>
-                <div class="flex gap-3 mt-4">
-                    <button onclick="applyAdvancedFilters()" class="btn-primary">
-                        <i class="fas fa-filter mr-2"></i>Apply Filters
-                    </button>
-                    <button onclick="clearSearchFilters()" class="btn-secondary">
-                        <i class="fas fa-times mr-2"></i>Clear All
-                    </button>
-                </div>
-            </div>
-
-            <!-- Search Results -->
-            <div id="searchResults">
-                <div class="text-center py-8 text-gray-400">
-                    <i class="fas fa-search text-4xl mb-3"></i>
-                    <p>Enter search criteria above to find expenses</p>
                 </div>
             </div>
         </div>
     </div>
-    <script src="script.js?v=25.50.33"></script>
+    <script src="script.js?v=25.01.02"></script>
 </body>
 </html>
