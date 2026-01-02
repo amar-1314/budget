@@ -80,6 +80,18 @@ function messagesToPrompt(messages: Array<{ role: string; content: string }>) {
   );
 }
 
+function normalizeHuggingFaceModel(model: string) {
+  const m = String(model || "").trim();
+  if (!m) return m;
+
+  const aliases: Record<string, string> = {
+    "meta-llama/Meta-Llama-3.1-70B-Instruct": "meta-llama/Llama-3.1-70B-Instruct",
+    "meta-llama/Meta-Llama-3.1-8B-Instruct": "meta-llama/Llama-3.1-8B-Instruct",
+  };
+
+  return aliases[m] || m;
+}
+
 async function callHuggingFaceChatCompletions(
   apiKey: string,
   model: string,
@@ -292,8 +304,8 @@ serve(async (req: Request) => {
   }
 
   const hfModel =
-    String(Deno.env.get("HUGGINGFACE_MODEL") ?? "").trim() ||
-    "meta-llama/Meta-Llama-3.1-8B-Instruct";
+    normalizeHuggingFaceModel(String(Deno.env.get("HUGGINGFACE_MODEL") ?? "").trim()) ||
+    "meta-llama/Llama-3.1-8B-Instruct";
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
