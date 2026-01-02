@@ -80,6 +80,41 @@ function messagesToPrompt(messages: Array<{ role: string; content: string }>) {
   );
 }
 
+async function callHuggingFaceChatCompletions(
+  apiKey: string,
+  model: string,
+  messages: Array<{ role: string; content: string }>,
+) {
+  const resp = await fetch("https://router.huggingface.co/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.2,
+      max_tokens: 900,
+      stream: false,
+    }),
+  });
+
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    const errMsg = data?.error?.message || data?.error || `Hugging Face error ${resp.status}`;
+    throw new Error(String(errMsg));
+  }
+
+  const content = String(data?.choices?.[0]?.message?.content || "").trim();
+  const parsed = extractJsonObject(content);
+  if (!parsed) {
+    throw new Error("Hugging Face returned non-JSON response");
+  }
+
+  return parsed;
+}
+
 type BudgetRow = {
   Category: string | null;
   Year: number | null;
@@ -203,56 +238,21 @@ function buildDataPack(expenses: ExpenseRow[], budgets: BudgetRow[]) {
 }
 
 async function callHuggingFace(apiKey: string, model: string, messages: Array<{ role: string; content: string }>) {
-  const endpoint = `https://api-inference.huggingface.co/models/${encodeURIComponent(model)}`;
-  const prompt = messagesToPrompt(messages);
-
+  // The old api-inference.huggingface.co endpoint is deprecated.
+  // Use the new Inference Providers router endpoint (OpenAI-compatible).
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const resp = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        inputs: prompt,
-        parameters: {
-          temperature: 0.2,
-          max_new_tokens: 900,
-          return_full_text: false,
-        },
-      }),
-    });
-
-    const data = await resp.json().catch(() => null);
-
-    // HF may return 503 with a "Model is loading" message.
-    const hfError = data?.error ? String(data.error) : "";
-    if (!resp.ok) {
-      throw new Error(hfError || `Hugging Face error ${resp.status}`);
-    }
-    if (hfError) {
-      const isLoading = /loading|currently loading|is loading/i.test(hfError);
+    try {
+      return await callHuggingFaceChatCompletions(apiKey, model, messages);
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      const isLoading = /loading|currently loading|is loading|try again/i.test(msg);
       if (isLoading && attempt < 3) {
         const waitMs = Math.min(2000 * attempt, 5000);
         await new Promise((r) => setTimeout(r, waitMs));
         continue;
       }
-      throw new Error(hfError);
+      throw e;
     }
-
-    let content = "";
-    if (Array.isArray(data)) {
-      content = String(data?.[0]?.generated_text || "").trim();
-    } else {
-      content = String(data?.generated_text || "").trim();
-    }
-
-    const parsed = extractJsonObject(content);
-    if (!parsed) {
-      throw new Error("Hugging Face returned non-JSON response");
-    }
-
-    return parsed;
   }
 
   throw new Error("Hugging Face request failed after retries");
