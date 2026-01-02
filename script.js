@@ -12964,16 +12964,39 @@ function setSmartSearchHistory(history) {
     }
 }
 
+function setSmartSearchTyping(isTyping) {
+    const mount = document.getElementById('smartSearchTypingMount');
+    if (!mount) return;
+    if (!isTyping) {
+        mount.innerHTML = '';
+        return;
+    }
+
+    mount.innerHTML = `
+        <div class="smart-search-row">
+            <div class="smart-search-bubble assistant smart-search-typing">
+                <span class="smart-search-typing-label">Thinking</span>
+                <span class="smart-search-dots" aria-hidden="true">
+                    <span></span><span></span><span></span>
+                </span>
+            </div>
+        </div>
+    `;
+
+    const container = document.getElementById('smartSearchChat');
+    if (container) container.scrollTop = container.scrollHeight;
+}
+
 function renderSmartSearchMessage(role, content) {
     const container = document.getElementById('smartSearchChat');
     if (!container) return;
 
     const isUser = role === 'user';
     const wrapper = document.createElement('div');
-    wrapper.className = `flex ${isUser ? 'justify-end' : 'justify-start'}`;
+    wrapper.className = `smart-search-row ${isUser ? 'user' : 'assistant'}`;
 
     const bubble = document.createElement('div');
-    bubble.className = `${isUser ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-800'} rounded-lg px-4 py-3 max-w-[85%] shadow-sm`;
+    bubble.className = `smart-search-bubble ${isUser ? 'user' : 'assistant'}`;
     bubble.style.whiteSpace = 'pre-wrap';
     bubble.innerHTML = escapeHtml(String(content || '')).replace(/\n/g, '<br>');
 
@@ -12987,10 +13010,10 @@ function renderSmartSearchAssistantResult(result) {
     if (!container) return;
 
     const wrapper = document.createElement('div');
-    wrapper.className = 'flex justify-start';
+    wrapper.className = 'smart-search-row assistant';
 
     const bubble = document.createElement('div');
-    bubble.className = 'bg-gray-100 text-gray-800 rounded-lg px-4 py-3 max-w-[85%] shadow-sm';
+    bubble.className = 'smart-search-bubble assistant smart-search-bubble-rich';
 
     const parts = [];
     const answer = String(result?.answer_markdown || '').trim();
@@ -13054,6 +13077,7 @@ function initSmartSearchChat() {
     if (!chat || !input || !btn) return;
 
     chat.innerHTML = '';
+    setSmartSearchTyping(false);
 
     const history = getSmartSearchHistory();
     if (history.length === 0) {
@@ -13102,6 +13126,8 @@ async function sendSmartSearchQuery() {
     input.value = '';
     btn.disabled = true;
     btn.classList.add('opacity-60');
+    btn.classList.add('btn-loading');
+    setSmartSearchTyping(true);
 
     try {
         const endpoint = `${SUPABASE_URL}/functions/v1/deepseek-smart-search`;
@@ -13124,6 +13150,7 @@ async function sendSmartSearchQuery() {
         }
 
         const result = data?.result;
+        setSmartSearchTyping(false);
         renderSmartSearchAssistantResult(result);
 
         const assistantContent = String(result?.answer_markdown || '').trim() || 'Done.';
@@ -13132,17 +13159,21 @@ async function sendSmartSearchQuery() {
 
     } catch (e) {
         console.error('Smart search failed:', e);
+        setSmartSearchTyping(false);
         renderSmartSearchMessage('assistant', `Error: ${String(e?.message || e)}`);
         showNotification('AI Smart Search error: ' + String(e?.message || e), 'error');
     } finally {
         btn.disabled = false;
         btn.classList.remove('opacity-60');
+        btn.classList.remove('btn-loading');
+        setSmartSearchTyping(false);
     }
 }
 
 function clearSmartSearchChat() {
     const chat = document.getElementById('smartSearchChat');
     if (chat) chat.innerHTML = '';
+    setSmartSearchTyping(false);
     setSmartSearchHistory([]);
     renderSmartSearchMessage('assistant', 'Chat cleared. Ask a new question anytime.');
 }
