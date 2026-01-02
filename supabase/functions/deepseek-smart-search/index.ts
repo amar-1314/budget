@@ -65,6 +65,21 @@ function extractJsonObject(raw: string) {
   return null;
 }
 
+function messagesToPrompt(messages: Array<{ role: string; content: string }>) {
+  // Keep this simple and model-agnostic.
+  // Many HF text-generation models follow instruction formats reasonably well with role tags.
+  return (
+    messages
+      .map((m) => {
+        const role = String(m?.role || "").trim().toUpperCase();
+        const content = String(m?.content || "").trim();
+        return `${role}: ${content}`;
+      })
+      .join("\n\n") +
+    "\n\nASSISTANT:"
+  );
+}
+
 type BudgetRow = {
   Category: string | null;
   Year: number | null;
@@ -187,35 +202,60 @@ function buildDataPack(expenses: ExpenseRow[], budgets: BudgetRow[]) {
   };
 }
 
-async function callDeepSeek(apiKey: string, messages: Array<{ role: string; content: string }>) {
-  const resp = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      messages,
-      stream: false,
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-    }),
-  });
+async function callHuggingFace(apiKey: string, model: string, messages: Array<{ role: string; content: string }>) {
+  const endpoint = `https://api-inference.huggingface.co/models/${encodeURIComponent(model)}`;
+  const prompt = messagesToPrompt(messages);
 
-  const data = await resp.json().catch(() => null);
-  if (!resp.ok) {
-    const errMsg = data?.error?.message || data?.error || `DeepSeek error ${resp.status}`;
-    throw new Error(String(errMsg));
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const resp = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        inputs: prompt,
+        parameters: {
+          temperature: 0.2,
+          max_new_tokens: 900,
+          return_full_text: false,
+        },
+      }),
+    });
+
+    const data = await resp.json().catch(() => null);
+
+    // HF may return 503 with a "Model is loading" message.
+    const hfError = data?.error ? String(data.error) : "";
+    if (!resp.ok) {
+      throw new Error(hfError || `Hugging Face error ${resp.status}`);
+    }
+    if (hfError) {
+      const isLoading = /loading|currently loading|is loading/i.test(hfError);
+      if (isLoading && attempt < 3) {
+        const waitMs = Math.min(2000 * attempt, 5000);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
+      throw new Error(hfError);
+    }
+
+    let content = "";
+    if (Array.isArray(data)) {
+      content = String(data?.[0]?.generated_text || "").trim();
+    } else {
+      content = String(data?.generated_text || "").trim();
+    }
+
+    const parsed = extractJsonObject(content);
+    if (!parsed) {
+      throw new Error("Hugging Face returned non-JSON response");
+    }
+
+    return parsed;
   }
 
-  const content = String(data?.choices?.[0]?.message?.content || "").trim();
-  const parsed = extractJsonObject(content);
-  if (!parsed) {
-    throw new Error("DeepSeek returned non-JSON response");
-  }
-
-  return parsed;
+  throw new Error("Hugging Face request failed after retries");
 }
 
 serve(async (req: Request) => {
@@ -239,17 +279,21 @@ serve(async (req: Request) => {
   const history = Array.isArray(payload?.history) ? payload.history : [];
   if (!query) return jsonResponse({ error: "Missing query" }, 400);
 
-  let deepseekKey = String(Deno.env.get("DEEPSEEK_API_KEY") ?? "").trim();
-  if (!deepseekKey) {
+  let hfKey = String(Deno.env.get("HUGGINGFACE_API_KEY") ?? "").trim();
+  if (!hfKey) {
     try {
-      deepseekKey = (await getSecretFromTable(SUPABASE_URL, SERVICE_ROLE_KEY, "DEEPSEEK_API_KEY")).trim();
+      hfKey = (await getSecretFromTable(SUPABASE_URL, SERVICE_ROLE_KEY, "HUGGINGFACE_API_KEY")).trim();
     } catch (_e) {
       // ignore
     }
   }
-  if (!deepseekKey) {
-    return jsonResponse({ error: "DeepSeek API key not configured (set DEEPSEEK_API_KEY)" }, 500);
+  if (!hfKey) {
+    return jsonResponse({ error: "Hugging Face API key not configured (set HUGGINGFACE_API_KEY)" }, 500);
   }
+
+  const hfModel =
+    String(Deno.env.get("HUGGINGFACE_MODEL") ?? "").trim() ||
+    "meta-llama/Meta-Llama-3.1-8B-Instruct";
 
   const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false },
@@ -314,7 +358,7 @@ serve(async (req: Request) => {
   ];
 
   try {
-    const result = await callDeepSeek(deepseekKey, messages);
+    const result = await callHuggingFace(hfKey, hfModel, messages);
     return jsonResponse({ ok: true, result }, 200);
   } catch (e: any) {
     return jsonResponse({ error: String(e?.message || e) }, 500);
