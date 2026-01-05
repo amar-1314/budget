@@ -235,6 +235,96 @@ async function uploadReceiptToStorage(expenseId, receiptDataUrl, expenseFields, 
     return data?.receipt;
 }
 
+async function detectDuplicateExpensesWithLLM(newExpense, options = {}) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+
+    const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 3500;
+    const minConfidence = Number.isFinite(Number(options.minConfidence)) ? Number(options.minConfidence) : 0.7;
+
+    const candidates = allExpenses
+        .filter(exp => exp?.fields?.Year === newExpense?.Year && exp?.fields?.Month === newExpense?.Month)
+        .slice(0, 60)
+        .map(exp => ({
+            id: exp.id,
+            Item: exp?.fields?.Item || '',
+            Category: exp?.fields?.Category || null,
+            Year: exp?.fields?.Year || null,
+            Month: exp?.fields?.Month || null,
+            Day: exp?.fields?.Day || null,
+            Actual: exp?.fields?.Actual || null,
+            Notes: exp?.fields?.Notes || null
+        }));
+
+    if (candidates.length === 0) return [];
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/detect-duplicate-expense`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+        const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+            },
+            body: JSON.stringify({
+                newExpense: {
+                    Item: newExpense?.Item || '',
+                    Category: newExpense?.Category || null,
+                    Year: newExpense?.Year || null,
+                    Month: newExpense?.Month || null,
+                    Day: newExpense?.Day || null,
+                    Actual: newExpense?.Actual || null,
+                    Notes: newExpense?.Notes || null
+                },
+                candidates
+            }),
+            signal: controller.signal
+        });
+
+        const data = await resp.json().catch(() => null);
+        if (!resp.ok) {
+            throw new Error(data?.error || `Duplicate check failed: ${resp.status}`);
+        }
+
+        const dupList = Array.isArray(data?.duplicates) ? data.duplicates : [];
+        const duplicates = dupList
+            .map(d => {
+                const id = String(d?.id || '').trim();
+                const confidence = Number(d?.confidence || 0);
+                const reason = String(d?.reason || '').trim();
+                const isExactDuplicate = Boolean(d?.isExactDuplicate);
+                return { id, confidence, reason, isExactDuplicate };
+            })
+            .filter(d => d.id && (d.isExactDuplicate || d.confidence >= minConfidence))
+            .slice(0, 3)
+            .map(d => {
+                const exp = allExpenses.find(e => String(e?.id) === d.id);
+                if (!exp) return null;
+                const confPct = Math.round((Number(d.confidence) || 0) * 100);
+                return {
+                    expense: exp,
+                    matchScore: Math.max(0, Math.min(10, Math.round((Number(d.confidence) || 0) * 10))),
+                    reasons: [
+                        d.isExactDuplicate ? '⚠️ EXACT DUPLICATE' : 'LLM duplicate match',
+                        d.reason || 'Similar transaction description',
+                        `LLM confidence: ${confPct}%`
+                    ].filter(Boolean),
+                    isExactDuplicate: d.isExactDuplicate
+                };
+            })
+            .filter(Boolean);
+
+        return duplicates;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
 // Call on load
 document.addEventListener('DOMContentLoaded', updateAppVersionDisplay);
 
@@ -7566,7 +7656,19 @@ async function saveExpense(event) {
 
         // Check for duplicates (only for new expenses, not edits)
         if (!recordId) {
-            const duplicates = findDuplicateExpenses(fields);
+            // Always flag exact duplicates locally (low risk, avoids missing a true duplicate if LLM is down)
+            const ruleDuplicates = findDuplicateExpenses(fields);
+            const exactDuplicates = (ruleDuplicates || []).filter(d => d && d.isExactDuplicate);
+
+            let duplicates = exactDuplicates;
+            if (duplicates.length === 0) {
+                try {
+                    duplicates = await detectDuplicateExpensesWithLLM(fields, { timeoutMs: 3500, minConfidence: 0.7 });
+                } catch (e) {
+                    console.warn('LLM duplicate detection failed, falling back to rule-based logic:', e);
+                    duplicates = ruleDuplicates;
+                }
+            }
             if (duplicates.length > 0) {
                 const confirmed = await showDuplicateConfirmation(duplicates, fields);
                 if (!confirmed) {
@@ -8042,7 +8144,7 @@ function showDuplicateConfirmation(duplicates, newExpense) {
                                  <div class="grid grid-cols-2 gap-2 text-sm">
                                      <div><span class="font-semibold">Item:</span> ${newExpense.Item}</div>
                                      <div><span class="font-semibold">Amount:</span> $${newExpense.Actual.toFixed(2)}</div>
-                                     <div><span class="font-semibold">Date:</span> ${monthNames[newExpense.Month]} ${newExpense.Day}, ${newExpense.Year}</div>
+                                     <div><span class="font-semibold">Date:</span> ${monthNames[parseInt(newExpense.Month)] || newExpense.Month} ${newExpense.Day}, ${newExpense.Year}</div>
                                      <div><span class="font-semibold">Category:</span> ${newExpense.Category || 'None'}</div>
                                  </div>
                              </div>
@@ -8057,7 +8159,7 @@ function showDuplicateConfirmation(duplicates, newExpense) {
                                          <div class="grid grid-cols-2 gap-2 text-sm mb-2">
                                              <div><span class="font-semibold">Item:</span> ${dup.expense.fields.Item}</div>
                                              <div><span class="font-semibold">Amount:</span> $${(dup.expense.fields.Actual || 0).toFixed(2)}</div>
-                                             <div><span class="font-semibold">Date:</span> ${monthNames[dup.expense.fields.Month]} ${dup.expense.fields.Day || 1}, ${dup.expense.fields.Year}</div>
+                                             <div><span class="font-semibold">Date:</span> ${monthNames[parseInt(dup.expense.fields.Month)] || dup.expense.fields.Month} ${dup.expense.fields.Day || 1}, ${dup.expense.fields.Year}</div>
                                              <div><span class="font-semibold">Category:</span> ${dup.expense.fields.Category || 'None'}</div>
                                          </div>
                                          <div class="text-xs text-${dup.isExactDuplicate ? 'red' : 'orange'}-700 font-semibold">
