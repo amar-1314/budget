@@ -6457,11 +6457,15 @@ function openAddExpenseModal() {
     document.getElementById('expenseForm').reset();
     document.getElementById('recordId').value = '';
     const now = new Date();
-    document.getElementById('year').value = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const currentDay = now.getDate();
-    document.getElementById('month').value = currentMonth;
-    document.getElementById('day').value = currentDay;
+
+    const yearSelector = document.getElementById('yearSelector');
+    const monthSelector = document.getElementById('monthSelector');
+    const selectedYear = yearSelector && yearSelector.value && yearSelector.value !== 'all' ? yearSelector.value : '';
+    const selectedMonth = monthSelector && monthSelector.value && monthSelector.value !== 'all' ? monthSelector.value : '';
+
+    document.getElementById('year').value = selectedYear || now.getFullYear();
+    document.getElementById('month').value = (selectedMonth ? String(selectedMonth).padStart(2, '0') : String(now.getMonth() + 1).padStart(2, '0'));
+    document.getElementById('day').value = now.getDate();
     
     // Initialize date picker to today
     updateDisplayDate();
