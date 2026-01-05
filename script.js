@@ -1027,6 +1027,26 @@ function supabaseToAirtable(supabaseRecord) {
         fields.Recurring = 'No';
     }
 
+    // Ensure we always have a usable date for rendering/filtering.
+    // If a record was inserted with null date parts (e.g., a UI bug), it can disappear from the filtered list.
+    // Prefer the active filter selection so the user can find and edit the record.
+    const now = new Date();
+    const yearSelector = document.getElementById('yearSelector');
+    const monthSelector = document.getElementById('monthSelector');
+    const fallbackYear = (yearSelector && yearSelector.value && yearSelector.value !== 'all') ? parseInt(yearSelector.value) : now.getFullYear();
+    const fallbackMonth = (monthSelector && monthSelector.value && monthSelector.value !== 'all') ? String(monthSelector.value).padStart(2, '0') : String(now.getMonth() + 1).padStart(2, '0');
+    const fallbackDay = 1;
+
+    if (fields.Year === undefined || fields.Year === null || fields.Year === '') {
+        fields.Year = fallbackYear;
+    }
+    if (fields.Month === undefined || fields.Month === null || fields.Month === '') {
+        fields.Month = fallbackMonth;
+    }
+    if (fields.Day === undefined || fields.Day === null || fields.Day === '') {
+        fields.Day = fallbackDay;
+    }
+
     // Ensure Month is a string (zero-padded) - do this FIRST before numeric conversion
     if (fields.Month !== undefined && fields.Month !== null && fields.Month !== '') {
         fields.Month = String(fields.Month).padStart(2, '0');
@@ -6437,6 +6457,7 @@ function openAddExpenseModal() {
     document.getElementById('expenseForm').reset();
     document.getElementById('recordId').value = '';
     const now = new Date();
+    document.getElementById('year').value = now.getFullYear();
     const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
     const currentDay = now.getDate();
     document.getElementById('month').value = currentMonth;
@@ -7494,12 +7515,29 @@ async function saveExpense(event) {
     try {
         const recordId = document.getElementById('recordId').value;
 
+        const yearEl = document.getElementById('year');
+        const monthEl = document.getElementById('month');
+        const dayEl = document.getElementById('day');
+
+        let yearVal = parseInt(yearEl?.value);
+        let monthVal = String(monthEl?.value || '').trim();
+        let dayVal = parseInt(dayEl?.value);
+
+        const now = new Date();
+        if (!Number.isFinite(yearVal)) yearVal = now.getFullYear();
+        if (!monthVal) monthVal = String(now.getMonth() + 1).padStart(2, '0');
+        monthVal = String(monthVal).padStart(2, '0');
+        if (!Number.isFinite(dayVal)) dayVal = now.getDate();
+
+        // Clamp day to a sensible range so it never becomes null/NaN in JSON
+        dayVal = Math.min(31, Math.max(1, dayVal));
+
         const fields = {
             Item: document.getElementById('itemName').value.trim(),
             Category: formatCategory(document.getElementById('category').value),
-            Year: parseInt(document.getElementById('year').value),
-            Month: document.getElementById('month').value,
-            Day: parseInt(document.getElementById('day').value),
+            Year: yearVal,
+            Month: monthVal,
+            Day: dayVal,
             Actual: actualAmount,
             LLC: document.getElementById('llc').value,
             AmarContribution: amarContribution,
