@@ -235,7 +235,6 @@ serve(async (req: Request) => {
         await sub.pushTextMessage(JSON.stringify(message), {
           urgency: webpush.Urgency.Low,
           ttl: 60 * 60 * 48,
-          topic: "weekly-digest",
         });
         sent += 1;
       } catch (e: any) {

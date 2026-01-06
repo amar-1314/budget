@@ -16,10 +16,15 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           CRON_SECRET: ${{ secrets.BUDGET_CRON_SECRET }}
         run: |
-          curl -sS "$SUPABASE_URL/functions/v1/push-weekly-digest" \
+          set -euo pipefail
+          CODE=$(curl -sS -o response.json -w "%{http_code}" "$SUPABASE_URL/functions/v1/push-weekly-digest" \
             -X POST \
             -H "Content-Type: application/json" \
             -H "apikey: $SUPABASE_ANON_KEY" \
             -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             -H "x-cron-secret: $CRON_SECRET" \
-            -d '{}' | cat
+            -d '{}')
+          cat response.json
+          echo ""
+          echo "HTTP $CODE"
+          test "$CODE" -ge 200 -a "$CODE" -lt 300

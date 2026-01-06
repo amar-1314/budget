@@ -114,7 +114,7 @@ serve(async (req: Request) => {
     subs.map(async (row) => {
       try {
         const sub = appServer.subscribe({ endpoint: row.endpoint, keys: row.keys });
-        await sub.pushTextMessage(JSON.stringify(message), { urgency: webpush.Urgency.High, ttl: 60 * 60, topic: "expense" });
+        await sub.pushTextMessage(JSON.stringify(message), { urgency: webpush.Urgency.High, ttl: 60 * 60 });
         sent += 1;
       } catch (e: any) {
         if (e instanceof webpush.PushMessageError) {

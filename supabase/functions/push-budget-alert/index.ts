@@ -178,7 +178,6 @@ serve(async (req: Request) => {
           await sub.pushTextMessage(JSON.stringify(message), {
             urgency: threshold >= 1 ? webpush.Urgency.High : webpush.Urgency.Normal,
             ttl: 60 * 60 * 12,
-            topic: "budget-alert",
           });
           sent += 1;
         } catch (e: any) {
