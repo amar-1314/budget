@@ -74,21 +74,22 @@ function getWeekWindowEastern(now = new Date()) {
   // Find "today" in Eastern and compute current day-of-week in Eastern.
   // We approximate by taking noon UTC for stability.
   const noonUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0));
-  const easternParts = datePartsInTimeZone(noonUtc, timeZone);
 
+  const easternParts = datePartsInTimeZone(noonUtc, timeZone);
   // Convert eastern y-m-d to a Date (UTC midnight) for arithmetic.
   const easternDateUtc = new Date(`${easternParts.isoDate}T00:00:00Z`);
-
   // Get day-of-week for that UTC date (close enough for our y-m-d arithmetic).
   const dow = easternDateUtc.getUTCDay();
   const mondayOffset = (dow + 6) % 7; // Mon=0, Sun=6
 
   // Previous week: Monday..Sunday
-  const start = addDaysUtc(easternDateUtc, -mondayOffset - 7);
-  const end = addDaysUtc(start, 7);
+  const startNoonUtc = addDaysUtc(noonUtc, -mondayOffset - 7);
+  const isoDates: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    isoDates.push(datePartsInTimeZone(addDaysUtc(startNoonUtc, i), timeZone).isoDate);
+  }
 
-  const startIso = datePartsInTimeZone(start, timeZone).isoDate;
-  return { start, end, weekStartDate: startIso };
+  return { weekStartDate: isoDates[0], isoDates };
 }
 
 serve(async (req: Request) => {
@@ -136,24 +137,44 @@ serve(async (req: Request) => {
     vapidKeys,
   });
 
-  const { weekStartDate, start, end } = getWeekWindowEastern(new Date());
+  const { weekStartDate, isoDates } = getWeekWindowEastern(new Date());
 
-  const { data: alreadySent, error: alreadyErr } = await supabase
+  let bodyJson: any = {};
+  try {
+    bodyJson = await req.json();
+  } catch (_e) {
+    bodyJson = {};
+  }
+  const force = Boolean(bodyJson?.force);
+
+  const legacyWeekStartDate = addDaysUtc(new Date(`${weekStartDate}T00:00:00Z`), -1).toISOString().slice(0, 10);
+
+  const { data: alreadySentRows, error: alreadyErr } = await supabase
     .from("push_weekly_digests_sent")
     .select("week_start_date")
-    .eq("week_start_date", weekStartDate)
-    .maybeSingle();
+    .in("week_start_date", [weekStartDate, legacyWeekStartDate]);
 
   if (alreadyErr) return jsonResponse({ error: alreadyErr.message }, 500);
-  if (alreadySent) return jsonResponse({ ok: true, skipped: true, reason: "Already sent", weekStartDate }, 200);
+  if (!force && (alreadySentRows || []).length > 0) {
+    return jsonResponse(
+      {
+        ok: true,
+        skipped: true,
+        reason: "Already sent",
+        weekStartDate,
+        matchedWeekStartDate: String((alreadySentRows as any)[0]?.week_start_date || ""),
+      },
+      200,
+    );
+  }
 
   // Build distinct (Year, Month) pairs for the 7-day window.
   const tz = "America/New_York";
   const pairs = new Set<string>();
-  for (let i = 0; i < 7; i++) {
-    const d = addDaysUtc(start, i);
-    const p = datePartsInTimeZone(d, tz);
-    pairs.add(`${p.year}-${p.month}`);
+  for (const iso of isoDates) {
+    const [y, m] = String(iso).split("-");
+    if (!y || !m) continue;
+    pairs.add(`${y}-${m}`);
   }
 
   let rows: BudgetRow[] = [];
@@ -173,11 +194,7 @@ serve(async (req: Request) => {
   }
 
   // Filter by window days (Eastern y-m-d).
-  const allowed = new Set<string>();
-  for (let i = 0; i < 7; i++) {
-    const d = addDaysUtc(start, i);
-    allowed.add(datePartsInTimeZone(d, tz).isoDate);
-  }
+  const allowed = new Set<string>(isoDates);
 
   const filtered = rows.filter((r) => {
     const y = Number((r as any).Year);
@@ -214,7 +231,7 @@ serve(async (req: Request) => {
     badge: "/icon-192.png",
     tag: `weekly-digest-${weekStartDate}`,
     requireInteraction: false,
-    data: { url: "./", weekStartDate },
+    data: { url: `./?page=weekly-digest&week_start_date=${weekStartDate}`, weekStartDate },
   };
 
   const { data: subsData, error: subsErr } = await supabase
@@ -273,7 +290,7 @@ serve(async (req: Request) => {
     {
       ok: true,
       weekStartDate,
-      window: { start: start.toISOString(), end: end.toISOString() },
+      window: { startDate: isoDates[0], endDate: isoDates[isoDates.length - 1] },
       total,
       topCategories: topCats,
       sent,

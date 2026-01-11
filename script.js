@@ -414,6 +414,31 @@ document.addEventListener('DOMContentLoaded', () => {
 // Try to get credentials from URL parameters first (works in private mode!)
 const urlParams = new URLSearchParams(window.location.search);
 
+function setAppPage(page) {
+    try {
+        const url = new URL(window.location.href);
+        if (page) {
+            url.searchParams.set('page', String(page));
+        } else {
+            url.searchParams.delete('page');
+        }
+        if (!page || String(page) !== 'weekly-digest') {
+            url.searchParams.delete('week_start_date');
+        }
+        window.history.replaceState({}, '', url.toString());
+    } catch (e) {
+        // Ignore
+    }
+}
+
+function getCurrentAppPage() {
+    try {
+        return new URLSearchParams(window.location.search).get('page');
+    } catch (e) {
+        return null;
+    }
+}
+
 // Supabase Configuration (Supabase-only mode)
 let SUPABASE_URL = urlParams.get('supabase_url') || localStorage.getItem('supabase_url');
 let SUPABASE_ANON_KEY = urlParams.get('supabase_key') || localStorage.getItem('supabase_anon_key');
@@ -1296,8 +1321,17 @@ document.addEventListener('DOMContentLoaded', function () {
     
     // Update last refresh time display
     updateLastRefreshTime();
-    
-    loadData();
+
+    const initialPage = getCurrentAppPage();
+    if (initialPage === 'weekly-digest') {
+        openWeeklyDigest({ skipUrlUpdate: true, skipLoad: true });
+    }
+
+    loadData().then(() => {
+        if (getCurrentAppPage() === 'weekly-digest') {
+            renderWeeklyDigest();
+        }
+    });
     loadProfilePictures();
     loadFixedExpenses();
     loadLLCExpenses();
@@ -10895,6 +10929,165 @@ async function openMonthlySummary() {
     }
 
     loadMonthlySummary();
+}
+
+function datePartsInTimeZone(date, timeZone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).formatToParts(date);
+
+    const map = {};
+    parts.forEach(p => {
+        if (p.type !== 'literal') map[p.type] = p.value;
+    });
+    return { isoDate: `${map.year}-${map.month}-${map.day}` };
+}
+
+function addDaysUtc(date, days) {
+    const d = new Date(date.getTime());
+    d.setUTCDate(d.getUTCDate() + days);
+    return d;
+}
+
+function getPreviousWeekEasternWindow(now = new Date()) {
+    const timeZone = 'America/New_York';
+    const noonUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12, 0, 0));
+
+    const weekday = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(noonUtc);
+    const weekdayIndex = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+    const dow = weekdayIndex[String(weekday)];
+
+    const startNoonUtc = addDaysUtc(noonUtc, -(dow + 7));
+    const isoDates = [];
+    for (let i = 0; i < 7; i++) {
+        isoDates.push(datePartsInTimeZone(addDaysUtc(startNoonUtc, i), timeZone).isoDate);
+    }
+
+    return { weekStartDate: isoDates[0], startDate: isoDates[0], endDate: isoDates[6], isoDates };
+}
+
+function getWeekWindowEasternFromStart(weekStartDateIso) {
+    const timeZone = 'America/New_York';
+    const startNoonUtc = new Date(`${String(weekStartDateIso)}T12:00:00Z`);
+    if (!isFinite(startNoonUtc.getTime())) {
+        throw new Error('Invalid week_start_date');
+    }
+
+    const isoDates = [];
+    for (let i = 0; i < 7; i++) {
+        isoDates.push(datePartsInTimeZone(addDaysUtc(startNoonUtc, i), timeZone).isoDate);
+    }
+
+    return { weekStartDate: isoDates[0], startDate: isoDates[0], endDate: isoDates[6], isoDates };
+}
+
+async function openWeeklyDigest(options = {}) {
+    const { skipUrlUpdate = false, skipLoad = false } = options || {};
+    closeAllModalsExcept('weeklyDigestModal');
+    document.getElementById('weeklyDigestModal').classList.add('active');
+    if (!skipUrlUpdate) setAppPage('weekly-digest');
+
+    if (skipLoad) {
+        return;
+    }
+
+    if (allExpenses.length === 0) {
+        await loadData();
+    }
+    renderWeeklyDigest();
+}
+
+function closeWeeklyDigest() {
+    document.getElementById('weeklyDigestModal').classList.remove('active');
+    if (getCurrentAppPage() === 'weekly-digest') {
+        setAppPage(null);
+    }
+}
+
+function renderWeeklyDigest() {
+    const container = document.getElementById('weeklyDigestContent');
+    if (!container) return;
+
+    if (!Array.isArray(allExpenses) || allExpenses.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8 text-gray-500">
+                <i class="fas fa-info-circle text-4xl mb-3 opacity-50"></i>
+                <p>No data loaded yet. Please refresh.</p>
+            </div>
+        `;
+        return;
+    }
+
+    let w;
+    try {
+        const qs = new URLSearchParams(window.location.search);
+        const requested = qs.get('week_start_date');
+        if (requested && /^\d{4}-\d{2}-\d{2}$/.test(requested)) {
+            w = getWeekWindowEasternFromStart(requested);
+        } else {
+            w = getPreviousWeekEasternWindow(new Date());
+        }
+    } catch (e) {
+        w = getPreviousWeekEasternWindow(new Date());
+    }
+    const allowed = new Set(w.isoDates);
+
+    let total = 0;
+    const totalsByCategory = new Map();
+
+    for (const exp of allExpenses) {
+        const f = exp?.fields || {};
+        const y = String(f.Year || '').padStart(4, '0');
+        const m = String(f.Month || '').padStart(2, '0');
+        const d = String(f.Day || '').padStart(2, '0');
+        if (!y || !m || !d || y.includes('NaN')) continue;
+        const iso = `${y}-${m}-${d}`;
+        if (!allowed.has(iso)) continue;
+
+        const amt = Number(f.Actual || 0);
+        if (!Number.isFinite(amt)) continue;
+        total += amt;
+
+        const cat = String(f.Category || 'Other');
+        totalsByCategory.set(cat, (totalsByCategory.get(cat) || 0) + amt);
+    }
+
+    const topCats = Array.from(totalsByCategory.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+    container.innerHTML = `
+        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
+            <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Summary for last week (Mon-Sun, ET): <span class="font-semibold">${w.startDate}</span> to <span class="font-semibold">${w.endDate}</span></p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                <div class="text-xs text-gray-500 font-semibold mb-1">TOTAL SPENT</div>
+                <div class="text-3xl font-extrabold text-purple-700">$${total.toFixed(2)}</div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                <div class="text-xs text-gray-500 font-semibold mb-3">TOP CATEGORIES</div>
+                ${topCats.length ? `
+                    <div class="space-y-2">
+                        ${topCats.map(([c, v]) => `
+                            <div class="flex items-center justify-between text-sm">
+                                <div class="font-semibold text-gray-800">${escapeHtml(String(c))}</div>
+                                <div class="font-bold text-gray-700">$${Number(v).toFixed(2)}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : `<div class="text-sm text-gray-500">No expenses recorded last week.</div>`}
+            </div>
+        </div>
+        <div class="flex justify-end">
+            <button onclick="renderWeeklyDigest()" class="btn-secondary">
+                <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+        </div>
+    `;
 }
 
 function closeMonthlySummary() {

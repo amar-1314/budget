@@ -156,6 +156,7 @@ self.addEventListener('notificationclick', (event) => {
 
   // Get the URL to open (default to home page)
   const urlToOpen = event.notification.data?.url || './';
+  const absoluteUrlToOpen = new URL(urlToOpen, self.location.origin).toString();
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUnassigned: true })
@@ -164,12 +165,15 @@ self.addEventListener('notificationclick', (event) => {
         for (const client of clientList) {
           if (client.url.includes(self.registration.scope) && 'focus' in client) {
             // Focus existing window
+            if ('navigate' in client) {
+              return client.navigate(absoluteUrlToOpen).then(() => client.focus());
+            }
             return client.focus();
           }
         }
         // Open new window if app is not open
         if (clients.openWindow) {
-          return clients.openWindow(urlToOpen);
+          return clients.openWindow(absoluteUrlToOpen);
         }
       })
   );
