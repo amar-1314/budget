@@ -271,11 +271,13 @@ serve(async (req: Request) => {
       .update({ receipt_processing_status: "processing", receipt_error: null })
       .eq("id", expenseId)
       .eq("has_receipt", true)
-      .or("receipt_processing_status.is.null,receipt_processing_status.in.(pending,failed)")
+      .eq("receipt_scanned", false)
+      .or("receipt_processing_status.is.null,receipt_processing_status.in.(pending,failed,processing)")
       .select("id,Item,Category,Year,Month,Day,has_receipt,receipt_scanned,receipt_processing_status,Receipt");
 
     if (lockErr) throw new Error(lockErr.message);
     if (!lockedRows || lockedRows.length === 0) {
+      console.log("process-receipt: skipped (lock not acquired)", { expenseId });
       return jsonResponse({ ok: true, skipped: true, reason: "Not pending (already processing/completed/dismissed/skipped)" }, 200);
     }
 
@@ -289,15 +291,34 @@ serve(async (req: Request) => {
         .from("Budget")
         .update({ receipt_processing_status: "skipped", receipt_error: null, receipt_scanned: true })
         .eq("id", expenseId);
+      console.log("process-receipt: skipped (not grocery)", { expenseId, category });
       return jsonResponse({ ok: true, skipped: true, reason: "Not grocery" }, 200);
     }
 
-    if (!(row as any).Receipt) {
+    let receiptValue = (row as any).Receipt;
+    if (!receiptValue) {
+      for (let attempt = 1; attempt <= 6; attempt++) {
+        await new Promise((r) => setTimeout(r, 650 * attempt));
+        const { data: refreshed, error: refreshErr } = await supabase
+          .from("Budget")
+          .select("Receipt")
+          .eq("id", expenseId)
+          .maybeSingle();
+        if (refreshErr) break;
+        if (refreshed?.Receipt) {
+          receiptValue = (refreshed as any).Receipt;
+          break;
+        }
+      }
+    }
+
+    if (!receiptValue) {
       await supabase
         .from("Budget")
         .update({ receipt_processing_status: "pending", receipt_error: "Receipt not uploaded yet" })
         .eq("id", expenseId);
-      return jsonResponse({ ok: true, skipped: true, reason: "No receipt uploaded" }, 200);
+      console.log("process-receipt: retryable (receipt pointer missing)", { expenseId });
+      return jsonResponse({ ok: false, retryable: true, reason: "Receipt not uploaded yet" }, 503);
     }
 
     const OCR_SPACE_API_KEY = await getSecret(SUPABASE_URL, SERVICE_ROLE_KEY, "OCR_SPACE_API_KEY");
@@ -307,7 +328,7 @@ serve(async (req: Request) => {
     let imageUrl = "";
     let base64Image = "";
 
-    const rawReceipt = (row as any).Receipt;
+    const rawReceipt = receiptValue;
     const parsedReceipt = typeof rawReceipt === "string" ? (() => {
       const s = rawReceipt.trim();
       if (s.startsWith("data:")) return [{ url: s }];

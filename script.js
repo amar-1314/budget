@@ -8295,24 +8295,47 @@ async function compressImage(file, maxWidth = 1200, quality = 0.8) {
             ctx.drawImage(img, 0, 0, width, height);
 
             // Convert to WebP (best compression) or fallback to JPEG
+            const originalSize = file.size;
+            const maxBytes = 950 * 1024;
+
             let mimeType = 'image/webp';
             let base64Data = canvas.toDataURL(mimeType, quality);
 
             // Fallback to JPEG if WebP not supported
-            if (!base64Data || base64Data === 'data:,') {
+            if (!base64Data || base64Data === 'data:,' || base64Data.startsWith('data:image/png')) {
                 mimeType = 'image/jpeg';
-                base64Data = canvas.toDataURL(mimeType, quality);
+                base64Data = canvas.toDataURL(mimeType, Math.min(0.75, quality));
             }
 
-            const originalSize = file.size;
-            const compressedSize = Math.round((base64Data.length * 3) / 4); // Approximate size
+            let compressedSize = Math.round((base64Data.length * 3) / 4);
+            let tries = 0;
+            while (compressedSize > maxBytes && tries < 8) {
+                tries += 1;
+                quality = Math.max(0.35, quality - 0.08);
+
+                const scale = 0.85;
+                width = Math.max(650, Math.round(width * scale));
+                height = Math.max(650, Math.round(height * scale));
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx2 = canvas.getContext('2d');
+                ctx2.drawImage(img, 0, 0, width, height);
+
+                base64Data = canvas.toDataURL(mimeType, quality);
+                if (!base64Data || base64Data === 'data:,' || base64Data.startsWith('data:image/png')) {
+                    base64Data = canvas.toDataURL('image/jpeg', quality);
+                    mimeType = 'image/jpeg';
+                }
+                compressedSize = Math.round((base64Data.length * 3) / 4);
+            }
 
             const compressionRatio = ((originalSize - compressedSize) / originalSize * 100).toFixed(1);
             console.log(`📦 Image compressed: ${(originalSize / 1024).toFixed(0)}KB → ${(compressedSize / 1024).toFixed(0)}KB (${compressionRatio}% reduction)`);
 
             resolve({
                 base64: base64Data,
-                filename: file.name.replace(/\.[^.]+$/, '.webp'), // Change extension to .webp
+                filename: file.name.replace(/\.[^.]+$/, mimeType.includes('jpeg') ? '.jpg' : '.webp'),
                 type: mimeType,
                 size: compressedSize,
                 originalSize: originalSize
