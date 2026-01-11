@@ -8437,13 +8437,6 @@ async function uploadReceiptAndSave(recordId, fields, file) {
         } else {
             // Grocery receipt: backend will scan asynchronously.
             showNotification(`Receipt saved! (${(compressed.size / 1024).toFixed(0)}KB) - Scanning in background...`, 'success');
-
-            // Best-effort kick to backend processor (safe if webhook is also configured)
-            try {
-                await kickoffBackendReceiptProcessing(expenseId);
-            } catch (e) {
-                console.warn('Backend receipt processing kickoff failed:', e?.message || e);
-            }
         }
         
     } catch (error) {

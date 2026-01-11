@@ -140,14 +140,21 @@ async function runOcrSpace(apiKey: string, input: { imageUrl?: string; base64Ima
     body: form,
   });
 
-  const data = await resp.json().catch(() => null);
+  const raw = await resp.text().catch(() => "");
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch (_e) {
+    data = null;
+  }
+
   if (!resp.ok) {
-    const msg = data?.ErrorMessage?.[0] || `OCR.Space failed: ${resp.status}`;
-    throw new Error(msg);
+    const msg = data?.ErrorMessage?.[0] || data?.error || raw?.slice(0, 220) || `OCR.Space failed: ${resp.status}`;
+    throw new Error(String(msg));
   }
   if (data?.IsErroredOnProcessing) {
     const msg = data?.ErrorMessage?.[0] || "OCR.Space processing error";
-    throw new Error(msg);
+    throw new Error(String(msg));
   }
 
   const text = data?.ParsedResults?.[0]?.ParsedText || "";
@@ -232,6 +239,113 @@ ${ocrText}`;
   return normalizeParsedReceipt(parsed);
 }
 
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function callGeminiForImage(geminiApiKey: string, input: { imageUrl?: string; base64DataUrl?: string }) {
+  let mimeType = "image/jpeg";
+  let base64Data = "";
+
+  if (input.base64DataUrl) {
+    const match = String(input.base64DataUrl).match(/^data:([^;]+);base64,(.+)$/i);
+    if (!match) throw new Error("Invalid base64 data URL");
+    mimeType = String(match[1] || mimeType);
+    base64Data = String(match[2] || "");
+  } else if (input.imageUrl) {
+    const resp = await fetch(String(input.imageUrl));
+    if (!resp.ok) throw new Error(`Failed to fetch image: ${resp.status}`);
+    mimeType = String(resp.headers.get("content-type") || mimeType);
+    const bytes = new Uint8Array(await resp.arrayBuffer());
+    base64Data = bytesToBase64(bytes);
+  } else {
+    throw new Error("Missing image input");
+  }
+
+  const prompt = `You are given an image of a grocery receipt. Extract receipt data and return ONLY valid JSON.
+
+Return JSON in this exact schema:
+{
+  "store": "store/merchant name",
+  "date": "YYYY-MM-DD format",
+  "total": number,
+  "items": [
+    {
+      "raw_description": "exact line item text from receipt",
+      "description": "cleaned, normalized grocery item name",
+      "quantity": number,
+      "quantity_unit": "lb|kg|oz|g|ct|ea|gal|qt|pt|l|ml",
+      "unit_price": number,
+      "total_price": number
+    }
+  ]
+}
+
+Rules:
+- Return ONLY JSON (no markdown)
+- Normalize items: remove store codes, abbreviations, and extra whitespace
+- Keep brand if it's important for identifying the item
+- quantity_unit must be one of the allowed values (default "ea")
+- Prices should be numbers without currency symbols`;
+
+  const requestBody = {
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: base64Data } },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      maxOutputTokens: 4096,
+    },
+  };
+
+  const resp = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiApiKey,
+      },
+      body: JSON.stringify(requestBody),
+    },
+  );
+
+  const data = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    const msg = data?.error?.message || `Gemini request failed: ${resp.status}`;
+    throw new Error(msg);
+  }
+
+  const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!textResponse) throw new Error("No text response from Gemini");
+
+  let jsonStr = String(textResponse).trim();
+  if (jsonStr.startsWith("```json")) jsonStr = jsonStr.slice(7);
+  else if (jsonStr.startsWith("```")) jsonStr = jsonStr.slice(3);
+  if (jsonStr.endsWith("```")) jsonStr = jsonStr.slice(0, -3);
+  jsonStr = jsonStr.trim();
+
+  const firstObj = jsonStr.indexOf("{");
+  const lastObj = jsonStr.lastIndexOf("}");
+  if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
+    jsonStr = jsonStr.slice(firstObj, lastObj + 1);
+  }
+  jsonStr = jsonStr.replace(/,\s*([}\]])/g, "$1").trim();
+
+  const parsed = JSON.parse(jsonStr);
+  return normalizeParsedReceipt(parsed);
+}
+
 function getExpenseIdFromPayload(payload: any): string {
   const direct = String(payload?.expenseId || "").trim();
   if (direct) return direct;
@@ -272,7 +386,7 @@ serve(async (req: Request) => {
       .eq("id", expenseId)
       .eq("has_receipt", true)
       .eq("receipt_scanned", false)
-      .or("receipt_processing_status.is.null,receipt_processing_status.in.(pending,failed,processing)")
+      .or("receipt_processing_status.is.null,receipt_processing_status.eq.pending")
       .select("id,Item,Category,Year,Month,Day,has_receipt,receipt_scanned,receipt_processing_status,Receipt");
 
     if (lockErr) throw new Error(lockErr.message);
@@ -297,28 +411,12 @@ serve(async (req: Request) => {
 
     let receiptValue = (row as any).Receipt;
     if (!receiptValue) {
-      for (let attempt = 1; attempt <= 6; attempt++) {
-        await new Promise((r) => setTimeout(r, 650 * attempt));
-        const { data: refreshed, error: refreshErr } = await supabase
-          .from("Budget")
-          .select("Receipt")
-          .eq("id", expenseId)
-          .maybeSingle();
-        if (refreshErr) break;
-        if (refreshed?.Receipt) {
-          receiptValue = (refreshed as any).Receipt;
-          break;
-        }
-      }
-    }
-
-    if (!receiptValue) {
       await supabase
         .from("Budget")
         .update({ receipt_processing_status: "pending", receipt_error: "Receipt not uploaded yet" })
         .eq("id", expenseId);
-      console.log("process-receipt: retryable (receipt pointer missing)", { expenseId });
-      return jsonResponse({ ok: false, retryable: true, reason: "Receipt not uploaded yet" }, 503);
+      console.log("process-receipt: skipped (receipt pointer missing)", { expenseId });
+      return jsonResponse({ ok: true, skipped: true, reason: "Receipt not uploaded yet" }, 200);
     }
 
     const OCR_SPACE_API_KEY = await getSecret(SUPABASE_URL, SERVICE_ROLE_KEY, "OCR_SPACE_API_KEY");
@@ -363,73 +461,64 @@ serve(async (req: Request) => {
 
     if (!imageUrl && !base64Image) throw new Error("Unable to resolve receipt image");
 
-    let ocrText = "";
-    let lastErr: unknown = null;
+    try {
+      const ocrText = await runOcrSpace(OCR_SPACE_API_KEY, base64Image ? { base64Image } : { imageUrl });
+      if (!ocrText || ocrText.trim().length < 10) throw new Error("OCR returned no text");
 
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        if (!ocrText) {
-          ocrText = await runOcrSpace(OCR_SPACE_API_KEY, base64Image ? { base64Image } : { imageUrl });
-        }
+      const parsed = await callGeminiForOcrText(GEMINI_API_KEY, ocrText);
+      const items = Array.isArray((parsed as any)?.items) ? (parsed as any).items : [];
+      if (!items.length) throw new Error("No items found");
 
-        if (!ocrText || ocrText.trim().length < 10) {
-          throw new Error("OCR returned no text");
-        }
+      const y = Number((row as any).Year) || new Date().getFullYear();
+      const m = String((row as any).Month || "01").padStart(2, "0");
+      const d = String((row as any).Day || 1).padStart(2, "0");
+      const purchaseDate = String((parsed as any).date || `${y}-${m}-${d}`);
+      const store = String((parsed as any).store || (row as any).Item || "Unknown");
 
-        const parsed = await callGeminiForOcrText(GEMINI_API_KEY, ocrText);
-        const items = Array.isArray((parsed as any)?.items) ? (parsed as any).items : [];
-        if (!items.length) throw new Error("No items found");
+      // Avoid duplicates if retried while still pending/processing
+      await supabase.from("ReceiptItems").delete().eq("expense_id", expenseId);
 
-        const y = Number((row as any).Year) || new Date().getFullYear();
-        const m = String((row as any).Month || "01").padStart(2, "0");
-        const d = String((row as any).Day || 1).padStart(2, "0");
-        const purchaseDate = String((parsed as any).date || `${y}-${m}-${d}`);
-        const store = String((parsed as any).store || (row as any).Item || "Unknown");
+      const rows = items.map((it: any) => {
+        const unit = String(it?.quantity_unit || "").trim();
+        const baseName = String(it?.description || it?.raw_description || "Unknown Item").trim() || "Unknown Item";
+        const itemName = unit && unit !== "ea" ? `${baseName} (${unit})` : baseName;
 
-        // Avoid duplicates if retried while still pending/processing
-        await supabase.from("ReceiptItems").delete().eq("expense_id", expenseId);
+        const quantity = parseNumberLoose(it?.quantity);
+        const unitPrice = parseNumberLoose(it?.unit_price);
+        const totalPrice = parseNumberLoose(it?.total_price);
 
-        for (const it of items) {
-          const unit = String(it?.quantity_unit || "").trim();
-          const baseName = String(it?.description || it?.raw_description || "Unknown Item").trim() || "Unknown Item";
-          const itemName = unit && unit !== "ea" ? `${baseName} (${unit})` : baseName;
+        return {
+          expense_id: expenseId,
+          item_name: itemName,
+          quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+          unit_price: Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : 0,
+          total_price: Number.isFinite(totalPrice) && totalPrice >= 0 ? totalPrice : 0,
+          store,
+          purchase_date: purchaseDate,
+        };
+      });
 
-          const quantity = parseNumberLoose(it?.quantity);
-          const unitPrice = parseNumberLoose(it?.unit_price);
-          const totalPrice = parseNumberLoose(it?.total_price);
+      const { error: insertErr } = await supabase.from("ReceiptItems").insert(rows);
+      if (insertErr) throw new Error(insertErr.message);
 
-          await supabase.from("ReceiptItems").insert({
-            expense_id: expenseId,
-            item_name: itemName,
-            quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
-            unit_price: Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : 0,
-            total_price: Number.isFinite(totalPrice) && totalPrice >= 0 ? totalPrice : 0,
-            store,
-            purchase_date: purchaseDate,
-          });
-        }
+      await supabase
+        .from("Budget")
+        .update({ receipt_scanned: true, receipt_processing_status: "completed", receipt_error: null })
+        .eq("id", expenseId);
 
-        await supabase
-          .from("Budget")
-          .update({ receipt_scanned: true, receipt_processing_status: "completed", receipt_error: null })
-          .eq("id", expenseId);
+      return jsonResponse({ ok: true, expenseId, itemCount: items.length }, 200);
+    } catch (e) {
+      const msg = String((e as any)?.message || e || "Unknown error");
+      console.error("process-receipt: failed", { expenseId, error: msg });
+      await supabase
+        .from("Budget")
+        .update({ receipt_processing_status: "failed", receipt_error: msg.slice(0, 255), receipt_scanned: false })
+        .eq("id", expenseId);
 
-        return jsonResponse({ ok: true, expenseId, itemCount: items.length }, 200);
-      } catch (e) {
-        lastErr = e;
-        // backoff
-        await new Promise((r) => setTimeout(r, 600 * attempt));
-      }
+      return jsonResponse({ ok: false, expenseId, error: msg }, 200);
     }
-
-    const msg = String((lastErr as any)?.message || lastErr || "Unknown error");
-    await supabase
-      .from("Budget")
-      .update({ receipt_processing_status: "failed", receipt_error: msg.slice(0, 255), receipt_scanned: false })
-      .eq("id", expenseId);
-
-    return jsonResponse({ ok: false, expenseId, error: msg }, 500);
   } catch (e: any) {
-    return jsonResponse({ error: String(e?.message || e) }, 500);
+    console.error("process-receipt: unhandled", { error: String(e?.message || e) });
+    return jsonResponse({ error: String(e?.message || e) }, 200);
   }
 });
