@@ -7502,39 +7502,16 @@ function showCategorySimilarityDialog(newCategory, similarCategories) {
 // Flag to prevent duplicate submissions
 let isSavingExpense = false;
 
-const CLIENT_RECEIPT_SCAN_ENABLED_KEY = 'client_receipt_scan_enabled';
-
-function isClientReceiptScanningEnabled() {
-    return true;
-}
-
-function toggleClientReceiptScanning(enabled) {
-    localStorage.setItem(CLIENT_RECEIPT_SCAN_ENABLED_KEY, 'true');
-    console.log('🧾 Client receipt scanning enabled (client-only)');
-    showNotification('✅ Client receipt scanning enabled (client-only)', 'success');
-}
-
-function loadClientReceiptScanningState() {
-    const toggle = document.getElementById('clientReceiptScanToggle');
-    if (toggle) {
-        toggle.checked = isClientReceiptScanningEnabled();
-    }
-}
-
 // Helper function to format tags: lowercase and replace spaces with hyphens
 function formatTags(tags) {
     if (!tags) return '';
     const normalized = String(tags)
+        .toLowerCase()
         .split(',')
-        .map(t => t.trim())
-        .filter(Boolean)
-        .map(t => t
-            .toLowerCase()
-            .replace(/\s+/g, '-')
-            .replace(/-+/g, '-')
-            .replace(/^-+/, '')
-            .replace(/-+$/, '')
-        )
+        .map(tag => String(tag || '').trim())
+        .map(tag => tag.replace(/\s+/g, '-'))
+        .map(tag => tag.replace(/-+/g, '-'))
+        .map(tag => tag.replace(/^-+/, '').replace(/-+$/, ''))
         .filter(Boolean);
     return normalized.join(', ');
 }
@@ -13594,9 +13571,6 @@ function openSettings() {
     
     // Load auto-refresh toggle state
     loadAutoRefreshState();
-
-    // Load client receipt scanning toggle state
-    loadClientReceiptScanningState();
     
     // Update last refresh time display
     updateLastRefreshTime();
@@ -14020,7 +13994,6 @@ function scheduleDailyRefresh() {
 // Start the scheduler when page loads
 document.addEventListener('DOMContentLoaded', () => {
     loadAutoRefreshState();
-    loadClientReceiptScanningState();
     scheduleDailyRefresh();
 });
 
