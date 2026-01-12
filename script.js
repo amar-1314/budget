@@ -1117,6 +1117,32 @@ async function supabaseDelete(tableName, id) {
     }, `Supabase DELETE ${tableName}/${id}`);
 }
 
+async function supabaseDeleteWhere(tableName, whereQuery) {
+    return await retryOperation(async () => {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+            throw new Error('Supabase credentials not configured');
+        }
+
+        const url = `${SUPABASE_URL}/rest/v1/${tableName}?${whereQuery}`;
+        const response = await fetchWithRetry(url, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=representation'
+            }
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Supabase DELETE error (${response.status}): ${error}`);
+        }
+
+        return true;
+    }, `Supabase DELETE ${tableName} where ${whereQuery}`);
+}
+
 // Convert Supabase format to internal record format (for compatibility)
 function supabaseToAirtable(supabaseRecord) {
     const fields = { ...supabaseRecord };
@@ -8498,6 +8524,8 @@ async function autoExtractReceiptItems(expenseId, base64Data, mimeType, expenseF
                 purchaseDate = `${year}-${month}-${day}`;
             }
             
+            await supabaseDeleteWhere(RECEIPT_ITEMS_TABLE, `expense_id=eq.${encodeURIComponent(expenseId)}`);
+
             // Save items to ReceiptItems table
             for (const item of extractedData.items) {
                 const unit = String(item.quantity_unit || '').trim();
@@ -8721,6 +8749,8 @@ async function retryFailedScan(expenseId) {
         const day = String(expense.Day || 1).padStart(2, '0');
         const purchaseDate = extractedData.date || `${year}-${month}-${day}`;
 
+        await supabaseDeleteWhere(RECEIPT_ITEMS_TABLE, `expense_id=eq.${encodeURIComponent(expenseId)}`);
+
         for (const item of extractedData.items) {
             const unit = String(item.quantity_unit || '').trim();
             const baseName = String(item.description || item.raw_description || 'Unknown Item').trim() || 'Unknown Item';
@@ -8866,6 +8896,8 @@ async function scanReceiptWithRetries(expenseId, base64DataUrl, expenseFields, m
                     purchaseDate = `${year}-${month}-${day}`;
                 }
                 
+                await supabaseDeleteWhere(RECEIPT_ITEMS_TABLE, `expense_id=eq.${encodeURIComponent(expenseId)}`);
+
                 // Save items to ReceiptItems table
                 for (const item of extractedData.items) {
                     const unit = String(item.quantity_unit || '').trim();
