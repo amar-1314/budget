@@ -388,6 +388,8 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") return jsonResponse({ ok: true }, 200);
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
+  return jsonResponse({ error: "Receipt processing is disabled (client-only)" }, 410);
+
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
     const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
