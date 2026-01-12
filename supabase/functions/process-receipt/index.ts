@@ -248,6 +248,32 @@ function bytesToBase64(bytes: Uint8Array) {
   return btoa(binary);
 }
 
+function tryParseSupabaseStorageUrl(urlStr: string): { bucket: string; path: string } | null {
+  try {
+    const u = new URL(urlStr);
+    const parts = u.pathname.split("/").filter(Boolean);
+    const objectIdx = parts.indexOf("object");
+    if (objectIdx === -1) return null;
+
+    const signIdx = parts.indexOf("sign");
+    if (signIdx !== -1 && signIdx > objectIdx) {
+      const bucket = parts[signIdx + 1] || "";
+      const path = parts.slice(signIdx + 2).join("/");
+      if (bucket && path) return { bucket, path };
+    }
+
+    const publicIdx = parts.indexOf("public");
+    if (publicIdx !== -1 && publicIdx > objectIdx) {
+      const bucket = parts[publicIdx + 1] || "";
+      const path = parts.slice(publicIdx + 2).join("/");
+      if (bucket && path) return { bucket, path };
+    }
+  } catch (_e) {
+    return null;
+  }
+  return null;
+}
+
 async function callGeminiForImage(geminiApiKey: string, input: { imageUrl?: string; base64DataUrl?: string }) {
   let mimeType = "image/jpeg";
   let base64Data = "";
@@ -452,11 +478,22 @@ serve(async (req: Request) => {
       const bucket = String(first?.bucket || "receipts");
       const path = String(first?.path || "");
       if (!path) throw new Error("Invalid receipt pointer (missing path)");
-      const { data: signed, error: signedErr } = await supabase.storage.from(bucket).createSignedUrl(path, 60 * 60);
-      if (signedErr) throw new Error(signedErr.message);
-      imageUrl = String(signed?.signedUrl || "");
+      const { data: blob, error: downloadErr } = await supabase.storage.from(bucket).download(path);
+      if (downloadErr) throw new Error(downloadErr.message);
+      const mimeType = String((blob as any)?.type || "image/jpeg");
+      const bytes = new Uint8Array(await (blob as any).arrayBuffer());
+      base64Image = `data:${mimeType};base64,${bytesToBase64(bytes)}`;
     } else if (url) {
-      imageUrl = url;
+      const parsed = tryParseSupabaseStorageUrl(url);
+      if (parsed) {
+        const { data: blob, error: downloadErr } = await supabase.storage.from(parsed.bucket).download(parsed.path);
+        if (downloadErr) throw new Error(downloadErr.message);
+        const mimeType = String((blob as any)?.type || "image/jpeg");
+        const bytes = new Uint8Array(await (blob as any).arrayBuffer());
+        base64Image = `data:${mimeType};base64,${bytesToBase64(bytes)}`;
+      } else {
+        imageUrl = url;
+      }
     }
 
     if (!imageUrl && !base64Image) throw new Error("Unable to resolve receipt image");
