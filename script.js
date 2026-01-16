@@ -115,32 +115,70 @@ const OCR_SPACE_API_KEY_STORAGE = 'ocr_space_api_key_v1';
 const GEMINI_API_KEY_STORAGE = 'gemini_api_key_v1';
 const RECEIPT_OCR_RETRY_DELAY_MS = 500 * 1000;
 
-function getStoredApiKey(storageKey, promptLabel) {
-    let key = '';
+let cachedReceiptSecrets = null;
+
+async function fetchReceiptSecretsFromEdge() {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
+
+    const endpoint = `${SUPABASE_URL}/functions/v1/receipt-secrets`;
+    const resp = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        }
+    });
+
+    const rawText = await resp.text().catch(() => '');
+    const data = rawText ? safeJsonParse(rawText) : null;
+    if (!resp.ok) {
+        const msg = data?.error || `Failed to fetch receipt secrets: ${resp.status}`;
+        throw new Error(String(msg));
+    }
+
+    const ocrSpaceApiKey = String(data?.ocrSpaceApiKey || '').trim();
+    const geminiApiKey = String(data?.geminiApiKey || '').trim();
+    if (!ocrSpaceApiKey || !geminiApiKey) {
+        throw new Error('Missing OCR_SPACE_API_KEY and/or GEMINI_API_KEY in app_secrets');
+    }
+
+    return { ocrSpaceApiKey, geminiApiKey };
+}
+
+async function getReceiptSecrets() {
+    if (cachedReceiptSecrets) return cachedReceiptSecrets;
+
     try {
-        key = String(localStorage.getItem(storageKey) || '').trim();
+        const cachedOcr = String(localStorage.getItem(OCR_SPACE_API_KEY_STORAGE) || '').trim();
+        const cachedGemini = String(localStorage.getItem(GEMINI_API_KEY_STORAGE) || '').trim();
+        if (cachedOcr && cachedGemini) {
+            cachedReceiptSecrets = { ocrSpaceApiKey: cachedOcr, geminiApiKey: cachedGemini };
+            return cachedReceiptSecrets;
+        }
     } catch (_e) {
     }
-    if (!key) {
-        const entered = prompt(promptLabel) || '';
-        key = String(entered).trim();
-        if (key) {
-            try {
-                localStorage.setItem(storageKey, key);
-            } catch (_e) {
-            }
-        }
+
+    const secrets = await fetchReceiptSecretsFromEdge();
+    cachedReceiptSecrets = secrets;
+    try {
+        localStorage.setItem(OCR_SPACE_API_KEY_STORAGE, secrets.ocrSpaceApiKey);
+        localStorage.setItem(GEMINI_API_KEY_STORAGE, secrets.geminiApiKey);
+    } catch (_e) {
     }
-    if (!key) throw new Error('Missing API key');
-    return key;
+    return secrets;
 }
 
-function getOcrSpaceApiKey() {
-    return getStoredApiKey(OCR_SPACE_API_KEY_STORAGE, 'Enter OCR.Space API Key');
+async function getOcrSpaceApiKey() {
+    const { ocrSpaceApiKey } = await getReceiptSecrets();
+    return ocrSpaceApiKey;
 }
 
-function getGeminiApiKey() {
-    return getStoredApiKey(GEMINI_API_KEY_STORAGE, 'Enter Gemini API Key');
+async function getGeminiApiKey() {
+    const { geminiApiKey } = await getReceiptSecrets();
+    return geminiApiKey;
 }
 
 function delay(ms) {
@@ -9097,7 +9135,7 @@ function normalizeReceiptExtractedData(extracted) {
 }
 
 async function runOcrSpace(receiptDataUrlOrUrl) {
-    const apiKey = getOcrSpaceApiKey();
+    const apiKey = await getOcrSpaceApiKey();
 
     let dataUrl = String(receiptDataUrlOrUrl || '');
     if (!dataUrl.startsWith('data:')) {
@@ -9194,7 +9232,7 @@ async function extractReceiptDataWithOcrSpaceAndGemini(receiptUrlOrDataUrl) {
 }
 
 async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
-    const apiKey = getGeminiApiKey();
+    const apiKey = await getGeminiApiKey();
 
     const prompt = `You are given OCR text extracted from a grocery receipt. Extract receipt data and return ONLY valid JSON.
 
@@ -9265,7 +9303,7 @@ ${ocrText}`;
 }
 
 async function extractReceiptDataWithGeminiFromImage(imageDataUrl) {
-    const apiKey = getGeminiApiKey();
+    const apiKey = await getGeminiApiKey();
     const m = String(imageDataUrl || '').match(/^data:([^;]+);base64,(.+)$/i);
     if (!m) throw new Error('Invalid imageDataUrl');
 
