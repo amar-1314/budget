@@ -113,7 +113,7 @@ function updateAppVersionDisplay() {
 
 const OCR_SPACE_API_KEY_STORAGE = 'ocr_space_api_key_v1';
 const GEMINI_API_KEY_STORAGE = 'gemini_api_key_v1';
-const RECEIPT_OCR_RETRY_DELAY_MS = 500 * 1000;
+const RECEIPT_OCR_RETRY_DELAY_MS = 500;
 
 let cachedReceiptSecrets = null;
 
@@ -8786,7 +8786,10 @@ async function processReceiptWithClientRules(receiptUrlOrDataUrl) {
         } catch (e) {
             lastErr = e;
             if (attempt < 2) {
-                updateScanningSpinner('Retrying...', `Waiting ${Math.round(RECEIPT_OCR_RETRY_DELAY_MS / 1000)}s before retry`);
+                const waitLabel = RECEIPT_OCR_RETRY_DELAY_MS < 1000
+                    ? `${RECEIPT_OCR_RETRY_DELAY_MS}ms`
+                    : `${Math.round(RECEIPT_OCR_RETRY_DELAY_MS / 1000)}s`;
+                updateScanningSpinner('Retrying...', `Waiting ${waitLabel} before retry`);
                 await delay(RECEIPT_OCR_RETRY_DELAY_MS);
             }
         }
@@ -9135,38 +9138,36 @@ function normalizeReceiptExtractedData(extracted) {
 }
 
 async function runOcrSpace(receiptDataUrlOrUrl) {
-    const apiKey = await getOcrSpaceApiKey();
-
     let dataUrl = String(receiptDataUrlOrUrl || '');
     if (!dataUrl.startsWith('data:')) {
         updateScanningSpinner('Preparing receipt...', 'Downloading image');
         dataUrl = await compressReceiptImageToDataUrl(dataUrl);
     }
 
-    const form = new FormData();
-    form.append('apikey', apiKey);
-    form.append('language', 'eng');
-    form.append('isOverlayRequired', 'false');
-    form.append('OCREngine', '2');
-    form.append('base64Image', dataUrl);
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        throw new Error('Supabase credentials not configured');
+    }
 
-    const resp = await fetch('https://api.ocr.space/parse/image', {
+    const endpoint = `${SUPABASE_URL}/functions/v1/ocr-space`;
+    const resp = await fetch(endpoint, {
         method: 'POST',
-        body: form
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ base64Image: dataUrl })
     });
 
-    const data = await resp.json().catch(() => null);
+    const rawText = await resp.text().catch(() => '');
+    const data = rawText ? safeJsonParse(rawText) : null;
     if (!resp.ok) {
-        const msg = data?.ErrorMessage?.[0] || data?.error || `OCR.Space failed: ${resp.status}`;
-        throw new Error(String(msg));
-    }
-    if (data?.IsErroredOnProcessing) {
-        const msg = data?.ErrorMessage?.[0] || 'OCR.Space processing error';
+        const msg = data?.error || `OCR proxy failed: ${resp.status}`;
         throw new Error(String(msg));
     }
 
-    const parsedText = data?.ParsedResults?.[0]?.ParsedText || '';
-    return String(parsedText);
+    const text = data?.text;
+    return String(text || '');
 }
 
 async function extractReceiptDataWithOcrSpaceAndGemini(receiptUrlOrDataUrl) {
