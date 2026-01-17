@@ -8567,12 +8567,16 @@ async function getFailedScans() {
     try {
         const failed = await supabaseGet(TABLE_NAME, {
             'has_receipt': 'eq.true',
-            'receipt_processing_status': 'eq.failed'
+            'receipt_scanned': 'eq.false'
         }, 100);
         // Filter to only grocery category expenses
         const groceryFailed = (failed || []).filter(expense => {
             const category = (expense.Category || '').toLowerCase();
-            return category.includes('grocery') || category.includes('groceries');
+            if (!(category.includes('grocery') || category.includes('groceries'))) return false;
+
+            const status = String(expense.receipt_processing_status || '').toLowerCase();
+            if (status === 'completed' || status === 'dismissed' || status === 'skipped') return false;
+            return true;
         });
         return groceryFailed;
     } catch (e) {
