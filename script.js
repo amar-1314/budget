@@ -9084,10 +9084,61 @@ function normalizeReceiptExtractedData(extracted) {
     const normalizedItems = [];
     const weightLineRegex = /(\d+(?:\.\d+)?)\s*(lb|kg|oz|g)\b/i;
 
+    const parseSignedMoneyFromLine = (raw) => {
+        const s = String(raw || '');
+        const matches = [...s.matchAll(/\d+\.\d{2}/g)].map(m => m[0]);
+        if (matches.length === 0) return NaN;
+        const last = matches[matches.length - 1];
+        const idx = s.lastIndexOf(last);
+        const after = idx >= 0 ? s.slice(idx + last.length) : '';
+        const before = idx >= 0 ? s.slice(Math.max(0, idx - 2), idx) : '';
+        const hasMinus = /-/.test(after) || /-/.test(before);
+        const val = parseFloat(last);
+        if (!isFinite(val)) return NaN;
+        return hasMinus ? -val : val;
+    };
+
+    const isDiscountLine = (descLower, rawDesc, item) => {
+        if (descLower.includes('discount') || descLower.includes('coupon') || descLower.includes('rebate') || descLower.includes('savings')) return true;
+        if (descLower === 'disc' || descLower.startsWith('disc ') || descLower.startsWith('coupon ')) return true;
+        if (descLower.includes('instant') && descLower.includes('savings')) return true;
+        const total = parseNumberLoose(item.total_price);
+        const signedFromRaw = parseSignedMoneyFromLine(rawDesc);
+        if ((isFinite(total) && total < 0) || (isFinite(signedFromRaw) && signedFromRaw < 0)) return true;
+        return false;
+    };
+
     for (const rawItem of extracted.items) {
         const item = rawItem && typeof rawItem === 'object' ? { ...rawItem } : {};
         const rawDesc = String(item.raw_description || item.description || '').trim();
         const descLower = rawDesc.toLowerCase();
+
+        if (rawDesc && isDiscountLine(descLower, rawDesc, item) && normalizedItems.length > 0) {
+            const prev = normalizedItems[normalizedItems.length - 1];
+            const candidate1 = parseNumberLoose(item.total_price);
+            const candidate2 = parseNumberLoose(item.unit_price);
+            const candidate3 = parseSignedMoneyFromLine(rawDesc);
+            let discount = isFinite(candidate1) ? candidate1 : (isFinite(candidate2) ? candidate2 : candidate3);
+            if (isFinite(discount) && discount > 0) discount = -discount;
+
+            if (prev && typeof prev === 'object') {
+                if (!isFinite(prev.__orig_total)) prev.__orig_total = isFinite(prev.total_price) ? prev.total_price : 0;
+                prev.__discount_total = (isFinite(prev.__discount_total) ? prev.__discount_total : 0) + (isFinite(discount) ? discount : 0);
+
+                const netTotal = Math.round((prev.__orig_total + prev.__discount_total) * 100) / 100;
+                prev.total_price = isFinite(netTotal) ? Math.max(0, netTotal) : (isFinite(prev.total_price) ? prev.total_price : 0);
+                const qty = isFinite(prev.quantity) && prev.quantity > 0 ? prev.quantity : 1;
+                prev.unit_price = Math.round((prev.total_price / qty) * 100) / 100;
+
+                if (isFinite(prev.__discount_total) && prev.__discount_total !== 0) {
+                    const origLabel = `$${Number(prev.__orig_total || 0).toFixed(2)}`;
+                    const discLabel = `${prev.__discount_total < 0 ? '-' : ''}$${Math.abs(prev.__discount_total).toFixed(2)}`;
+                    const base = String(prev.description || prev.raw_description || 'Unknown Item').trim() || 'Unknown Item';
+                    prev.description = `${base} (Orig ${origLabel}, Disc ${discLabel})`;
+                }
+            }
+            continue;
+        }
 
         const qty = parseNumberLoose(item.quantity);
         const unitPrice = parseNumberLoose(item.unit_price);
@@ -9264,6 +9315,7 @@ Rules:
 - Keep brand if it's important for identifying the item
 - quantity_unit must be one of the allowed values (default "ea")
 - Prices should be numbers without currency symbols
+- IMPORTANT: Do not emit discounts/coupons as standalone items. If a discount line appears for an item, fold it into that item's total_price (net) and keep the product as a single item.
 
 OCR TEXT:
 ${ocrText}`;
@@ -9336,7 +9388,8 @@ Rules:
 - Normalize items: remove store codes, abbreviations, and extra whitespace
 - Keep brand if it's important for identifying the item
 - quantity_unit must be one of the allowed values (default "ea")
-- Prices should be numbers without currency symbols`;
+- Prices should be numbers without currency symbols
+- IMPORTANT: Do not emit discounts/coupons as standalone items. If a discount line appears for an item, fold it into that item's total_price (net) and keep the product as a single item.`;
 
     const requestBody = {
         contents: [{
@@ -9594,10 +9647,32 @@ async function searchReceiptItems(query) {
             return;
         }
 
+        const splitDiscountFromItemName = (name) => {
+            const s = String(name || '').trim();
+            const m = s.match(/^(.*)\s\(Orig\s(\$\d+\.\d{2}),\sDisc\s(-?\$\d+\.\d{2})\)$/);
+            if (!m) return { title: s, orig: '', disc: '' };
+            return { title: String(m[1] || '').trim(), orig: String(m[2] || '').trim(), disc: String(m[3] || '').trim() };
+        };
+
         container.innerHTML = results.map(r => `
             <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex justify-between items-center">
                 <div class="flex-1">
-                    <div class="font-bold text-gray-800">${r.item_name}</div>
+                    ${(() => {
+                        const parts = splitDiscountFromItemName(r.item_name);
+                        const title = parts.title || r.item_name;
+                        const hasDisc = Boolean(parts.orig) && Boolean(parts.disc);
+                        const discClass = String(parts.disc || '').trim().startsWith('-') ? 'text-green-700' : 'text-gray-600';
+                        return `
+                            <div class="font-bold text-gray-800">${escapeHtml(title)}</div>
+                            ${hasDisc ? `
+                                <div class="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">Deal</span>
+                                    <span>Orig ${escapeHtml(parts.orig)}</span>
+                                    <span class="${discClass}">Disc ${escapeHtml(parts.disc)}</span>
+                                </div>
+                            ` : ''}
+                        `;
+                    })()}
                     <div class="text-xs text-gray-500">
                         <i class="fas fa-store mr-1"></i>${r.store || 'Unknown'} • 
                         <i class="fas fa-calendar mr-1"></i>${r.purchase_date || 'Unknown'}
