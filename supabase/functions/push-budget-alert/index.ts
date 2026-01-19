@@ -92,7 +92,7 @@ serve(async (req: Request) => {
 
   const { data: budgetRows, error: budgetErr } = await supabase
     .from("Budgets")
-    .select("Budget")
+    .select("Amount,Budget")
     .eq("Year", year)
     .eq("Month", month)
     .eq("Category", category)
@@ -100,7 +100,8 @@ serve(async (req: Request) => {
 
   if (budgetErr) return jsonResponse({ error: budgetErr.message }, 500);
 
-  const budgetVal = Number(budgetRows?.[0]?.Budget ?? 0);
+  const budgetRow = (budgetRows || [])[0] as { Amount?: number; Budget?: number } | undefined;
+  const budgetVal = Number(budgetRow?.Amount ?? budgetRow?.Budget ?? 0);
   if (!Number.isFinite(budgetVal) || budgetVal <= 0) {
     return jsonResponse({ ok: true, skipped: true, reason: "No budget set" }, 200);
   }

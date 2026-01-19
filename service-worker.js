@@ -156,7 +156,13 @@ self.addEventListener('notificationclick', (event) => {
 
   // Get the URL to open (default to home page)
   const urlToOpen = event.notification.data?.url || './';
-  const absoluteUrlToOpen = new URL(urlToOpen, self.location.origin).toString();
+  const scopeBase = self.registration?.scope || `${self.location.origin}${self.location.pathname}`;
+  let absoluteUrlToOpen = '';
+  try {
+    absoluteUrlToOpen = new URL(urlToOpen, scopeBase).toString();
+  } catch (_err) {
+    absoluteUrlToOpen = new URL('./', scopeBase).toString();
+  }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUnassigned: true })
