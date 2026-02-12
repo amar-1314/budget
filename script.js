@@ -16,6 +16,53 @@ function getSessionLogs() {
     }
 }
 
+function updateFixedLLCButtonState(value) {
+    const llcBtn = document.getElementById('fixedLlcToggleBtn');
+    if (!llcBtn) return;
+    if (value === 'Yes') {
+        llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+        llcBtn.style.color = 'white';
+        llcBtn.style.borderColor = '#3b82f6';
+        llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Business</span>';
+    } else {
+        llcBtn.style.background = 'white';
+        llcBtn.style.color = '#6b7280';
+        llcBtn.style.borderColor = '#e5e7eb';
+        llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
+    }
+}
+
+function updateFixedMoreDetailsButtonState(isOpen) {
+    const btn = document.getElementById('fixedMoreDetailsBtn');
+    if (!btn) return;
+    if (isOpen) {
+        btn.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
+        btn.style.color = 'white';
+        btn.style.borderColor = '#8b5cf6';
+        btn.innerHTML = '<i class="fas fa-chevron-up"></i><span>Less</span>';
+    } else {
+        btn.style.background = 'white';
+        btn.style.color = '#6b7280';
+        btn.style.borderColor = '#e5e7eb';
+        btn.innerHTML = '<i class="fas fa-ellipsis-h"></i><span>More</span>';
+    }
+}
+
+function toggleFixedLLC() {
+    const llcSelect = document.getElementById('fixedLLC');
+    if (!llcSelect) return;
+    llcSelect.value = llcSelect.value === 'No' ? 'Yes' : 'No';
+    updateFixedLLCButtonState(llcSelect.value);
+}
+
+function toggleFixedMoreDetails() {
+    const panel = document.getElementById('fixedMoreDetailsPanel');
+    if (!panel) return;
+    const shouldOpen = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden');
+    updateFixedMoreDetailsButtonState(shouldOpen);
+}
+
 function setSessionLogs(logs) {
     try {
         sessionStorage.setItem(SESSION_LOGS_KEY, JSON.stringify(logs));
@@ -893,6 +940,9 @@ let allExpenses = [];
 let allPayments = [];
 let currentReceiptData = null; // Store current receipt for editing
 let charts = { pie: null, llc: null, line: null, categoryMonthly: null, contributionsMonthly: null, contributionCoverage: null, yearComparison: null, categoryTrend: null, contributionTrend: null };
+let dataLoaded = false;
+let fixedExpensesLoaded = false;
+let isMaterializingFixedExpenses = false;
 
 // Latest computed over-budget categories for the current dashboard period
 let latestOverBudgetCategories = [];
@@ -1743,7 +1793,8 @@ function populateYearDropdown() {
     }
 }
 
-async function loadData() {
+async function loadData(options = {}) {
+    const { silent = false } = options;
     const startTime = performance.now();
     console.log('⏱️ Loading data...');
 
@@ -1832,7 +1883,14 @@ async function loadData() {
         updateLastRefreshTime();
         console.log('✅ Updated last refresh time:', refreshTime);
         
-        showNotification('Data loaded successfully!', 'success');
+        dataLoaded = true;
+        if (fixedExpensesLoaded && !isMaterializingFixedExpenses) {
+            await materializeFixedExpensesForCurrentMonth();
+        }
+
+        if (!silent) {
+            showNotification('Data loaded successfully!', 'success');
+        }
     } catch (error) {
         const errorTime = performance.now() - startTime;
         console.error(`❌ Error after ${errorTime.toFixed(0)}ms:`, error);
@@ -10215,9 +10273,97 @@ async function loadFixedExpenses() {
         }
 
         allFixedExpenses = data.records;
+        fixedExpensesLoaded = true;
+        if (dataLoaded && !isMaterializingFixedExpenses) {
+            await materializeFixedExpensesForCurrentMonth();
+        }
     } catch (error) {
         console.log('Could not load fixed expenses:', error);
         allFixedExpenses = [];
+    }
+}
+
+function isFixedExpenseActiveForMonth(fields, year, month) {
+    const startYear = parseInt(fields.StartYear, 10);
+    const startMonth = parseInt(fields.StartMonth, 10);
+    const targetMonth = parseInt(month, 10);
+    if (!Number.isFinite(startYear) || !Number.isFinite(startMonth) || !Number.isFinite(targetMonth)) {
+        return false;
+    }
+    return year > startYear || (year === startYear && targetMonth >= startMonth);
+}
+
+function findExistingFixedExpenseEntry(fixedExpense, year, month) {
+    const fixedFields = fixedExpense.fields || {};
+    const fixedItem = String(fixedFields.Item || '').trim().toLowerCase();
+    const fixedCategory = String(fixedFields.Category || '').trim().toLowerCase();
+    const fixedAmount = Number(fixedFields.Amount || 0);
+    return allExpenses.find(expense => {
+        const fields = expense.fields || {};
+        const expenseMonth = String(fields.Month || '').padStart(2, '0');
+        if (fields.Year !== year || expenseMonth !== String(month).padStart(2, '0')) {
+            return false;
+        }
+        if (fields.FixedExpenseId && fields.FixedExpenseId === fixedExpense.id) {
+            return true;
+        }
+        const itemMatch = String(fields.Item || '').trim().toLowerCase() === fixedItem;
+        const categoryMatch = String(fields.Category || '').trim().toLowerCase() === fixedCategory;
+        const amountMatch = Math.abs((Number(fields.Actual) || 0) - fixedAmount) < 0.01;
+        return itemMatch && categoryMatch && amountMatch;
+    });
+}
+
+async function materializeFixedExpensesForCurrentMonth() {
+    if (!dataLoaded || !fixedExpensesLoaded || isMaterializingFixedExpenses) return;
+    if (!Array.isArray(allFixedExpenses) || allFixedExpenses.length === 0) return;
+
+    isMaterializingFixedExpenses = true;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const created = [];
+
+    try {
+        for (const fixedExpense of allFixedExpenses) {
+            const fields = fixedExpense.fields || {};
+            if (!isFixedExpenseActiveForMonth(fields, year, month)) continue;
+            if (findExistingFixedExpenseEntry(fixedExpense, year, month)) continue;
+
+            const amount = Number(fields.Amount || 0);
+            if (!Number.isFinite(amount) || amount <= 0) continue;
+
+            const newExpense = {
+                id: 'rec' + Date.now() + Math.random().toString(36).substr(2, 9),
+                Item: String(fields.Item || '').trim(),
+                Category: formatCategory(fields.Category || ''),
+                Year: year,
+                Month: month,
+                Day: 1,
+                Actual: amount,
+                LLC: fields.LLC || 'No',
+                AmarContribution: Number(fields.AmarContribution || 0),
+                PriyaContribution: Number(fields.PriyaContribution || 0),
+                Tags: formatTags(fields.Tags || ''),
+                Notes: String(fields.Notes || '').trim(),
+                FixedExpenseId: fixedExpense.id,
+                IsFixedExpense: true
+            };
+
+            const saved = await supabasePost(TABLE_NAME, newExpense);
+            const expenseId = saved?.id || newExpense.id;
+            await createPaymentEntriesFromContributions(newExpense, expenseId);
+            created.push(newExpense);
+        }
+
+        if (created.length > 0) {
+            await loadData({ silent: true });
+            showNotification(`Added ${created.length} fixed expense${created.length > 1 ? 's' : ''} for ${month}/${year}`, 'success');
+        }
+    } catch (error) {
+        console.error('Error materializing fixed expenses:', error);
+    } finally {
+        isMaterializingFixedExpenses = false;
     }
 }
 
@@ -10804,6 +10950,25 @@ function openAddFixedExpenseForm() {
     document.getElementById('fixedExpenseForm').reset();
     document.getElementById('fixedExpenseId').value = '';
 
+    const fixedLLC = document.getElementById('fixedLLC');
+    if (fixedLLC) {
+        fixedLLC.value = 'No';
+        updateFixedLLCButtonState('No');
+    }
+    const fixedPanel = document.getElementById('fixedMoreDetailsPanel');
+    if (fixedPanel) {
+        fixedPanel.classList.add('hidden');
+        updateFixedMoreDetailsButtonState(false);
+    }
+    const fixedAmar = document.getElementById('fixedAmarContributionInput');
+    const fixedPriya = document.getElementById('fixedPriyaContributionInput');
+    const fixedTags = document.getElementById('fixedTags');
+    const fixedNotes = document.getElementById('fixedNotes');
+    if (fixedAmar) fixedAmar.value = '';
+    if (fixedPriya) fixedPriya.value = '';
+    if (fixedTags) fixedTags.value = '';
+    if (fixedNotes) fixedNotes.value = '';
+
     // Populate year dropdown
     const yearSelect = document.getElementById('fixedStartYear');
     yearSelect.innerHTML = '';
@@ -10845,6 +11010,11 @@ function renderFixedExpenses() {
         const fields = expense.fields;
         const startMonth = monthNames[parseInt(fields.StartMonth) - 1] || 'N/A';
         const amount = fields.Amount || 0;
+        const amar = Number(fields.AmarContribution || 0);
+        const priya = Number(fields.PriyaContribution || 0);
+        const contributionLine = amar || priya
+            ? `<p class="text-xs text-gray-500 mt-1">Contrib: Amar $${amar.toFixed(2)}, Priya $${priya.toFixed(2)}</p>`
+            : '';
         return `
                     <div class="p-4 border border-gray-200 rounded-lg hover:shadow-md transition-shadow">
                         <div class="flex justify-between items-start">
@@ -10852,6 +11022,7 @@ function renderFixedExpenses() {
                                 <h4 class="font-bold text-gray-800">${fields.Item || 'Unnamed'}</h4>
                                 <p class="text-sm text-gray-600">${fields.Category || 'N/A'}</p>
                                 <p class="text-xs text-gray-500 mt-1">Starts: ${startMonth} ${fields.StartYear || 'N/A'}</p>
+                                ${contributionLine}
                             </div>
                             <div class="text-right">
                                 <p class="text-lg font-bold text-purple-600">$${amount.toFixed(2)}</p>
@@ -10875,13 +11046,63 @@ async function saveFixedExpense(event) {
     event.preventDefault();
 
     const id = document.getElementById('fixedExpenseId').value;
+    const amount = parseFloat(document.getElementById('fixedAmount').value);
+    if (!amount || amount <= 0) {
+        showNotification('Please enter a valid amount', 'error');
+        return;
+    }
+
+    let amarContribution = parseFloat(document.getElementById('fixedAmarContributionInput')?.value) || 0;
+    let priyaContribution = parseFloat(document.getElementById('fixedPriyaContributionInput')?.value) || 0;
+    const totalContribution = amarContribution + priyaContribution;
+    const contributionMismatch = Math.abs(totalContribution - amount) > 0.01;
+
+    if ((amarContribution <= 0 && priyaContribution <= 0) || contributionMismatch) {
+        const contributionChoice = await showContributionHelper(amount, amarContribution, priyaContribution);
+        if (contributionChoice === 'cancel') {
+            return;
+        } else if (contributionChoice === 'amar') {
+            amarContribution = amount;
+            priyaContribution = 0;
+            if (document.getElementById('fixedAmarContributionInput')) {
+                document.getElementById('fixedAmarContributionInput').value = amount;
+            }
+            if (document.getElementById('fixedPriyaContributionInput')) {
+                document.getElementById('fixedPriyaContributionInput').value = 0;
+            }
+        } else if (contributionChoice === 'priya') {
+            amarContribution = 0;
+            priyaContribution = amount;
+            if (document.getElementById('fixedAmarContributionInput')) {
+                document.getElementById('fixedAmarContributionInput').value = 0;
+            }
+            if (document.getElementById('fixedPriyaContributionInput')) {
+                document.getElementById('fixedPriyaContributionInput').value = amount;
+            }
+        } else if (contributionChoice === 'split') {
+            const half = amount / 2;
+            amarContribution = half;
+            priyaContribution = half;
+            if (document.getElementById('fixedAmarContributionInput')) {
+                document.getElementById('fixedAmarContributionInput').value = half;
+            }
+            if (document.getElementById('fixedPriyaContributionInput')) {
+                document.getElementById('fixedPriyaContributionInput').value = half;
+            }
+        }
+    }
+
     const fields = {
-        Item: document.getElementById('fixedItemName').value,
-        Category: document.getElementById('fixedCategory').value,
-        Amount: parseFloat(document.getElementById('fixedAmount').value),
+        Item: document.getElementById('fixedItemName').value.trim(),
+        Category: formatCategory(document.getElementById('fixedCategory').value),
+        Amount: amount,
         LLC: document.getElementById('fixedLLC').value,
         StartYear: parseInt(document.getElementById('fixedStartYear').value),
-        StartMonth: document.getElementById('fixedStartMonth').value
+        StartMonth: document.getElementById('fixedStartMonth').value,
+        AmarContribution: amarContribution,
+        PriyaContribution: priyaContribution,
+        Tags: formatTags(document.getElementById('fixedTags')?.value || ''),
+        Notes: document.getElementById('fixedNotes')?.value.trim() || ''
     };
 
     showLoader('Saving fixed expense...');
@@ -10919,6 +11140,19 @@ async function editFixedExpense(id) {
     document.getElementById('fixedCategory').value = expense.fields.Category;
     document.getElementById('fixedAmount').value = expense.fields.Amount;
     document.getElementById('fixedLLC').value = expense.fields.LLC || 'No';
+    updateFixedLLCButtonState(document.getElementById('fixedLLC').value);
+    if (document.getElementById('fixedAmarContributionInput')) {
+        document.getElementById('fixedAmarContributionInput').value = expense.fields.AmarContribution || '';
+    }
+    if (document.getElementById('fixedPriyaContributionInput')) {
+        document.getElementById('fixedPriyaContributionInput').value = expense.fields.PriyaContribution || '';
+    }
+    if (document.getElementById('fixedTags')) {
+        document.getElementById('fixedTags').value = expense.fields.Tags || '';
+    }
+    if (document.getElementById('fixedNotes')) {
+        document.getElementById('fixedNotes').value = expense.fields.Notes || '';
+    }
 
     // Populate year dropdown
     const yearSelect = document.getElementById('fixedStartYear');
@@ -10933,6 +11167,23 @@ async function editFixedExpense(id) {
     }
 
     document.getElementById('fixedStartMonth').value = expense.fields.StartMonth;
+
+    const hasDetails =
+        Number(expense.fields.AmarContribution || 0) > 0 ||
+        Number(expense.fields.PriyaContribution || 0) > 0 ||
+        (expense.fields.Tags && String(expense.fields.Tags).trim()) ||
+        (expense.fields.Notes && String(expense.fields.Notes).trim());
+    const panel = document.getElementById('fixedMoreDetailsPanel');
+    if (panel) {
+        if (hasDetails) {
+            panel.classList.remove('hidden');
+            updateFixedMoreDetailsButtonState(true);
+        } else {
+            panel.classList.add('hidden');
+            updateFixedMoreDetailsButtonState(false);
+        }
+    }
+
     document.getElementById('addFixedExpenseModal').classList.add('active');
 }
 
