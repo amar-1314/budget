@@ -9287,6 +9287,139 @@ async function extractReceiptDataWithOcrSpaceAndGemini(receiptUrlOrDataUrl) {
     return extracted;
 }
 
+function extractGeminiJsonBlock(rawText) {
+    let jsonStr = String(rawText || '').trim();
+    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
+    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
+    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
+    jsonStr = jsonStr.trim();
+
+    const start = jsonStr.indexOf('{');
+    if (start === -1) return jsonStr;
+
+    let inString = false;
+    let escaped = false;
+    const stack = [];
+
+    for (let i = start; i < jsonStr.length; i++) {
+        const ch = jsonStr[i];
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (ch === '"') {
+            inString = true;
+            continue;
+        }
+        if (ch === '{' || ch === '[') {
+            stack.push(ch);
+            continue;
+        }
+        if (ch === '}' || ch === ']') {
+            if (stack.length) {
+                const last = stack[stack.length - 1];
+                if ((ch === '}' && last === '{') || (ch === ']' && last === '[')) {
+                    stack.pop();
+                }
+            }
+            if (stack.length === 0) {
+                return jsonStr.slice(start, i + 1);
+            }
+        }
+    }
+
+    return jsonStr.slice(start);
+}
+
+function appendMissingJsonClosers(jsonStr) {
+    let inString = false;
+    let escaped = false;
+    const stack = [];
+
+    for (let i = 0; i < jsonStr.length; i++) {
+        const ch = jsonStr[i];
+        if (inString) {
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (ch === '"') {
+            inString = true;
+            continue;
+        }
+        if (ch === '{' || ch === '[') {
+            stack.push(ch);
+            continue;
+        }
+        if (ch === '}' || ch === ']') {
+            if (stack.length) {
+                const last = stack[stack.length - 1];
+                if ((ch === '}' && last === '{') || (ch === ']' && last === '[')) {
+                    stack.pop();
+                }
+            }
+        }
+    }
+
+    if (!stack.length) return jsonStr;
+
+    let suffix = '';
+    for (let i = stack.length - 1; i >= 0; i--) {
+        suffix += stack[i] === '{' ? '}' : ']';
+    }
+    return jsonStr + suffix;
+}
+
+function parseGeminiReceiptJson(textResponse) {
+    if (!textResponse) throw new Error('No text response from Gemini');
+
+    const raw = extractGeminiJsonBlock(textResponse);
+    const cleaned = raw.replace(/,\s*([}\]])/g, '$1').trim();
+
+    const attempt = safeJsonParse(cleaned);
+    if (attempt) return attempt;
+
+    const repaired = appendMissingJsonClosers(cleaned);
+    if (repaired !== cleaned) {
+        const repairedAttempt = safeJsonParse(repaired);
+        if (repairedAttempt) {
+            console.warn('Repaired malformed Gemini JSON response.');
+            return repairedAttempt;
+        }
+    }
+
+    const lastObj = cleaned.lastIndexOf('}');
+    const lastArr = cleaned.lastIndexOf(']');
+    const last = Math.max(lastObj, lastArr);
+    if (last > 0) {
+        const trimmedAttempt = safeJsonParse(cleaned.slice(0, last + 1));
+        if (trimmedAttempt) return trimmedAttempt;
+    }
+
+    throw new Error('Gemini JSON parse error: Response was truncated or malformed');
+}
+
 async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
     const apiKey = await getGeminiApiKey();
 
@@ -9341,21 +9474,7 @@ ${ocrText}`;
     }
 
     const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!textResponse) throw new Error('No text response from Gemini');
-
-    let jsonStr = String(textResponse).trim();
-    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
-    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
-    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
-    jsonStr = jsonStr.trim();
-    const firstObj = jsonStr.indexOf('{');
-    const lastObj = jsonStr.lastIndexOf('}');
-    if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
-        jsonStr = jsonStr.slice(firstObj, lastObj + 1);
-    }
-    jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1').trim();
-
-    const parsed = JSON.parse(jsonStr);
+    const parsed = parseGeminiReceiptJson(textResponse);
     return normalizeReceiptExtractedData(parsed);
 }
 
