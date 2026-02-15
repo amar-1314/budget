@@ -8859,9 +8859,9 @@ async function processReceiptWithClientRules(receiptUrlOrDataUrl) {
 
     updateScanningSpinner('Extracting items...', 'Gemini image (final attempt)');
     const imgDataUrl = await compressReceiptImageToDataUrl(source, {
-        maxWidth: 1800,
-        maxHeight: 2200,
-        quality: 0.6
+        maxWidth: 2400,
+        maxHeight: 3200,
+        quality: 0.75
     });
     try {
         const extracted = await extractReceiptDataWithGeminiFromImage(imgDataUrl);
@@ -9541,6 +9541,39 @@ async function callGeminiGenerateContent(apiKey, requestBody, options = {}) {
     return data;
 }
 
+async function parseGeminiReceiptResponseWithRetry(apiKey, requestBody) {
+    let data = await callGeminiGenerateContent(apiKey, requestBody);
+    let finishReason = String(data?.candidates?.[0]?.finishReason || '').trim();
+    let textResponse = getGeminiTextFromResponse(data);
+
+    try {
+        return parseGeminiReceiptJson(textResponse);
+    } catch (e) {
+        if (finishReason !== 'MAX_TOKENS') throw e;
+
+        const retryRequestBody = {
+            ...requestBody,
+            generationConfig: {
+                ...requestBody.generationConfig,
+                maxOutputTokens: Math.max(8192, requestBody.generationConfig?.maxOutputTokens || 0)
+            }
+        };
+
+        data = await callGeminiGenerateContent(apiKey, retryRequestBody);
+        finishReason = String(data?.candidates?.[0]?.finishReason || '').trim();
+        textResponse = getGeminiTextFromResponse(data);
+
+        try {
+            return parseGeminiReceiptJson(textResponse);
+        } catch (retryErr) {
+            if (finishReason === 'MAX_TOKENS') {
+                throw new Error(`Gemini output truncated (MAX_TOKENS): ${retryErr.message}`);
+            }
+            throw retryErr;
+        }
+    }
+}
+
 async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
     const apiKey = await getGeminiApiKey();
 
@@ -9579,7 +9612,7 @@ ${ocrText}`;
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 4096,
+            maxOutputTokens: 8192,
             responseMimeType: 'application/json',
             thinkingConfig: {
                 thinkingBudget: 0
@@ -9639,7 +9672,7 @@ Rules:
         }],
         generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 4096,
+            maxOutputTokens: 8192,
             responseMimeType: 'application/json',
             thinkingConfig: {
                 thinkingBudget: 0
