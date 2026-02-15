@@ -8858,7 +8858,11 @@ async function processReceiptWithClientRules(receiptUrlOrDataUrl) {
     }
 
     updateScanningSpinner('Extracting items...', 'Gemini image (final attempt)');
-    const imgDataUrl = await compressReceiptImageToDataUrl(source);
+    const imgDataUrl = await compressReceiptImageToDataUrl(source, {
+        maxWidth: 1800,
+        maxHeight: 2200,
+        quality: 0.6
+    });
     try {
         const extracted = await extractReceiptDataWithGeminiFromImage(imgDataUrl);
         return normalizeReceiptExtractedData(extracted);
@@ -9478,6 +9482,65 @@ function parseGeminiReceiptJson(textResponse) {
     throw new Error('Gemini JSON parse error: Response was truncated or malformed');
 }
 
+function getGeminiTextFromResponse(data) {
+    const parts = data?.candidates?.[0]?.content?.parts;
+    if (!Array.isArray(parts)) return '';
+    return parts
+        .map(part => String(part?.text || ''))
+        .join('')
+        .trim();
+}
+
+function isGeminiGenerationConfigCompatibilityError(message) {
+    const msg = String(message || '').toLowerCase();
+    if (!msg) return false;
+    return (
+        msg.includes('unknown name "responsemimetype"') ||
+        msg.includes('unknown name "thinkingconfig"') ||
+        msg.includes('cannot find field') ||
+        (msg.includes('invalid json payload') && msg.includes('generationconfig'))
+    );
+}
+
+async function callGeminiGenerateContent(apiKey, requestBody, options = {}) {
+    const { allowLegacyConfigFallback = true } = options;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+    const send = async (body) => {
+        const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await resp.json().catch(() => null);
+        return { resp, data };
+    };
+
+    let { resp, data } = await send(requestBody);
+    if (resp.ok) return data;
+
+    const errMsg = data?.error?.message || `Gemini request failed: ${resp.status}`;
+    if (!allowLegacyConfigFallback || !isGeminiGenerationConfigCompatibilityError(errMsg)) {
+        throw new Error(String(errMsg));
+    }
+
+    const legacyRequestBody = {
+        ...requestBody,
+        generationConfig: {
+            temperature: requestBody?.generationConfig?.temperature ?? 0.1,
+            maxOutputTokens: requestBody?.generationConfig?.maxOutputTokens ?? 4096
+        }
+    };
+
+    ({ resp, data } = await send(legacyRequestBody));
+    if (!resp.ok) {
+        const legacyErrMsg = data?.error?.message || `Gemini request failed: ${resp.status}`;
+        throw new Error(String(legacyErrMsg));
+    }
+
+    return data;
+}
+
 async function extractReceiptDataWithGeminiFromOcrText(ocrText) {
     const apiKey = await getGeminiApiKey();
 
@@ -9506,6 +9569,7 @@ Rules:
 - Keep brand if it's important for identifying the item
 - quantity_unit must be one of the allowed values (default "ea")
 - Prices should be numbers without currency symbols
+- Keep output compact JSON (no pretty printing)
 - IMPORTANT: Do not emit discounts/coupons as standalone items. If a discount line appears for an item, fold it into that item's total_price (net) and keep the product as a single item.
 
 OCR TEXT:
@@ -9515,24 +9579,16 @@ ${ocrText}`;
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 4096
+            maxOutputTokens: 4096,
+            responseMimeType: 'application/json',
+            thinkingConfig: {
+                thinkingBudget: 0
+            }
         }
     };
 
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-    });
+    const parsed = await parseGeminiReceiptResponseWithRetry(apiKey, requestBody);
 
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok) {
-        const errMsg = data?.error?.message || `Gemini request failed: ${resp.status}`;
-        throw new Error(String(errMsg));
-    }
-
-    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    const parsed = parseGeminiReceiptJson(textResponse);
     return normalizeReceiptExtractedData(parsed);
 }
 
@@ -9566,6 +9622,7 @@ Rules:
 - Keep brand if it's important for identifying the item
 - quantity_unit must be one of the allowed values (default "ea")
 - Prices should be numbers without currency symbols
+- Keep output compact JSON (no pretty printing)
 - IMPORTANT: Do not emit discounts/coupons as standalone items. If a discount line appears for an item, fold it into that item's total_price (net) and keep the product as a single item.`;
 
     const requestBody = {
@@ -9582,38 +9639,16 @@ Rules:
         }],
         generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 4096
+            maxOutputTokens: 4096,
+            responseMimeType: 'application/json',
+            thinkingConfig: {
+                thinkingBudget: 0
+            }
         }
     };
 
-    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
-    });
+    const parsed = await parseGeminiReceiptResponseWithRetry(apiKey, requestBody);
 
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok) {
-        const errMsg = data?.error?.message || `Gemini request failed: ${resp.status}`;
-        throw new Error(String(errMsg));
-    }
-
-    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!textResponse) throw new Error('No text response from Gemini');
-
-    let jsonStr = String(textResponse).trim();
-    if (jsonStr.startsWith('```json')) jsonStr = jsonStr.slice(7);
-    else if (jsonStr.startsWith('```')) jsonStr = jsonStr.slice(3);
-    if (jsonStr.endsWith('```')) jsonStr = jsonStr.slice(0, -3);
-    jsonStr = jsonStr.trim();
-    const firstObj = jsonStr.indexOf('{');
-    const lastObj = jsonStr.lastIndexOf('}');
-    if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
-        jsonStr = jsonStr.slice(firstObj, lastObj + 1);
-    }
-    jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1').trim();
-
-    const parsed = JSON.parse(jsonStr);
     return normalizeReceiptExtractedData(parsed);
 }
 
