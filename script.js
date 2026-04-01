@@ -7239,6 +7239,7 @@ async function saveStandaloneContribution(event) {
             };
             await supabasePost(PAYMENTS_TABLE, priyaPayment);
 
+            setButtonLoading(submitBtn, false);
             closeContributionModal();
             await loadData();
             hideLoader();
@@ -7267,6 +7268,7 @@ async function saveStandaloneContribution(event) {
                 await supabasePost(PAYMENTS_TABLE, newPayment);
             }
 
+            setButtonLoading(submitBtn, false);
             closeContributionModal();
             await loadData();
             hideLoader();
