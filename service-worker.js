@@ -2,7 +2,7 @@
 // Enables background push notifications and offline support
 
 // Auto-generated cache version based on build timestamp
-const BUILD_TIMESTAMP = '2026-02-15T02:56:30Z'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2026-04-01T18:44:25Z'; // Auto-updated on deployment
 const CACHE_VERSION = BUILD_TIMESTAMP.replace(/[-:]/g, '').replace(/T/g, '-').replace(/Z/g, '');
 const CACHE_NAME = `budget-tracker-${CACHE_VERSION}`;
 
