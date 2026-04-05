@@ -13017,13 +13017,11 @@ function createPredictionTrendChart(predicted, avgMonthly, lastMonth, currentMon
 }
 
 function openAIInsights() {
-    closeAllModalsExcept('aiInsightsModal');
-    document.getElementById('aiInsightsModal').classList.add('active');
-    generateAIInsights();
+    openAnalyzeFinances();
 }
 
 function closeAIInsights() {
-    document.getElementById('aiInsightsModal').classList.remove('active');
+    closeAnalyzeFinances();
 }
 
 function generateAIInsights() {
@@ -13342,17 +13340,31 @@ function generateFinancialAnalysis() {
         return;
     }
 
-    // Use ALL available data to get a true long-term picture.
+    // Cumulative analysis starting from Jan 2026.
     // Periodic expenses (semi-annual insurance, annual fees) are properly
     // amortized across the full window instead of spiking a single month.
-    const allMonthKeys = new Set();
-    allExpenses.forEach(exp => {
+    const ANALYSIS_START = '2026-01';
+
+    const analysisExpenses = allExpenses.filter(exp => {
         const k = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
-        allMonthKeys.add(k);
+        return k >= ANALYSIS_START;
     });
-    allPayments.forEach(p => {
+    const analysisPayments = allPayments.filter(p => {
         const k = `${p.fields.Year}-${String(p.fields.Month).padStart(2, '0')}`;
-        allMonthKeys.add(k);
+        return k >= ANALYSIS_START;
+    });
+
+    if (analysisExpenses.length === 0) {
+        container.innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fas fa-inbox text-4xl mb-3"></i><p>No expenses found from Jan 2026 onwards.</p></div>';
+        return;
+    }
+
+    const allMonthKeys = new Set();
+    analysisExpenses.forEach(exp => {
+        allMonthKeys.add(`${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`);
+    });
+    analysisPayments.forEach(p => {
+        allMonthKeys.add(`${p.fields.Year}-${String(p.fields.Month).padStart(2, '0')}`);
     });
     const sortedMonthKeys = [...allMonthKeys].sort();
     const monthCount = sortedMonthKeys.length || 1;
@@ -13367,7 +13379,7 @@ function generateFinancialAnalysis() {
         }
     }
 
-    const totalRentalIncome = allPayments
+    const totalRentalIncome = analysisPayments
         .filter(p => p.fields.PaymentType === 'RentalIncome')
         .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
     const avgRentalIncome = totalRentalIncome / monthCount;
@@ -13379,7 +13391,7 @@ function generateFinancialAnalysis() {
     const categoryMonthly = {};  // { cat: { 'YYYY-MM': total } }
     let totalSpent = 0;
     let mortgageTotal = 0;
-    allExpenses.forEach(exp => {
+    analysisExpenses.forEach(exp => {
         const cat = (exp.fields.Category || 'Other').trim();
         const amt = exp.fields.Actual || 0;
         const mk = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
@@ -13646,163 +13658,173 @@ function renderFinancialAnalysis(container, data) {
         categoryResults, insights, monthCount
     } = data;
 
+    const scoreColor = healthScore.score >= 70 ? '#10b981' : healthScore.score >= 50 ? '#f59e0b' : '#ef4444';
     const scoreGradient = healthScore.score >= 70
-        ? 'from-green-500 to-emerald-600'
+        ? 'linear-gradient(135deg, #10b981, #059669)'
         : healthScore.score >= 50
-            ? 'from-yellow-500 to-orange-500'
-            : 'from-red-500 to-pink-600';
+            ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+            : 'linear-gradient(135deg, #ef4444, #dc2626)';
 
-    const incomeBarWidth = 100;
     const spendBarWidth = totalMonthlyIncome > 0 ? Math.min(100, (avgTotalSpent / totalMonthlyIncome) * 100) : 100;
-    const surplusColor = monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600';
+    const surplusColor = monthlySurplus >= 0 ? 'color: #059669' : 'color: #dc2626';
+    const surplusBg = monthlySurplus >= 0 ? 'background: rgba(16,185,129,0.1)' : 'background: rgba(239,68,68,0.1)';
 
-    let html = `<div class="space-y-6">`;
+    let html = `<div style="display: flex; flex-direction: column; gap: 20px;">`;
 
     // 1. Health Score Card
     html += `
-        <div class="rounded-xl p-6 bg-gradient-to-br ${scoreGradient} text-white">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-xl font-bold mb-1">Financial Health Score</h3>
-                    <p class="text-sm opacity-90">${healthScore.message}</p>
+        <div style="background: ${scoreGradient}; border-radius: var(--radius-lg); padding: 24px; color: white; box-shadow: var(--shadow-md);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="flex: 1;">
+                    <div style="font-size: 18px; font-weight: 800; margin-bottom: 6px;">Financial Health Score</div>
+                    <div style="font-size: 13px; opacity: 0.9; line-height: 1.4;">${healthScore.message}</div>
                 </div>
-                <div class="text-center">
-                    <div class="text-5xl font-bold">${healthScore.score}</div>
-                    <div class="text-lg font-semibold opacity-75">Grade: ${healthScore.grade}</div>
+                <div style="text-align: center; margin-left: 16px;">
+                    <div style="font-size: 48px; font-weight: 800; line-height: 1;">${healthScore.score}</div>
+                    <div style="font-size: 14px; font-weight: 600; opacity: 0.8;">Grade: ${healthScore.grade}</div>
                 </div>
             </div>
-            <div class="mt-4 bg-white/20 rounded-full h-3">
-                <div class="bg-white rounded-full h-3 transition-all" style="width: ${healthScore.score}%"></div>
+            <div style="margin-top: 16px; background: rgba(255,255,255,0.2); border-radius: 99px; height: 10px;">
+                <div style="width: ${healthScore.score}%; background: white; border-radius: 99px; height: 10px; transition: width 0.5s ease;"></div>
             </div>
         </div>`;
 
     // 2. Income vs Expenses Summary
     html += `
-        <div class="card p-5">
-            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2"><i class="fas fa-balance-scale text-blue-500"></i>Income vs Expenses (Monthly Avg)</h3>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                <div class="bg-blue-50 rounded-lg p-3 text-center">
-                    <div class="text-xs text-blue-600 font-semibold">Salary</div>
-                    <div class="text-lg font-bold text-blue-800">$${salary.toLocaleString()}</div>
+        <div class="card" style="padding: 20px;">
+            <div style="font-weight: 700; font-size: 15px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
+                <i class="fas fa-balance-scale" style="color: var(--color-primary);"></i>Income vs Expenses <span style="font-weight: 400; font-size: 12px; color: #9ca3af;">(monthly avg)</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px;">
+                <div style="background: rgba(102,126,234,0.08); border-radius: var(--radius-md); padding: 12px; text-align: center;">
+                    <div style="font-size: 11px; font-weight: 600; color: #667eea; text-transform: uppercase; letter-spacing: 0.5px;">Salary</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #1f2937;">$${salary.toLocaleString()}</div>
                 </div>
-                <div class="bg-green-50 rounded-lg p-3 text-center">
-                    <div class="text-xs text-green-600 font-semibold">Rental Income</div>
-                    <div class="text-lg font-bold text-green-800">$${avgRentalIncome.toFixed(0)}</div>
+                <div style="background: rgba(16,185,129,0.08); border-radius: var(--radius-md); padding: 12px; text-align: center;">
+                    <div style="font-size: 11px; font-weight: 600; color: #10b981; text-transform: uppercase; letter-spacing: 0.5px;"><i class="fas fa-home" style="margin-right: 4px;"></i>Rental</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #1f2937;">$${avgRentalIncome.toFixed(0)}</div>
                 </div>
-                <div class="bg-purple-50 rounded-lg p-3 text-center">
-                    <div class="text-xs text-purple-600 font-semibold">Total Income</div>
-                    <div class="text-lg font-bold text-purple-800">$${totalMonthlyIncome.toFixed(0)}</div>
+                <div style="background: rgba(139,92,246,0.08); border-radius: var(--radius-md); padding: 12px; text-align: center;">
+                    <div style="font-size: 11px; font-weight: 600; color: #8b5cf6; text-transform: uppercase; letter-spacing: 0.5px;">Total Income</div>
+                    <div style="font-size: 20px; font-weight: 800; color: #1f2937;">$${totalMonthlyIncome.toFixed(0)}</div>
                 </div>
-                <div class="rounded-lg p-3 text-center ${monthlySurplus >= 0 ? 'bg-green-50' : 'bg-red-50'}">
-                    <div class="text-xs font-semibold ${surplusColor}">${monthlySurplus >= 0 ? 'Surplus' : 'Deficit'}</div>
-                    <div class="text-lg font-bold ${surplusColor}">${monthlySurplus >= 0 ? '' : '-'}$${Math.abs(monthlySurplus).toFixed(0)}</div>
+                <div style="${surplusBg}; border-radius: var(--radius-md); padding: 12px; text-align: center;">
+                    <div style="font-size: 11px; font-weight: 600; ${surplusColor}; text-transform: uppercase; letter-spacing: 0.5px;">${monthlySurplus >= 0 ? 'Surplus' : 'Deficit'}</div>
+                    <div style="font-size: 20px; font-weight: 800; ${surplusColor};">${monthlySurplus >= 0 ? '+' : '-'}$${Math.abs(monthlySurplus).toFixed(0)}</div>
                 </div>
             </div>
-            <div class="space-y-2">
-                <div class="flex items-center gap-3">
-                    <div class="text-xs text-gray-500 w-16">Income</div>
-                    <div class="flex-1 bg-gray-100 rounded-full h-4">
-                        <div class="bg-blue-500 rounded-full h-4" style="width: ${incomeBarWidth}%"></div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 11px; color: #6b7280; width: 60px;">Income</span>
+                    <div style="flex: 1; background: #f3f4f6; border-radius: 99px; height: 12px;">
+                        <div style="width: 100%; background: var(--color-primary); border-radius: 99px; height: 12px;"></div>
                     </div>
-                    <div class="text-xs font-semibold text-gray-700 w-20 text-right">$${totalMonthlyIncome.toFixed(0)}</div>
+                    <span style="font-size: 12px; font-weight: 700; color: #374151; width: 70px; text-align: right;">$${totalMonthlyIncome.toFixed(0)}</span>
                 </div>
-                <div class="flex items-center gap-3">
-                    <div class="text-xs text-gray-500 w-16">Spending</div>
-                    <div class="flex-1 bg-gray-100 rounded-full h-4">
-                        <div class="${spendBarWidth > 90 ? 'bg-red-500' : spendBarWidth > 75 ? 'bg-yellow-500' : 'bg-green-500'} rounded-full h-4" style="width: ${spendBarWidth}%"></div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 11px; color: #6b7280; width: 60px;">Spending</span>
+                    <div style="flex: 1; background: #f3f4f6; border-radius: 99px; height: 12px;">
+                        <div style="width: ${spendBarWidth}%; background: ${spendBarWidth > 90 ? '#ef4444' : spendBarWidth > 75 ? '#f59e0b' : '#10b981'}; border-radius: 99px; height: 12px; transition: width 0.5s ease;"></div>
                     </div>
-                    <div class="text-xs font-semibold text-gray-700 w-20 text-right">$${avgTotalSpent.toFixed(0)}</div>
+                    <span style="font-size: 12px; font-weight: 700; color: #374151; width: 70px; text-align: right;">$${avgTotalSpent.toFixed(0)}</span>
                 </div>
             </div>
-            <div class="mt-3 flex gap-4 text-xs text-gray-500">
-                <span>Savings Rate: <span class="font-bold ${savingsRate >= 20 ? 'text-green-600' : savingsRate >= 10 ? 'text-yellow-600' : 'text-red-600'}">${savingsRate.toFixed(0)}%</span></span>
-                <span>Discretionary: <span class="font-bold">${discretionaryRatio.toFixed(0)}%</span> of salary</span>
+            <div style="margin-top: 12px; display: flex; gap: 16px; font-size: 12px; color: #6b7280;">
+                <span>Savings: <strong style="color: ${savingsRate >= 20 ? '#059669' : savingsRate >= 10 ? '#d97706' : '#dc2626'};">${savingsRate.toFixed(0)}%</strong></span>
+                <span>Non-Housing Spend: <strong>${discretionaryRatio.toFixed(0)}%</strong> of salary</span>
             </div>
         </div>`;
 
     // 3. Housing Analysis
+    const housingBorderColor = housingRatio <= 28 ? '#10b981' : housingRatio <= 35 ? '#f59e0b' : '#ef4444';
     html += `
-        <div class="card p-5 border-l-4 ${housingRatio <= 28 ? 'border-green-500' : housingRatio <= 35 ? 'border-yellow-500' : 'border-red-500'}">
-            <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-home ${housingRatio <= 28 ? 'text-green-500' : housingRatio <= 35 ? 'text-yellow-500' : 'text-red-500'}"></i>Housing Analysis</h3>
-            <div class="grid grid-cols-3 gap-3 mb-3">
-                <div class="text-center">
-                    <div class="text-xs text-gray-500">Mortgage</div>
-                    <div class="text-lg font-bold text-gray-800">$${avgMortgage.toFixed(0)}</div>
+        <div class="card" style="padding: 20px; border-left: 4px solid ${housingBorderColor};">
+            <div style="font-weight: 700; font-size: 15px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
+                <i class="fas fa-home" style="color: ${housingBorderColor};"></i>Housing Analysis
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+                <div style="text-align: center; padding: 10px; background: #f9fafb; border-radius: var(--radius-md);">
+                    <div style="font-size: 11px; color: #6b7280; font-weight: 600;">Mortgage</div>
+                    <div style="font-size: 18px; font-weight: 800; color: #1f2937;">$${avgMortgage.toFixed(0)}</div>
+                    <div style="font-size: 10px; color: #9ca3af;">/month</div>
                 </div>
-                <div class="text-center">
-                    <div class="text-xs text-gray-500">Rental Income</div>
-                    <div class="text-lg font-bold text-green-600">-$${avgRentalIncome.toFixed(0)}</div>
+                <div style="text-align: center; padding: 10px; background: rgba(16,185,129,0.06); border-radius: var(--radius-md);">
+                    <div style="font-size: 11px; color: #10b981; font-weight: 600;">Rental Income</div>
+                    <div style="font-size: 18px; font-weight: 800; color: #059669;">-$${avgRentalIncome.toFixed(0)}</div>
+                    <div style="font-size: 10px; color: #9ca3af;">/month</div>
                 </div>
-                <div class="text-center">
-                    <div class="text-xs text-gray-500">Net Housing Cost</div>
-                    <div class="text-lg font-bold ${netHousingCost <= 0 ? 'text-green-600' : 'text-gray-800'}">$${netHousingCost.toFixed(0)}</div>
+                <div style="text-align: center; padding: 10px; background: ${netHousingCost <= 0 ? 'rgba(16,185,129,0.06)' : '#f9fafb'}; border-radius: var(--radius-md);">
+                    <div style="font-size: 11px; color: #6b7280; font-weight: 600;">Net Cost</div>
+                    <div style="font-size: 18px; font-weight: 800; color: ${netHousingCost <= 0 ? '#059669' : '#1f2937'};">${netHousingCost <= 0 ? '-' : ''}$${Math.abs(netHousingCost).toFixed(0)}</div>
+                    <div style="font-size: 10px; color: #9ca3af;">/month</div>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
-                <div class="text-xs text-gray-500">Housing-to-Salary Ratio:</div>
-                <div class="flex-1 bg-gray-100 rounded-full h-2.5">
-                    <div class="rounded-full h-2.5 ${housingRatio <= 28 ? 'bg-green-500' : housingRatio <= 35 ? 'bg-yellow-500' : 'bg-red-500'}" style="width: ${Math.min(100, housingRatio * 2)}%"></div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 11px; color: #6b7280; white-space: nowrap;">Housing Ratio:</span>
+                <div style="flex: 1; background: #f3f4f6; border-radius: 99px; height: 8px;">
+                    <div style="width: ${Math.min(100, housingRatio * 2)}%; background: ${housingBorderColor}; border-radius: 99px; height: 8px;"></div>
                 </div>
-                <div class="text-xs font-bold ${housingRatio <= 28 ? 'text-green-600' : housingRatio <= 35 ? 'text-yellow-600' : 'text-red-600'}">${housingRatio.toFixed(0)}%</div>
-                <div class="text-xs text-gray-400">(target: &lt;28%)</div>
+                <span style="font-size: 12px; font-weight: 700; color: ${housingBorderColor};">${housingRatio.toFixed(0)}%</span>
+                <span style="font-size: 10px; color: #9ca3af;">(target: &lt;28%)</span>
             </div>
-            <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Mortgage is treated as investment property cost, offset by rental income. Ratio uses salary only (not rental income).</p>
+            <div style="margin-top: 8px; font-size: 11px; color: #9ca3af;"><i class="fas fa-info-circle" style="margin-right: 4px;"></i>Mortgage is investment property cost, offset by rental income. Ratio uses salary only.</div>
         </div>`;
 
     // 4. Category Benchmark Grid
     html += `
         <div>
-            <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-th-list text-purple-500"></i>Category Benchmarks (Amortized over ${monthCount} months)</h3>
-            <div class="space-y-2">`;
+            <div style="font-weight: 700; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
+                <i class="fas fa-th-list" style="color: var(--color-primary);"></i>Category Benchmarks <span style="font-weight: 400; font-size: 12px; color: #9ca3af;">(amortized over ${monthCount} months)</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">`;
 
     categoryResults.forEach(r => {
         const icon = (r.benchmark && r.benchmark.icon) || FINANCIAL_BENCHMARKS[r.cat]?.icon || 'fa-tag';
-        const statusDot = r.statusColor === 'green' ? 'bg-green-500'
-            : r.statusColor === 'yellow' ? 'bg-yellow-500'
-            : r.statusColor === 'red' ? 'bg-red-500' : 'bg-gray-400';
-        const statusBg = r.statusColor === 'green' ? 'bg-green-50'
-            : r.statusColor === 'yellow' ? 'bg-yellow-50'
-            : r.statusColor === 'red' ? 'bg-red-50' : 'bg-gray-50';
-        const statusText = r.statusColor === 'green' ? 'text-green-700'
-            : r.statusColor === 'yellow' ? 'text-yellow-700'
-            : r.statusColor === 'red' ? 'text-red-700' : 'text-gray-600';
+        const dotColor = r.statusColor === 'green' ? '#10b981'
+            : r.statusColor === 'yellow' ? '#f59e0b'
+            : r.statusColor === 'red' ? '#ef4444' : '#9ca3af';
+        const labelBg = r.statusColor === 'green' ? 'rgba(16,185,129,0.1)'
+            : r.statusColor === 'yellow' ? 'rgba(245,158,11,0.1)'
+            : r.statusColor === 'red' ? 'rgba(239,68,68,0.1)' : 'rgba(156,163,175,0.1)';
+        const labelColor = r.statusColor === 'green' ? '#059669'
+            : r.statusColor === 'yellow' ? '#d97706'
+            : r.statusColor === 'red' ? '#dc2626' : '#6b7280';
 
         let barPct = 0;
-        let barColor = 'bg-gray-300';
+        let barColor = '#d1d5db';
         let benchmarkRange = 'No benchmark';
         if (r.benchmark) {
             barPct = Math.min(100, (r.avg / (r.benchmark.max * 1.5)) * 100);
-            barColor = r.statusColor === 'green' ? 'bg-green-500'
-                : r.statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-red-500';
+            barColor = dotColor;
             benchmarkRange = `$${r.benchmark.min} – $${r.benchmark.max}`;
         }
 
         const freq = r.frequency || {};
         const freqBadge = freq.type && freq.type !== 'monthly'
-            ? `<span class="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium ml-1" title="${freq.detail || ''}">${freq.label}</span>`
+            ? `<span style="display: inline-block; padding: 1px 6px; background: rgba(59,130,246,0.1); color: #2563eb; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 6px;" title="${freq.detail || ''}">${freq.label}</span>`
             : '';
 
         html += `
-            <div class="card p-3 flex items-center gap-3 ${statusBg} border-l-3" style="border-left: 3px solid;">
-                <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background: var(--gradient-primary);">
-                    <i class="fas ${icon} text-white text-xs"></i>
+            <div class="card" style="padding: 12px 14px; display: flex; align-items: center; gap: 12px; border-left: 3px solid ${dotColor};">
+                <div style="width: 32px; height: 32px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--gradient-primary);">
+                    <i class="fas ${icon}" style="color: white; font-size: 12px;"></i>
                 </div>
-                <div class="flex-1 min-w-0">
-                    <div class="flex items-center justify-between">
-                        <div class="font-semibold text-gray-800 text-sm truncate">${escapeHtml(r.cat)}${freqBadge}</div>
-                        <div class="flex items-center gap-2 flex-shrink-0">
-                            <span class="text-sm font-bold text-gray-800">$${r.avg.toFixed(0)}/mo</span>
-                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold ${statusText} ${statusBg}">
-                                <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>${r.statusLabel}
+                <div style="flex: 1; min-width: 0;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div style="font-weight: 600; font-size: 13px; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(r.cat)}${freqBadge}</div>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                            <span style="font-size: 14px; font-weight: 700; color: #1f2937;">$${r.avg.toFixed(0)}<span style="font-size: 10px; font-weight: 500; color: #9ca3af;">/mo</span></span>
+                            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; background: ${labelBg}; color: ${labelColor};">
+                                <span style="width: 6px; height: 6px; border-radius: 50%; background: ${dotColor};"></span>${r.statusLabel}
                             </span>
                         </div>
                     </div>
-                    ${freq.type && freq.type !== 'monthly' ? `<div class="text-xs text-blue-600 mt-0.5"><i class="fas fa-info-circle mr-1"></i>${freq.detail} (total: $${r.total.toFixed(0)} over ${monthCount} mo)</div>` : ''}
-                    <div class="mt-1 flex items-center gap-2">
-                        <div class="flex-1 bg-gray-200 rounded-full h-1.5">
-                            <div class="${barColor} rounded-full h-1.5 transition-all" style="width: ${barPct}%"></div>
+                    ${freq.type && freq.type !== 'monthly' ? `<div style="font-size: 11px; color: #3b82f6; margin-top: 2px;"><i class="fas fa-calendar-alt" style="margin-right: 4px;"></i>${freq.detail} (total: $${r.total.toFixed(0)} over ${monthCount} mo)</div>` : ''}
+                    <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                        <div style="flex: 1; background: #e5e7eb; border-radius: 99px; height: 5px;">
+                            <div style="width: ${barPct}%; background: ${barColor}; border-radius: 99px; height: 5px; transition: width 0.5s ease;"></div>
                         </div>
-                        <span class="text-xs text-gray-400 flex-shrink-0">${benchmarkRange}</span>
+                        <span style="font-size: 10px; color: #9ca3af; flex-shrink: 0;">${benchmarkRange}</span>
                     </div>
                 </div>
             </div>`;
@@ -13814,31 +13836,27 @@ function renderFinancialAnalysis(container, data) {
     if (insights.length > 0) {
         html += `
             <div>
-                <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-lightbulb text-yellow-500"></i>Key Takeaways</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
+                <div style="font-weight: 700; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
+                    <i class="fas fa-lightbulb" style="color: #f59e0b;"></i>Key Takeaways
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">`;
 
         insights.forEach(insight => {
-            const borderColor = insight.type === 'warning' ? 'border-red-500'
-                : insight.type === 'success' ? 'border-green-500'
-                : insight.type === 'info' ? 'border-blue-500' : 'border-yellow-500';
-            const bgColor = insight.type === 'warning' ? 'bg-red-50'
-                : insight.type === 'success' ? 'bg-green-50'
-                : insight.type === 'info' ? 'bg-blue-50' : 'bg-yellow-50';
-            const iconColor = insight.type === 'warning' ? 'text-red-600'
-                : insight.type === 'success' ? 'text-green-600'
-                : insight.type === 'info' ? 'text-blue-600' : 'text-yellow-600';
-            const actionColor = insight.type === 'warning' ? 'text-red-700'
-                : insight.type === 'success' ? 'text-green-700'
-                : insight.type === 'info' ? 'text-blue-700' : 'text-yellow-700';
+            const accentColor = insight.type === 'warning' ? '#ef4444'
+                : insight.type === 'success' ? '#10b981'
+                : insight.type === 'info' ? '#3b82f6' : '#f59e0b';
+            const bgTint = insight.type === 'warning' ? 'rgba(239,68,68,0.04)'
+                : insight.type === 'success' ? 'rgba(16,185,129,0.04)'
+                : insight.type === 'info' ? 'rgba(59,130,246,0.04)' : 'rgba(245,158,11,0.04)';
 
             html += `
-                <div class="card p-4 border-l-4 ${borderColor} ${bgColor}">
-                    <div class="flex items-start gap-3">
-                        <i class="fas ${insight.icon} text-xl ${iconColor} mt-0.5"></i>
-                        <div class="flex-1">
-                            <h4 class="font-bold text-gray-800 text-sm mb-1">${insight.title}</h4>
-                            <p class="text-xs text-gray-700 mb-2">${insight.message}</p>
-                            ${insight.action ? `<div class="text-xs font-semibold ${actionColor}"><i class="fas fa-lightbulb mr-1"></i>${insight.action}</div>` : ''}
+                <div class="card" style="padding: 14px 16px; border-left: 4px solid ${accentColor}; background: ${bgTint};">
+                    <div style="display: flex; align-items: flex-start; gap: 12px;">
+                        <i class="fas ${insight.icon}" style="font-size: 18px; color: ${accentColor}; margin-top: 2px; flex-shrink: 0;"></i>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; font-size: 13px; color: #1f2937; margin-bottom: 4px;">${insight.title}</div>
+                            <div style="font-size: 12px; color: #4b5563; line-height: 1.5;">${insight.message}</div>
+                            ${insight.action ? `<div style="margin-top: 6px; font-size: 11px; font-weight: 600; color: ${accentColor};"><i class="fas fa-lightbulb" style="margin-right: 4px;"></i>${insight.action}</div>` : ''}
                         </div>
                     </div>
                 </div>`;
@@ -13847,11 +13865,7 @@ function renderFinancialAnalysis(container, data) {
         html += `</div></div>`;
     }
 
-    html += `
-        <div class="text-center mt-4">
-            <button onclick="closeAnalyzeFinances()" class="btn-secondary">Close</button>
-        </div>
-    </div>`;
+    html += `</div>`;
 
     container.innerHTML = html;
 }

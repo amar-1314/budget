@@ -111,14 +111,6 @@
                         <div class="text-xs text-gray-500">AI-powered spending predictions</div>
                     </div>
                 </button>
-                <button onclick="openAIInsights(); toggleMenu();"
-                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
-                    <i class="fas fa-brain text-purple-600 text-xl"></i>
-                    <div>
-                        <div class="font-semibold text-gray-800">AI Insights</div>
-                        <div class="text-xs text-gray-500">Smart spending analysis & tips</div>
-                    </div>
-                </button>
                 <button onclick="openAnalyzeFinances(); toggleMenu();"
                     class="w-full text-left px-4 py-3 rounded-lg hover:bg-green-50 transition-colors flex items-center gap-3 border border-green-200">
                     <i class="fas fa-stethoscope text-green-600 text-xl"></i>
@@ -1586,36 +1578,18 @@
             </div>
         </div>
     </div>
-    <div id="aiInsightsModal" class="modal">
-        <div class="modal-content" style="max-width: 1000px;">
-            <div class="flex justify-between items-center mb-6">
-                <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-brain mr-2 text-purple-600"></i>AI
-                    Insights</h2>
-                <button onclick="closeAIInsights()" class="text-gray-400 hover:text-gray-600">
-                    <i class="fas fa-times text-2xl"></i>
-                </button>
-            </div>
-            <div class="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
-                <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Smart analysis of your spending
-                    patterns with actionable recommendations.</p>
-            </div>
-            <div id="aiInsightsContent">
-                <div class="text-center py-8 text-gray-400">
-                    <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
-                    <p>Analyzing your spending data...</p>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Analyze Finances Modal -->
+    <!-- Analyze Finances Modal (repurposed from AI Insights) -->
     <div id="analyzeFinancesModal" class="modal">
         <div class="modal-content" style="max-width: 1000px;">
-            <div class="flex justify-between items-center mb-6">
+            <div class="flex justify-between items-center mb-4">
                 <div>
                     <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-stethoscope mr-2 text-green-600"></i>Financial Health Check</h2>
-                    <div class="text-sm text-gray-500" id="analyzeFinancesSubtitle"></div>
+                    <div class="text-sm text-gray-500 mt-1" id="analyzeFinancesSubtitle"></div>
                 </div>
                 <button onclick="closeAnalyzeFinances()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-2xl"></i></button>
+            </div>
+            <div class="bg-green-50 border-l-4 border-green-500 p-4 mb-6 rounded-r-lg">
+                <p class="text-sm text-green-800"><i class="fas fa-info-circle mr-2"></i>Cumulative analysis of your spending vs benchmarks for a family in the DMV area. Periodic expenses (insurance, annual fees) are automatically amortized.</p>
             </div>
             <div id="analyzeFinancesContent">
                 <div class="text-center py-8 text-gray-400">
