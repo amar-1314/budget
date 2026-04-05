@@ -7087,10 +7087,15 @@ function checkContributionMismatches() {
         data.contributions = data.amarNonMortgage + amarAdjustedMortgage + data.priya + priyaMortgageContribs;
     });
 
-    // Check for mismatches
+    // Check for mismatches (only from Nov 2025 onward, when contribution tracking was introduced)
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     Object.keys(monthlyData).forEach(key => {
         const data = monthlyData[key];
+        const yr = parseInt(data.year);
+        const mo = parseInt(data.month);
+
+        // Skip months before Nov 2025 — contribution fields weren't tracked yet
+        if (yr < 2025 || (yr === 2025 && mo < 11)) return;
 
         // Check if contributions match spending
         // Rental income is tracked separately and only affects remaining balance, not mismatch detection
@@ -7098,7 +7103,7 @@ function checkContributionMismatches() {
 
         // Allow small rounding differences (< $0.01)
         if (diff > 0.01) {
-            const monthName = monthNames[parseInt(data.month) - 1];
+            const monthName = monthNames[mo - 1];
             const type = data.contributions > data.spending ? 'over' : 'under';
             mismatches.push({
                 period: `${monthName} ${data.year}`,
