@@ -1,6 +1,6 @@
 // Version format: YEAR.WEEK.DEPLOYMENT (e.g., 25.48.1)
-const BUILD_TIMESTAMP = '2026-04-05T05:17:35Z'; // Auto-updated on deployment
-const APP_VERSION = '26.14.5'; // Auto-updated on deployment
+const BUILD_TIMESTAMP = '2026-04-05T05:19:03Z'; // Auto-updated on deployment
+const APP_VERSION = '26.14.6'; // Auto-updated on deployment
 
 const SESSION_LOGS_KEY = 'session_logs_v1';
 const SESSION_LOGS_MAX = 800;
