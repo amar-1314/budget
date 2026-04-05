@@ -20,14 +20,12 @@ function updateFixedLLCButtonState(value) {
     const llcBtn = document.getElementById('fixedLlcToggleBtn');
     if (!llcBtn) return;
     if (value === 'Yes') {
-        llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
-        llcBtn.style.color = 'white';
-        llcBtn.style.borderColor = '#3b82f6';
+        llcBtn.classList.remove('toggle-btn-inactive');
+        llcBtn.classList.add('toggle-btn-active-llc');
         llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Business</span>';
     } else {
-        llcBtn.style.background = 'white';
-        llcBtn.style.color = '#6b7280';
-        llcBtn.style.borderColor = '#e5e7eb';
+        llcBtn.classList.remove('toggle-btn-active-llc');
+        llcBtn.classList.add('toggle-btn-inactive');
         llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
     }
 }
@@ -36,14 +34,12 @@ function updateFixedMoreDetailsButtonState(isOpen) {
     const btn = document.getElementById('fixedMoreDetailsBtn');
     if (!btn) return;
     if (isOpen) {
-        btn.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
-        btn.style.color = 'white';
-        btn.style.borderColor = '#8b5cf6';
+        btn.classList.remove('toggle-btn-inactive');
+        btn.classList.add('toggle-btn-active-more');
         btn.innerHTML = '<i class="fas fa-chevron-up"></i><span>Less</span>';
     } else {
-        btn.style.background = 'white';
-        btn.style.color = '#6b7280';
-        btn.style.borderColor = '#e5e7eb';
+        btn.classList.remove('toggle-btn-active-more');
+        btn.classList.add('toggle-btn-inactive');
         btn.innerHTML = '<i class="fas fa-ellipsis-h"></i><span>More</span>';
     }
 }
@@ -1566,7 +1562,6 @@ document.addEventListener('DOMContentLoaded', function () {
                  left: 0;
                  right: 0;
                  height: 80px;
-                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                  display: flex;
                  align-items: center;
                  justify-content: center;
@@ -1576,6 +1571,7 @@ document.addEventListener('DOMContentLoaded', function () {
                  font-weight: 600;
                  font-size: 14px;
              `;
+    pullToRefreshIndicator.classList.add('pull-refresh-default');
     pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><i class="fas fa-arrow-down" style="font-size: 20px; margin-bottom: 6px; opacity: 0.7;"></i><div>Pull down to refresh</div></div>';
     document.body.appendChild(pullToRefreshIndicator);
     
@@ -1616,10 +1612,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     hasTriggeredHaptic = true;
                 }
                 pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><i class="fas fa-check-circle" style="font-size: 24px; margin-bottom: 6px;"></i><div>Release to refresh</div></div>';
-                pullToRefreshIndicator.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)'; // Green
+                pullToRefreshIndicator.classList.remove('pull-refresh-default');
+                pullToRefreshIndicator.classList.add('pull-refresh-ready');
             } else {
                 pullToRefreshIndicator.innerHTML = `<div style="text-align: center;"><i class="fas fa-arrow-down" style="font-size: 20px; margin-bottom: 6px; opacity: ${0.5 + progress/200};"></i><div>Pull down to refresh</div></div>`;
-                pullToRefreshIndicator.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'; // Purple
+                pullToRefreshIndicator.classList.remove('pull-refresh-ready');
+                pullToRefreshIndicator.classList.add('pull-refresh-default');
             }
         }
     }, { passive: true });
@@ -1633,7 +1631,8 @@ document.addEventListener('DOMContentLoaded', function () {
             
             // Trigger refresh
             pullToRefreshIndicator.innerHTML = '<div style="text-align: center;"><div class="loading" style="width: 24px; height: 24px; border-width: 3px; margin: 0 auto 8px;"></div><div>Refreshing...</div></div>';
-            pullToRefreshIndicator.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            pullToRefreshIndicator.classList.remove('pull-refresh-ready');
+            pullToRefreshIndicator.classList.add('pull-refresh-default');
             pullToRefreshIndicator.style.transform = 'translateY(80px)';
 
             try {
@@ -1663,7 +1662,8 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
             // Reset
             pullToRefreshIndicator.style.transform = 'translateY(0)';
-            pullToRefreshIndicator.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            pullToRefreshIndicator.classList.remove('pull-refresh-ready');
+            pullToRefreshIndicator.classList.add('pull-refresh-default');
         }
 
         isPulling = false;
@@ -5079,16 +5079,14 @@ function suggestCategoryFromItem() {
         if (categoryInput.dataset.autoFilled === 'true') {
             categoryInput.value = '';
             categoryInput.dataset.autoFilled = 'false';
-            categoryInput.style.backgroundColor = '';
-            categoryInput.style.borderColor = '';
+            categoryInput.classList.remove('input-autofill-exact', 'input-autofill-fuzzy');
             const existingHint = document.getElementById('categoryHint');
             if (existingHint) existingHint.remove();
         }
         if (tagsInput && tagsInput.dataset.autoFilled === 'true') {
             tagsInput.value = '';
             tagsInput.dataset.autoFilled = 'false';
-            tagsInput.style.backgroundColor = '';
-            tagsInput.style.borderColor = '';
+            tagsInput.classList.remove('input-autofill-exact', 'input-autofill-fuzzy');
             const existingHint = document.getElementById('tagsHint');
             if (existingHint) existingHint.remove();
         }
@@ -5106,8 +5104,7 @@ function suggestCategoryFromItem() {
     if (categoryInput.dataset.autoFilled === 'true' && categoryInput.dataset.lastItem !== itemName) {
         categoryInput.value = '';
         categoryInput.dataset.autoFilled = 'false';
-        categoryInput.style.backgroundColor = '';
-        categoryInput.style.borderColor = '';
+        categoryInput.classList.remove('input-autofill-exact', 'input-autofill-fuzzy');
         const existingHint = document.getElementById('categoryHint');
         if (existingHint) existingHint.remove();
         
@@ -5115,7 +5112,7 @@ function suggestCategoryFromItem() {
         if (tagsInput && tagsInput.dataset.autoFilled === 'true') {
             tagsInput.value = '';
             tagsInput.dataset.autoFilled = 'false';
-            tagsInput.style.backgroundColor = '';
+            tagsInput.classList.remove('input-autofill-exact', 'input-autofill-fuzzy');
             const tagsHint = document.getElementById('tagsHint');
             if (tagsHint) tagsHint.remove();
         }
@@ -5193,8 +5190,7 @@ function suggestCategoryFromItem() {
                 categoryInput.dataset.lastItem = itemName; // Store the item that triggered this
 
                 // Show visual feedback
-                categoryInput.style.backgroundColor = '#f0fdf4'; // Light green
-                categoryInput.style.borderColor = '#86efac'; // Green border
+                categoryInput.classList.add('input-autofill-exact');
 
                 // Add tooltip/hint
                 const existingHint = document.getElementById('categoryHint');
@@ -5208,8 +5204,7 @@ function suggestCategoryFromItem() {
 
                 // Remove visual feedback after 3 seconds
                 setTimeout(() => {
-                    categoryInput.style.backgroundColor = '';
-                    categoryInput.style.borderColor = '';
+                    categoryInput.classList.remove('input-autofill-exact');
                 }, 3000);
             }
         }
@@ -5238,8 +5233,7 @@ function suggestCategoryFromItem() {
                         categoryInput.dataset.autoFilled = 'true';
                         categoryInput.dataset.lastItem = itemName; // Store the item that triggered this
 
-                        categoryInput.style.backgroundColor = '#fef3c7'; // Light yellow (less confident)
-                        categoryInput.style.borderColor = '#fbbf24'; // Yellow border
+                        categoryInput.classList.add('input-autofill-fuzzy');
 
                         const existingHint = document.getElementById('categoryHint');
                         if (existingHint) existingHint.remove();
@@ -5251,8 +5245,7 @@ function suggestCategoryFromItem() {
                         (categoryInput.parentElement?.parentElement || categoryInput.parentElement).appendChild(hint);
 
                         setTimeout(() => {
-                            categoryInput.style.backgroundColor = '';
-                            categoryInput.style.borderColor = '';
+                            categoryInput.classList.remove('input-autofill-fuzzy');
                         }, 3000);
 
                         break; // Only suggest once
@@ -5312,8 +5305,8 @@ function suggestTagsFromItem(itemName, itemTagsMap) {
     if (confidence >= 70) {
         tagsInput.value = sortedTags.join(', ');
         tagsInput.dataset.autoFilled = 'true';
-        tagsInput.style.backgroundColor = matchType === 'exact' ? '#f0fdf4' : '#fef3c7';
-        tagsInput.style.borderColor = matchType === 'exact' ? '#86efac' : '#fbbf24';
+        tagsInput.classList.remove('input-autofill-exact', 'input-autofill-fuzzy');
+        tagsInput.classList.add(matchType === 'exact' ? 'input-autofill-exact' : 'input-autofill-fuzzy');
         
         const existingHint = document.getElementById('tagsHint');
         if (existingHint) existingHint.remove();
@@ -5325,8 +5318,7 @@ function suggestTagsFromItem(itemName, itemTagsMap) {
         tagsInput.parentElement.appendChild(hint);
         
         setTimeout(() => {
-            tagsInput.style.backgroundColor = '';
-            tagsInput.style.borderColor = '';
+            tagsInput.classList.remove('input-autofill-exact', 'input-autofill-fuzzy');
         }, 3000);
     }
 }
@@ -5430,14 +5422,12 @@ function updateLLCButtonStyle(value) {
     if (!llcBtn) return;
     
     if (value === 'Yes') {
-        llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
-        llcBtn.style.color = 'white';
-        llcBtn.style.borderColor = '#1d4ed8';
+        llcBtn.classList.remove('toggle-btn-inactive');
+        llcBtn.classList.add('toggle-btn-active-llc');
         llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Business</span>';
     } else {
-        llcBtn.style.background = 'white';
-        llcBtn.style.color = '#6b7280';
-        llcBtn.style.borderColor = '#e5e7eb';
+        llcBtn.classList.remove('toggle-btn-active-llc');
+        llcBtn.classList.add('toggle-btn-inactive');
         llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
     }
 }
@@ -6671,15 +6661,13 @@ function toggleLLC() {
     
     if (llcSelect.value === 'No') {
         llcSelect.value = 'Yes';
-        llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
-        llcBtn.style.color = 'white';
-        llcBtn.style.borderColor = '#3b82f6';
+        llcBtn.classList.remove('toggle-btn-inactive');
+        llcBtn.classList.add('toggle-btn-active-llc');
         llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Business</span>';
     } else {
         llcSelect.value = 'No';
-        llcBtn.style.background = 'white';
-        llcBtn.style.color = '#6b7280';
-        llcBtn.style.borderColor = '#e5e7eb';
+        llcBtn.classList.remove('toggle-btn-active-llc');
+        llcBtn.classList.add('toggle-btn-inactive');
         llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
     }
 }
@@ -6691,15 +6679,13 @@ function toggleMoreDetails() {
     
     if (panel.classList.contains('hidden')) {
         panel.classList.remove('hidden');
-        btn.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
-        btn.style.color = 'white';
-        btn.style.borderColor = '#8b5cf6';
+        btn.classList.remove('toggle-btn-inactive');
+        btn.classList.add('toggle-btn-active-more');
         btn.innerHTML = '<i class="fas fa-chevron-up"></i><span>Less</span>';
     } else {
         panel.classList.add('hidden');
-        btn.style.background = 'white';
-        btn.style.color = '#6b7280';
-        btn.style.borderColor = '#e5e7eb';
+        btn.classList.remove('toggle-btn-active-more');
+        btn.classList.add('toggle-btn-inactive');
         btn.innerHTML = '<i class="fas fa-ellipsis-h"></i><span>More</span>';
     }
 }
@@ -6775,17 +6761,15 @@ function openAddExpenseModal() {
     document.getElementById('llc').dataset.userChanged = 'false';
     document.getElementById('llc').dataset.autoFilled = 'false';
     const llcBtn = document.getElementById('llcToggleBtn');
-    llcBtn.style.background = 'white';
-    llcBtn.style.color = '#6b7280';
-    llcBtn.style.borderColor = '#e5e7eb';
+    llcBtn.classList.remove('toggle-btn-active-llc');
+    llcBtn.classList.add('toggle-btn-inactive');
     llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
     
     // Hide more details panel
     document.getElementById('moreDetailsPanel').classList.add('hidden');
     const moreBtn = document.getElementById('moreDetailsBtn');
-    moreBtn.style.background = 'white';
-    moreBtn.style.color = '#6b7280';
-    moreBtn.style.borderColor = '#e5e7eb';
+    moreBtn.classList.remove('toggle-btn-active-more');
+    moreBtn.classList.add('toggle-btn-inactive');
     moreBtn.innerHTML = '<i class="fas fa-ellipsis-h"></i><span>More</span>';
     
     currentReceiptData = null;
@@ -7414,14 +7398,12 @@ async function editExpense(id) {
     // Update LLC toggle button
     const llcBtn = document.getElementById('llcToggleBtn');
     if (expense.fields.LLC === 'Yes') {
-        llcBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
-        llcBtn.style.color = 'white';
-        llcBtn.style.borderColor = '#3b82f6';
+        llcBtn.classList.remove('toggle-btn-inactive');
+        llcBtn.classList.add('toggle-btn-active-llc');
         llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Business</span>';
     } else {
-        llcBtn.style.background = 'white';
-        llcBtn.style.color = '#6b7280';
-        llcBtn.style.borderColor = '#e5e7eb';
+        llcBtn.classList.remove('toggle-btn-active-llc');
+        llcBtn.classList.add('toggle-btn-inactive');
         llcBtn.innerHTML = '<i class="fas fa-building"></i><span>Personal</span>';
     }
 
@@ -7434,15 +7416,13 @@ async function editExpense(id) {
     
     if (hasMoreDetails) {
         moreDetailsPanel.classList.remove('hidden');
-        moreBtn.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
-        moreBtn.style.color = 'white';
-        moreBtn.style.borderColor = '#8b5cf6';
+        moreBtn.classList.remove('toggle-btn-inactive');
+        moreBtn.classList.add('toggle-btn-active-more');
         moreBtn.innerHTML = '<i class="fas fa-chevron-up"></i><span>Less</span>';
     } else {
         moreDetailsPanel.classList.add('hidden');
-        moreBtn.style.background = 'white';
-        moreBtn.style.color = '#6b7280';
-        moreBtn.style.borderColor = '#e5e7eb';
+        moreBtn.classList.remove('toggle-btn-active-more');
+        moreBtn.classList.add('toggle-btn-inactive');
         moreBtn.innerHTML = '<i class="fas fa-ellipsis-h"></i><span>More</span>';
     }
 

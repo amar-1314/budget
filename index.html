@@ -31,16 +31,16 @@
     </div>
 
     <div id="globalLoadingOverlay"
-        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        class="gradient-bg"
+        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center;">
         <div style="position: relative; width: 120px; height: 120px;">
             <div class="fancy-spinner"></div>
             <div class="fancy-spinner-inner"></div>
             <div class="fancy-spinner-dot"></div>
         </div>
-        <p
-            style="font-size: 24px; font-weight: 700; color: white; margin-top: 32px; text-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <p style="font-size: 22px; font-weight: 800; color: white; margin-top: 32px; letter-spacing: -0.5px;">
             Budget Tracker</p>
-        <p id="globalLoadingText" style="font-size: 16px; color: rgba(255,255,255,0.9); margin-top: 8px; font-weight: 500;">Loading your
+        <p id="globalLoadingText" style="font-size: 14px; color: rgba(255,255,255,0.6); margin-top: 8px; font-weight: 500;">Loading your
             data...</p>
         <div style="margin-top: 24px; display: flex; gap: 8px;">
             <div class="loading-dot" style="animation-delay: 0s;"></div>
@@ -172,34 +172,34 @@
     </div>
     <div id="menuOverlay" class="fixed inset-0 bg-black bg-opacity-50 z-40" style="display: none;"
         onclick="toggleMenu()"></div>
-    <div class="gradient-bg text-white py-4 md:py-8 px-4 md:px-6 shadow-lg">
+    <div class="gradient-bg text-white py-4 md:py-6 px-4 md:px-6" style="box-shadow: 0 4px 20px rgba(102,126,234,0.3);">
         <div class="max-w-7xl mx-auto">
             <div class="flex justify-between items-center">
                 <div>
-                    <h1 class="text-2xl md:text-4xl font-bold mb-1 md:mb-2"><i
-                            class="fas fa-chart-line mr-2 md:mr-3"></i>Budget Tracker</h1>
-                    <p class="text-purple-100 text-xs md:text-base">Amar & Priya</p>
+                    <h1 class="text-xl md:text-3xl font-extrabold mb-0.5 md:mb-1 tracking-tight"><i
+                            class="fas fa-chart-line mr-2 md:mr-3 opacity-80"></i>Budget Tracker</h1>
+                    <p class="text-white/50 text-xs md:text-sm font-medium tracking-wide">Amar & Priya</p>
                 </div>
-                <div class="flex items-center gap-2 md:gap-4">
+                <div class="flex items-center gap-1.5 md:gap-3">
                     <button onclick="toggleMenu()"
-                        class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700"
+                        class="w-10 h-10 md:w-auto md:h-auto md:px-4 md:py-2.5 rounded-full md:rounded-lg bg-white/10 border border-white/20 text-white hover:bg-white/25 transition-all duration-200 flex items-center justify-center"
                         title="Menu">
-                        <i class="fas fa-bars"></i>
+                        <i class="fas fa-bars text-sm"></i>
                     </button>
                     <button onclick="showMismatchNotifications()"
-                        class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700 relative"
+                        class="w-10 h-10 md:w-auto md:h-auto md:px-4 md:py-2.5 rounded-full md:rounded-lg bg-white/10 border border-white/20 text-white hover:bg-white/25 transition-all duration-200 flex items-center justify-center relative"
                         title="Notifications" id="notificationBtn">
-                        <i class="fas fa-bell"></i>
+                        <i class="fas fa-bell text-sm"></i>
                         <span id="notificationBadge"
-                            class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold"
+                            class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold ring-2 ring-purple-600"
                             style="display: none;">0</span>
                     </button>
                     <button onclick="openSettings()"
-                        class="btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700"
-                        title="Settings"><i class="fas fa-cog"></i><span
-                            class="hidden md:inline ml-2">Settings</span></button>
+                        class="w-10 h-10 md:w-auto md:h-auto md:px-4 md:py-2.5 rounded-full md:rounded-lg bg-white/10 border border-white/20 text-white hover:bg-white/25 transition-all duration-200 flex items-center justify-center"
+                        title="Settings"><i class="fas fa-cog text-sm"></i><span
+                            class="hidden md:inline ml-2 text-sm font-medium">Settings</span></button>
                     <button onclick="openAddExpenseModal()"
-                        class="desktop-only btn-secondary bg-white/20 border-white/40 text-white hover:bg-white hover:text-purple-700"><i
+                        class="hidden md:flex px-4 py-2.5 rounded-lg bg-white/15 border border-white/25 text-white hover:bg-white hover:text-purple-700 transition-all duration-200 items-center text-sm font-medium"><i
                             class="fas fa-plus mr-2"></i>Add Expense</button>
                 </div>
             </div>
@@ -221,147 +221,158 @@
                     class="fas fa-sync-alt md:mr-2"></i><span class="hidden md:inline">Refresh</span></button>
         </div>
         <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-6 mb-6 md:mb-8">
-            <div class="stat-card">
+            <div class="stat-card stat-card--budget">
                 <div class="relative z-10">
-                    <div class="text-purple-100 text-xs md:text-sm font-semibold mb-1">BUDGET</div>
-                    <div class="text-xl md:text-3xl font-bold" id="totalBudget">$0</div>
+                    <div class="text-white/70 text-xs md:text-sm font-semibold mb-1 tracking-wide flex items-center gap-1.5">
+                        <i class="fas fa-wallet text-xs opacity-70"></i>BUDGET
+                    </div>
+                    <div class="text-xl md:text-3xl font-bold tracking-tight" id="totalBudget">$0</div>
                 </div>
             </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <div class="stat-card stat-card--spent">
                 <div class="relative z-10">
-                    <div class="text-pink-100 text-xs md:text-sm font-semibold mb-1">SPENT</div>
-                    <div class="text-xl md:text-3xl font-bold" id="totalActual">$0</div>
+                    <div class="text-white/70 text-xs md:text-sm font-semibold mb-1 tracking-wide flex items-center gap-1.5">
+                        <i class="fas fa-receipt text-xs opacity-70"></i>SPENT
+                    </div>
+                    <div class="text-xl md:text-3xl font-bold tracking-tight" id="totalActual">$0</div>
                 </div>
             </div>
-            <div class="stat-card cursor-pointer" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);" onclick="handleLLCTileClick()" title="Click to view LLC-only expenses">
+            <div class="stat-card stat-card--llc cursor-pointer" onclick="handleLLCTileClick()" title="Click to view LLC-only expenses">
                 <div class="relative z-10">
-                    <div class="text-blue-100 text-xs md:text-sm font-semibold mb-1">LLC</div>
-                    <div class="text-xl md:text-3xl font-bold" id="llcTotal">$0</div>
+                    <div class="text-white/70 text-xs md:text-sm font-semibold mb-1 tracking-wide flex items-center gap-1.5">
+                        <i class="fas fa-briefcase text-xs opacity-70"></i>LLC
+                    </div>
+                    <div class="text-xl md:text-3xl font-bold tracking-tight" id="llcTotal">$0</div>
                 </div>
             </div>
-            <div class="stat-card cursor-pointer" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);" onclick="handleLeftTileClick()" title="Click to view over-budget details">
+            <div class="stat-card stat-card--left cursor-pointer" onclick="handleLeftTileClick()" title="Click to view over-budget details">
                 <div class="relative z-10">
-                    <div class="text-green-100 text-xs md:text-sm font-semibold mb-1">LEFT</div>
-                    <div class="text-xl md:text-3xl font-bold" id="remaining">$0</div>
+                    <div class="text-white/70 text-xs md:text-sm font-semibold mb-1 tracking-wide flex items-center gap-1.5">
+                        <i class="fas fa-piggy-bank text-xs opacity-70"></i>LEFT
+                    </div>
+                    <div class="text-xl md:text-3xl font-bold tracking-tight" id="remaining">$0</div>
                 </div>
             </div>
-            <div class="stat-card" style="background: linear-gradient(135deg, #FFD89B 0%, #19547B 100%);">
+            <div class="stat-card stat-card--rental">
                 <div class="relative z-10">
-                    <div class="text-yellow-100 text-xs md:text-sm font-semibold mb-1">RENTAL</div>
-                    <div class="text-xl md:text-3xl font-bold" id="rentalIncomeTotal">$0</div>
+                    <div class="text-white/70 text-xs md:text-sm font-semibold mb-1 tracking-wide flex items-center gap-1.5">
+                        <i class="fas fa-home text-xs opacity-70"></i>RENTAL
+                    </div>
+                    <div class="text-xl md:text-3xl font-bold tracking-tight" id="rentalIncomeTotal">$0</div>
                 </div>
             </div>
-            <div class="stat-card cursor-pointer"
-                style="background: linear-gradient(135deg, #FA8BFF 0%, #2BD2FF 90%, #2BFF88 100%);"
+            <div class="stat-card stat-card--predicted cursor-pointer"
                 onclick="openPredictiveBudgeting()" title="Click to view detailed predictions">
                 <div class="relative z-10">
-                    <div class="text-white text-xs md:text-sm font-semibold mb-1 flex items-center gap-1">
-                        <i class="fas fa-crystal-ball"></i>
-                        <span>PREDICTED</span>
+                    <div class="text-white/70 text-xs md:text-sm font-semibold mb-1 tracking-wide flex items-center gap-1.5">
+                        <i class="fas fa-crystal-ball text-xs opacity-70"></i>PREDICTED
                     </div>
-                    <div class="text-xl md:text-3xl font-bold" id="predictedTotal">$0</div>
-                    <div class="text-xs text-white opacity-75 mt-1">Next Month</div>
+                    <div class="text-xl md:text-3xl font-bold tracking-tight" id="predictedTotal">$0</div>
+                    <div class="text-xs text-white/60 mt-1">Next Month</div>
                 </div>
             </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div class="card p-6">
+            <div class="card p-6" style="border-left: 4px solid #4facfe;">
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center gap-3">
                         <div class="relative group cursor-pointer"
                             onclick="document.getElementById('amarPictureInput').click()">
                             <div
-                                class="w-16 h-16 rounded-full overflow-hidden bg-blue-100 flex items-center justify-center border-2 border-blue-300">
+                                class="w-14 h-14 rounded-full overflow-hidden bg-blue-50 flex items-center justify-center ring-2 ring-blue-200 ring-offset-2">
                                 <img id="amarPicture" src="" alt="Amar" class="w-full h-full object-cover"
                                     style="display: none;">
-                                <i id="amarPictureIcon" class="fas fa-user-circle text-blue-500 text-4xl"></i>
+                                <i id="amarPictureIcon" class="fas fa-user-circle text-blue-400 text-3xl"></i>
                             </div>
                             <div
-                                class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <i class="fas fa-camera text-white text-xl"></i>
+                                class="absolute inset-0 bg-black bg-opacity-40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-camera text-white"></i>
                             </div>
                         </div>
                         <input type="file" id="amarPictureInput" accept="image/*" style="display: none;"
                             onchange="uploadProfilePicture('Amar', this)">
-                        <h3 class="text-xl font-bold text-gray-800">Amar's Share</h3>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-800">Amar's Share</h3>
+                            <div class="text-xs text-gray-400">50% split</div>
+                        </div>
                     </div>
                     <div class="text-right">
-                        <div class="text-2xl font-bold text-blue-600" id="amarShare">$0</div>
-                        <div class="text-xs text-gray-500">Share: 50%</div>
+                        <div class="text-2xl font-extrabold text-blue-600" id="amarShare">$0</div>
                     </div>
                 </div>
                 <div class="mb-3">
-                    <div class="flex justify-between text-sm mb-1">
-                        <span class="text-gray-600">Contributed</span>
-                        <span class="font-semibold text-blue-600"><span id="amarContribution">$0</span> (<span
-                                id="amarContributionPercent">0</span>%)</span>
+                    <div class="flex justify-between text-sm mb-1.5">
+                        <span class="text-gray-500 text-xs font-medium">Contributed</span>
+                        <span class="font-semibold text-blue-600 text-sm"><span id="amarContribution">$0</span> <span class="text-xs text-gray-400">(<span
+                                id="amarContributionPercent">0</span>%)</span></span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill" id="amarContributionProgress"
                             style="width: 0%; background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);"></div>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <div class="flex justify-between text-sm mb-1">
-                        <span class="text-gray-600">Net Due (w/ Rental)</span>
-                        <span class="font-semibold text-gray-700" id="amarRemaining">$0</span>
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1.5">
+                        <span class="text-gray-500 text-xs font-medium">Net Due (w/ Rental)</span>
+                        <span class="font-bold text-gray-800" id="amarRemaining">$0</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill" id="amarRemainingProgress" style="width: 100%; background: #e5e7eb;">
                         </div>
                     </div>
                 </div>
-                <button onclick="openContributionModal('Amar')" class="btn-primary w-full text-sm py-2"><i
+                <button onclick="openContributionModal('Amar')" class="btn-secondary w-full text-sm py-2.5 border-blue-200 text-blue-600 hover:bg-blue-600 hover:border-blue-600"><i
                         class="fas fa-plus mr-2"></i>Add Payment</button>
             </div>
-            <div class="card p-6">
+            <div class="card p-6" style="border-left: 4px solid #f093fb;">
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center gap-3">
                         <div class="relative group cursor-pointer"
                             onclick="document.getElementById('priyaPictureInput').click()">
                             <div
-                                class="w-16 h-16 rounded-full overflow-hidden bg-pink-100 flex items-center justify-center border-2 border-pink-300">
+                                class="w-14 h-14 rounded-full overflow-hidden bg-pink-50 flex items-center justify-center ring-2 ring-pink-200 ring-offset-2">
                                 <img id="priyaPicture" src="" alt="Priya" class="w-full h-full object-cover"
                                     style="display: none;">
-                                <i id="priyaPictureIcon" class="fas fa-user-circle text-pink-500 text-4xl"></i>
+                                <i id="priyaPictureIcon" class="fas fa-user-circle text-pink-400 text-3xl"></i>
                             </div>
                             <div
-                                class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                <i class="fas fa-camera text-white text-xl"></i>
+                                class="absolute inset-0 bg-black bg-opacity-40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-camera text-white"></i>
                             </div>
                         </div>
                         <input type="file" id="priyaPictureInput" accept="image/*" style="display: none;"
                             onchange="uploadProfilePicture('Priya', this)">
-                        <h3 class="text-xl font-bold text-gray-800">Priya's Share</h3>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-800">Priya's Share</h3>
+                            <div class="text-xs text-gray-400">50% split</div>
+                        </div>
                     </div>
                     <div class="text-right">
-                        <div class="text-2xl font-bold text-pink-600" id="priyaShare">$0</div>
-                        <div class="text-xs text-gray-500">Share: 50%</div>
+                        <div class="text-2xl font-extrabold text-pink-600" id="priyaShare">$0</div>
                     </div>
                 </div>
                 <div class="mb-3">
-                    <div class="flex justify-between text-sm mb-1">
-                        <span class="text-gray-600">Contributed</span>
-                        <span class="font-semibold text-pink-600"><span id="priyaContribution">$0</span> (<span
-                                id="priyaContributionPercent">0</span>%)</span>
+                    <div class="flex justify-between text-sm mb-1.5">
+                        <span class="text-gray-500 text-xs font-medium">Contributed</span>
+                        <span class="font-semibold text-pink-600 text-sm"><span id="priyaContribution">$0</span> <span class="text-xs text-gray-400">(<span
+                                id="priyaContributionPercent">0</span>%)</span></span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill" id="priyaContributionProgress"
                             style="width: 0%; background: linear-gradient(90deg, #f093fb 0%, #f5576c 100%);"></div>
                     </div>
                 </div>
-                <div class="mb-3">
-                    <div class="flex justify-between text-sm mb-1">
-                        <span class="text-gray-600">Net Due (w/ Rental)</span>
-                        <span class="font-semibold text-gray-700" id="priyaRemaining">$0</span>
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1.5">
+                        <span class="text-gray-500 text-xs font-medium">Net Due (w/ Rental)</span>
+                        <span class="font-bold text-gray-800" id="priyaRemaining">$0</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill" id="priyaRemainingProgress"
                             style="width: 100%; background: #e5e7eb;"></div>
                     </div>
                 </div>
-                <button onclick="openContributionModal('Priya')" class="btn-primary w-full text-sm py-2"
-                    style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);"><i
+                <button onclick="openContributionModal('Priya')" class="btn-secondary w-full text-sm py-2.5 border-pink-200 text-pink-600 hover:bg-pink-600 hover:border-pink-600"><i
                         class="fas fa-plus mr-2"></i>Add Payment</button>
             </div>
         </div>
