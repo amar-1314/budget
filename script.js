@@ -13342,24 +13342,32 @@ function generateFinancialAnalysis() {
         return;
     }
 
-    const now = new Date();
-    const analysisMonths = getAnalysisMonths(now, 3);
-    const monthCount = analysisMonths.length || 1;
+    // Use ALL available data to get a true long-term picture.
+    // Periodic expenses (semi-annual insurance, annual fees) are properly
+    // amortized across the full window instead of spiking a single month.
+    const allMonthKeys = new Set();
+    allExpenses.forEach(exp => {
+        const k = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+        allMonthKeys.add(k);
+    });
+    allPayments.forEach(p => {
+        const k = `${p.fields.Year}-${String(p.fields.Month).padStart(2, '0')}`;
+        allMonthKeys.add(k);
+    });
+    const sortedMonthKeys = [...allMonthKeys].sort();
+    const monthCount = sortedMonthKeys.length || 1;
 
     const subtitleEl = document.getElementById('analyzeFinancesSubtitle');
     if (subtitleEl) {
         const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        if (analysisMonths.length > 0) {
-            const first = analysisMonths[0];
-            const last = analysisMonths[analysisMonths.length - 1];
-            subtitleEl.textContent = `Based on ${monthNames[first.m - 1]} ${first.y} – ${monthNames[last.m - 1]} ${last.y} (${monthCount}-month avg)`;
+        if (sortedMonthKeys.length > 0) {
+            const first = sortedMonthKeys[0].split('-');
+            const last = sortedMonthKeys[sortedMonthKeys.length - 1].split('-');
+            subtitleEl.textContent = `Cumulative analysis: ${monthNames[parseInt(first[1]) - 1]} ${first[0]} – ${monthNames[parseInt(last[1]) - 1]} ${last[0]} (${monthCount} months)`;
         }
     }
 
-    const monthlyExpenses = filterExpensesToMonths(analysisMonths);
-    const monthlyPayments = filterPaymentsToMonths(analysisMonths);
-
-    const totalRentalIncome = monthlyPayments
+    const totalRentalIncome = allPayments
         .filter(p => p.fields.PaymentType === 'RentalIncome')
         .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
     const avgRentalIncome = totalRentalIncome / monthCount;
@@ -13367,13 +13375,16 @@ function generateFinancialAnalysis() {
     const salary = HOUSEHOLD_PROFILE.monthlySalary;
     const totalMonthlyIncome = salary + avgRentalIncome;
 
-    const categoryTotals = {};
+    // Build per-category, per-month breakdown for frequency analysis
+    const categoryMonthly = {};  // { cat: { 'YYYY-MM': total } }
     let totalSpent = 0;
     let mortgageTotal = 0;
-    monthlyExpenses.forEach(exp => {
+    allExpenses.forEach(exp => {
         const cat = (exp.fields.Category || 'Other').trim();
         const amt = exp.fields.Actual || 0;
-        categoryTotals[cat] = (categoryTotals[cat] || 0) + amt;
+        const mk = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+        if (!categoryMonthly[cat]) categoryMonthly[cat] = {};
+        categoryMonthly[cat][mk] = (categoryMonthly[cat][mk] || 0) + amt;
         totalSpent += amt;
         if (cat === 'Mortgage') mortgageTotal += amt;
     });
@@ -13388,17 +13399,24 @@ function generateFinancialAnalysis() {
     const discretionaryRatio = salary > 0 ? (nonHousingSpend / salary) * 100 : 0;
 
     const categoryResults = [];
-    Object.entries(categoryTotals).forEach(([cat, total]) => {
+    Object.entries(categoryMonthly).forEach(([cat, monthlyMap]) => {
         if (cat === 'Mortgage') return;
-        const avg = total / monthCount;
+
+        const catTotal = Object.values(monthlyMap).reduce((s, v) => s + v, 0);
+        const monthsWithSpend = Object.keys(monthlyMap).length;
+        const amortizedAvg = catTotal / monthCount;
+
+        // Detect spending frequency pattern
+        const frequency = detectSpendingFrequency(monthlyMap, sortedMonthKeys, cat);
+
         const benchmark = FINANCIAL_BENCHMARKS[cat];
         let status, statusLabel, statusColor, benchmarkNote;
         if (benchmark) {
-            if (avg <= benchmark.max) {
+            if (amortizedAvg <= benchmark.max) {
                 status = 'healthy';
                 statusLabel = 'Healthy';
                 statusColor = 'green';
-            } else if (avg <= benchmark.max * 1.25) {
+            } else if (amortizedAvg <= benchmark.max * 1.25) {
                 status = 'watch';
                 statusLabel = 'Watch';
                 statusColor = 'yellow';
@@ -13414,7 +13432,11 @@ function generateFinancialAnalysis() {
             statusColor = 'gray';
             benchmarkNote = 'No benchmark defined for this category';
         }
-        categoryResults.push({ cat, avg, total, benchmark, status, statusLabel, statusColor, benchmarkNote });
+        categoryResults.push({
+            cat, avg: amortizedAvg, total: catTotal, benchmark,
+            status, statusLabel, statusColor, benchmarkNote,
+            frequency, monthsWithSpend
+        });
     });
 
     categoryResults.sort((a, b) => b.avg - a.avg);
@@ -13428,6 +13450,62 @@ function generateFinancialAnalysis() {
         savingsRate, housingRatio, discretionaryRatio, nonHousingSpend,
         categoryResults, insights, monthCount
     });
+}
+
+function detectSpendingFrequency(monthlyMap, allMonthKeys, category) {
+    const monthsWithSpend = Object.keys(monthlyMap).length;
+    const totalMonths = allMonthKeys.length;
+    if (totalMonths === 0) return { type: 'unknown', label: 'Unknown', detail: '' };
+
+    const ratio = monthsWithSpend / totalMonths;
+    const amounts = Object.values(monthlyMap);
+    const avg = amounts.reduce((s, v) => s + v, 0) / amounts.length;
+    const variance = amounts.length > 1
+        ? amounts.reduce((s, v) => s + Math.pow(v - avg, 2), 0) / amounts.length
+        : 0;
+    const cv = avg > 0 ? Math.sqrt(variance) / avg : 0; // coefficient of variation
+
+    if (ratio >= 0.8 && cv < 0.5) {
+        return { type: 'monthly', label: 'Monthly', detail: 'Consistent monthly expense' };
+    }
+    if (ratio >= 0.8 && cv >= 0.5) {
+        return { type: 'monthly-variable', label: 'Monthly (varies)', detail: 'Occurs monthly but amount fluctuates' };
+    }
+
+    // Detect periodic patterns by looking at intervals between spending months
+    const spendMonthIndices = allMonthKeys
+        .map((k, i) => monthlyMap[k] ? i : -1)
+        .filter(i => i >= 0);
+
+    if (spendMonthIndices.length >= 2) {
+        const gaps = [];
+        for (let i = 1; i < spendMonthIndices.length; i++) {
+            gaps.push(spendMonthIndices[i] - spendMonthIndices[i - 1]);
+        }
+        const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+        const gapVariance = gaps.length > 1
+            ? gaps.reduce((s, g) => s + Math.pow(g - avgGap, 2), 0) / gaps.length
+            : 0;
+        const gapConsistent = Math.sqrt(gapVariance) <= 1.5;
+
+        if (gapConsistent && avgGap >= 2.5 && avgGap <= 3.5) {
+            return { type: 'quarterly', label: 'Quarterly', detail: `Paid ~every 3 months, amortized monthly` };
+        }
+        if (gapConsistent && avgGap >= 5 && avgGap <= 7) {
+            return { type: 'semi-annual', label: 'Semi-Annual', detail: `Paid ~every 6 months, amortized monthly` };
+        }
+        if (gapConsistent && avgGap >= 10 && avgGap <= 14) {
+            return { type: 'annual', label: 'Annual', detail: `Paid ~once a year, amortized monthly` };
+        }
+    }
+
+    if (monthsWithSpend === 1) {
+        return { type: 'one-time', label: 'One-Time', detail: 'Single occurrence, amortized over analysis period' };
+    }
+    if (ratio < 0.3) {
+        return { type: 'occasional', label: 'Occasional', detail: `Occurred in ${monthsWithSpend} of ${totalMonths} months` };
+    }
+    return { type: 'irregular', label: 'Irregular', detail: `Occurred in ${monthsWithSpend} of ${totalMonths} months` };
 }
 
 function getAnalysisMonths(now, count) {
@@ -13540,6 +13618,21 @@ function generateFinancialInsights(categoryResults, housingRatio, savingsRate, n
     if (topCategory && topCategory.cat !== 'Mortgage') {
         const pctOfIncome = ((topCategory.avg / salary) * 100).toFixed(0);
         insights.push({ type: 'info', icon: 'fa-arrow-up', title: `Biggest Non-Housing Expense: ${topCategory.cat}`, message: `${topCategory.cat} averages $${topCategory.avg.toFixed(0)}/mo (${pctOfIncome}% of salary).`, action: topCategory.status !== 'healthy' ? `Review ${topCategory.cat} spending for potential savings.` : null });
+    }
+
+    // Highlight periodic expenses that have been amortized
+    const periodicCats = categoryResults.filter(r =>
+        r.frequency && ['semi-annual', 'quarterly', 'annual', 'one-time', 'occasional'].includes(r.frequency.type)
+    );
+    if (periodicCats.length > 0) {
+        const names = periodicCats.map(r => `${r.cat} (${r.frequency.label})`).join(', ');
+        insights.push({
+            type: 'info',
+            icon: 'fa-calendar-alt',
+            title: 'Periodic Expenses Detected',
+            message: `${periodicCats.length} categories are not monthly: ${names}. Their costs are amortized (spread across all months) so the benchmark comparison is fair.`,
+            action: 'These are normal periodic bills — they won\'t trigger false alarms.'
+        });
     }
 
     return insights;
@@ -13659,7 +13752,7 @@ function renderFinancialAnalysis(container, data) {
     // 4. Category Benchmark Grid
     html += `
         <div>
-            <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-th-list text-purple-500"></i>Category Benchmarks (${monthCount}-Month Avg)</h3>
+            <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-th-list text-purple-500"></i>Category Benchmarks (Amortized over ${monthCount} months)</h3>
             <div class="space-y-2">`;
 
     categoryResults.forEach(r => {
@@ -13684,6 +13777,11 @@ function renderFinancialAnalysis(container, data) {
             benchmarkRange = `$${r.benchmark.min} – $${r.benchmark.max}`;
         }
 
+        const freq = r.frequency || {};
+        const freqBadge = freq.type && freq.type !== 'monthly'
+            ? `<span class="inline-block px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium ml-1" title="${freq.detail || ''}">${freq.label}</span>`
+            : '';
+
         html += `
             <div class="card p-3 flex items-center gap-3 ${statusBg} border-l-3" style="border-left: 3px solid;">
                 <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background: var(--gradient-primary);">
@@ -13691,7 +13789,7 @@ function renderFinancialAnalysis(container, data) {
                 </div>
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center justify-between">
-                        <div class="font-semibold text-gray-800 text-sm truncate">${escapeHtml(r.cat)}</div>
+                        <div class="font-semibold text-gray-800 text-sm truncate">${escapeHtml(r.cat)}${freqBadge}</div>
                         <div class="flex items-center gap-2 flex-shrink-0">
                             <span class="text-sm font-bold text-gray-800">$${r.avg.toFixed(0)}/mo</span>
                             <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold ${statusText} ${statusBg}">
@@ -13699,6 +13797,7 @@ function renderFinancialAnalysis(container, data) {
                             </span>
                         </div>
                     </div>
+                    ${freq.type && freq.type !== 'monthly' ? `<div class="text-xs text-blue-600 mt-0.5"><i class="fas fa-info-circle mr-1"></i>${freq.detail} (total: $${r.total.toFixed(0)} over ${monthCount} mo)</div>` : ''}
                     <div class="mt-1 flex items-center gap-2">
                         <div class="flex-1 bg-gray-200 rounded-full h-1.5">
                             <div class="${barColor} rounded-full h-1.5 transition-all" style="width: ${barPct}%"></div>
