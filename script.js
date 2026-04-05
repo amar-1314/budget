@@ -13967,11 +13967,29 @@ function renderFinancialAnalysis(container, data) {
         html += `</div></div>`;
     }
 
+    // 8. AI-Powered Insights (loaded asynchronously via Gemini)
+    html += `
+        <div id="aiFinancialInsightsSection">
+            <div style="font-weight: 700; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
+                <i class="fas fa-robot" style="color: #8b5cf6;"></i>AI-Powered Insights <span style="font-weight: 400; font-size: 12px; color: #9ca3af;">by Gemini</span>
+            </div>
+            <div id="aiFinancialInsightsContent" style="min-height: 120px;">
+                <div class="card" style="padding: 24px; text-align: center; border: 1px dashed #d1d5db;">
+                    <div class="loader-spinner" style="margin: 0 auto 12px;"></div>
+                    <div style="font-size: 13px; color: #6b7280;">Analyzing your finances with AI...</div>
+                    <div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">Considering current DMV cost-of-living, inflation trends, and your spending patterns</div>
+                </div>
+            </div>
+        </div>`;
+
     html += `</div>`;
     container.innerHTML = html;
 
     // Render the trend chart after DOM is ready
     setTimeout(() => renderFinancialTrendChart(sortedMonthKeys, monthlyTotals, salary), 50);
+
+    // Fire off AI analysis asynchronously
+    fetchAIFinancialInsights(data);
 }
 
 function renderFinancialTrendChart(sortedMonthKeys, monthlyTotals, salary) {
@@ -14049,6 +14067,179 @@ function renderFinancialTrendChart(sortedMonthKeys, monthlyTotals, salary) {
             }
         }
     });
+}
+
+function buildAIFinancialPrompt(data) {
+    const {
+        healthScore, salary, avgRentalIncome, totalMonthlyIncome,
+        avgTotalSpent, avgMortgage, netHousingCost, monthlySurplus,
+        savingsRate, housingRatio, nonHousingSpend,
+        categoryResults, monthCount, sortedMonthKeys, monthlyTotals
+    } = data;
+
+    const catSummary = categoryResults.slice(0, 15).map(r => {
+        const peer = r.benchmark?.dmvMedian ? `, DMV median: $${r.benchmark.dmvMedian}` : '';
+        const freq = r.frequency?.type !== 'monthly' ? ` (${r.frequency?.label || r.frequency?.type})` : '';
+        return `  - ${r.cat}: $${r.avg.toFixed(0)}/mo avg${freq}, status: ${r.statusLabel}${peer}`;
+    }).join('\n');
+
+    const trendSummary = sortedMonthKeys.map(mk => {
+        const t = monthlyTotals[mk];
+        return `  ${mk}: spent $${t.spent.toFixed(0)}, rental $${t.rental.toFixed(0)}, net $${t.net.toFixed(0)}`;
+    }).join('\n');
+
+    return `You are a personal finance advisor for a family in the DMV area (Herndon, VA). Analyze their finances and provide dynamic, actionable insights based on CURRENT economic conditions (2026 inflation, DMV cost of living, interest rates, market trends).
+
+FAMILY PROFILE:
+- Couple in mid-30s, 10-month-old daughter
+- Combined salary: $${salary.toLocaleString()}/mo post-tax (Amar $6k, Priya $5k)
+- Own 2 rental houses in Charles Town, WV (avg rental income: $${avgRentalIncome.toFixed(0)}/mo)
+- Live in rental apartment in Herndon, VA
+
+FINANCIAL SNAPSHOT (${monthCount} months analyzed):
+- Total income: $${totalMonthlyIncome.toFixed(0)}/mo (salary + rental)
+- Avg spending: $${avgTotalSpent.toFixed(0)}/mo
+- Monthly surplus: $${monthlySurplus.toFixed(0)}/mo
+- Savings rate: ${savingsRate.toFixed(1)}%
+- Housing ratio: ${housingRatio.toFixed(1)}% of salary
+- Mortgage: $${avgMortgage.toFixed(0)}/mo, Net housing cost: $${netHousingCost.toFixed(0)}/mo
+- Non-housing spending: $${nonHousingSpend.toFixed(0)}/mo
+- Health score: ${healthScore.score}/100 (${healthScore.grade})
+
+CATEGORY BREAKDOWN (amortized monthly avg):
+${catSummary}
+
+MONTHLY TREND:
+${trendSummary}
+
+Provide your analysis as a JSON object with this EXACT structure (no markdown fences):
+{
+  "insights": [
+    {
+      "type": "success|warning|info|tip",
+      "icon": "fa-icon-name",
+      "title": "Short title",
+      "message": "Detailed insight with specific numbers, DMV context, and current economic context",
+      "action": "Specific actionable advice or null"
+    }
+  ]
+}
+
+REQUIREMENTS:
+1. Include 5-7 insights covering: overall financial health, DMV cost-of-living context, spending velocity/trend direction, specific category comparisons vs DMV peers, investment property performance, savings optimization, and one forward-looking tip based on current economic conditions
+2. Use SPECIFIC percentages and dollar amounts from the data — e.g. "You spend 32% more on dining than a typical DMV family at your income level"
+3. Consider current 2026 economic conditions: inflation rates, grocery price trends, gas prices in Northern Virginia, housing market
+4. Be conversational but data-driven. Avoid generic advice
+5. If spending is trending up or down month-over-month, call that out specifically
+6. Compare non-housing spending to what a similar DMV family ($11k/mo income, family of 3) would typically spend
+7. Return ONLY the JSON object, nothing else`;
+}
+
+async function fetchAIFinancialInsights(data) {
+    const container = document.getElementById('aiFinancialInsightsContent');
+    if (!container) return;
+
+    let insights = null;
+
+    // Primary: HuggingFace via deepseek-smart-search edge function
+    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+        try {
+            const prompt = buildAIFinancialPrompt(data);
+            const endpoint = `${SUPABASE_URL}/functions/v1/deepseek-smart-search`;
+            const resp = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                },
+                body: JSON.stringify({ query: prompt, history: [] })
+            });
+            const respData = await resp.json().catch(() => null);
+            if (resp.ok && respData?.result) {
+                const result = respData.result;
+                if (Array.isArray(result.insights)) {
+                    insights = result.insights;
+                } else if (result.answer_markdown) {
+                    try {
+                        const parsed = JSON.parse(result.answer_markdown);
+                        if (Array.isArray(parsed.insights)) insights = parsed.insights;
+                    } catch (_e) { /* not JSON, skip */ }
+                }
+            }
+            if (!insights) {
+                console.warn('HuggingFace did not return valid insights, falling back to Gemini');
+            }
+        } catch (e) {
+            console.warn('HuggingFace financial analysis failed, falling back to Gemini:', e);
+        }
+    }
+
+    // Fallback: Gemini client-side
+    if (!insights) {
+        try {
+            const apiKey = await getGeminiApiKey();
+            const prompt = buildAIFinancialPrompt(data);
+            const requestBody = {
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                    temperature: 0.4,
+                    maxOutputTokens: 2048,
+                    responseMimeType: 'application/json',
+                    thinkingConfig: { thinkingBudget: 0 }
+                }
+            };
+            const geminiData = await callGeminiGenerateContent(apiKey, requestBody);
+            const textResponse = geminiData?.candidates?.[0]?.content?.parts
+                ?.map(p => p.text || '').join('').trim();
+            if (textResponse) {
+                let jsonStr = textResponse;
+                if (jsonStr.startsWith('```')) jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+                const parsed = JSON.parse(jsonStr);
+                if (Array.isArray(parsed.insights)) insights = parsed.insights;
+            }
+        } catch (e) {
+            console.error('Gemini financial analysis also failed:', e);
+        }
+    }
+
+    // Render results
+    if (!insights || insights.length === 0) {
+        container.innerHTML = `
+            <div class="card" style="padding: 20px; text-align: center; border-left: 4px solid #f59e0b;">
+                <i class="fas fa-exclamation-triangle" style="color: #f59e0b; font-size: 24px; margin-bottom: 8px;"></i>
+                <div style="font-size: 13px; color: #6b7280;">AI analysis is temporarily unavailable. The static insights above still reflect your current financial picture.</div>
+            </div>`;
+        return;
+    }
+
+    let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+    insights.forEach(insight => {
+        const type = String(insight.type || 'info');
+        const accentColor = type === 'warning' ? '#ef4444'
+            : type === 'success' ? '#10b981'
+            : type === 'tip' ? '#8b5cf6'
+            : '#3b82f6';
+        const bgTint = type === 'warning' ? 'rgba(239,68,68,0.04)'
+            : type === 'success' ? 'rgba(16,185,129,0.04)'
+            : type === 'tip' ? 'rgba(139,92,246,0.04)'
+            : 'rgba(59,130,246,0.04)';
+        const icon = insight.icon || 'fa-lightbulb';
+
+        html += `
+            <div class="card" style="padding: 14px 16px; border-left: 4px solid ${accentColor}; background: ${bgTint};">
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <i class="fas ${escapeHtml(icon)}" style="font-size: 18px; color: ${accentColor}; margin-top: 2px; flex-shrink: 0;"></i>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 700; font-size: 13px; color: #1f2937; margin-bottom: 4px;">${escapeHtml(String(insight.title || ''))}</div>
+                        <div style="font-size: 12px; color: #4b5563; line-height: 1.5;">${escapeHtml(String(insight.message || ''))}</div>
+                        ${insight.action ? `<div style="margin-top: 6px; font-size: 11px; font-weight: 600; color: ${accentColor};"><i class="fas fa-lightbulb" style="margin-right: 4px;"></i>${escapeHtml(String(insight.action))}</div>` : ''}
+                    </div>
+                </div>
+            </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
 }
 
 function openAdvancedAnalytics() {
