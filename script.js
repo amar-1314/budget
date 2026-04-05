@@ -4361,6 +4361,224 @@ function applyOverBudgetDrilldown(categoryEncoded) {
     }
 }
 
+function openNetSpendModal() {
+    try {
+        closeAllModalsExcept('netSpendModal');
+        const expenses = getFilteredExpenses();
+        const selectedYear = document.getElementById('yearSelector').value;
+        const selectedMonth = document.getElementById('monthSelector').value;
+
+        let filteredPayments = allPayments;
+        if (selectedYear !== 'all') filteredPayments = filteredPayments.filter(p => String(p.fields.Year) === selectedYear);
+        if (selectedMonth !== 'all') filteredPayments = filteredPayments.filter(p => p.fields.Month === selectedMonth);
+
+        const totalRentalIncome = filteredPayments
+            .filter(p => p.fields.PaymentType === 'RentalIncome')
+            .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+        const totalSpent = expenses.reduce((sum, exp) => sum + (exp.fields.Actual || 0), 0);
+        const netSpend = totalSpent - totalRentalIncome;
+
+        const subtitleEl = document.getElementById('netSpendSubtitle');
+        if (subtitleEl) {
+            const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            let periodLabel = 'All Time';
+            if (selectedYear !== 'all' && selectedMonth !== 'all') {
+                periodLabel = `${monthNames[(parseInt(selectedMonth) || 1) - 1]} ${selectedYear}`;
+            } else if (selectedYear !== 'all') {
+                periodLabel = selectedYear;
+            }
+            subtitleEl.textContent = periodLabel;
+        }
+
+        const summaryEl = document.getElementById('netSpendSummary');
+        if (summaryEl) {
+            summaryEl.innerHTML = `
+                <div class="grid grid-cols-3 gap-3 text-center">
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-xs text-gray-500 font-semibold">Total Spent</div>
+                        <div class="text-lg font-bold text-gray-800">$${totalSpent.toFixed(2)}</div>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-3">
+                        <div class="text-xs text-green-600 font-semibold"><i class="fas fa-home mr-1"></i>Rental Income</div>
+                        <div class="text-lg font-bold text-green-700">$${totalRentalIncome.toFixed(2)}</div>
+                    </div>
+                    <div class="rounded-lg p-3" style="background: linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,226,0.1));">
+                        <div class="text-xs font-semibold" style="color: var(--color-primary);">Net Spend</div>
+                        <div class="text-lg font-bold" style="color: var(--color-primary);">$${netSpend.toFixed(2)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        const categoryMap = {};
+        expenses.forEach(exp => {
+            const cat = (exp.fields.Category || 'Uncategorized').trim();
+            if (!categoryMap[cat]) {
+                categoryMap[cat] = { total: 0, amarContrib: 0, priyaContrib: 0, expenses: [] };
+            }
+            categoryMap[cat].total += (exp.fields.Actual || 0);
+            categoryMap[cat].amarContrib += (exp.fields.AmarContribution || 0);
+            categoryMap[cat].priyaContrib += (exp.fields.PriyaContribution || 0);
+            categoryMap[cat].expenses.push(exp);
+        });
+
+        const sorted = Object.entries(categoryMap).sort((a, b) => b[1].total - a[1].total);
+
+        const listEl = document.getElementById('netSpendList');
+        if (!listEl) return;
+
+        if (sorted.length === 0) {
+            listEl.innerHTML = `<div class="text-center py-10 text-gray-400"><i class="fas fa-inbox text-5xl mb-4"></i><p class="text-lg">No expenses found</p></div>`;
+        } else {
+            const categoryIcons = {
+                'Mortgage': 'fa-home', 'Groceries': 'fa-shopping-cart', 'Utilities': 'fa-bolt',
+                'Insurance': 'fa-shield-alt', 'Dining': 'fa-utensils', 'Shopping': 'fa-shopping-bag',
+                'Transportation': 'fa-car', 'Entertainment': 'fa-film', 'Health': 'fa-heartbeat',
+                'Education': 'fa-graduation-cap', 'Travel': 'fa-plane', 'Subscriptions': 'fa-redo',
+                'Phone': 'fa-mobile-alt', 'Internet': 'fa-wifi', 'Gas': 'fa-gas-pump',
+                'Maintenance': 'fa-wrench', 'Baby': 'fa-baby', 'Pets': 'fa-paw',
+                'Gifts': 'fa-gift', 'Clothing': 'fa-tshirt', 'Personal Care': 'fa-spa'
+            };
+            const rows = sorted.map(([cat, data], idx) => {
+                const icon = categoryIcons[cat] || 'fa-tag';
+                const pctOfTotal = totalSpent > 0 ? ((data.total / totalSpent) * 100).toFixed(1) : '0.0';
+                const catEncoded = encodeURIComponent(cat);
+                const amarPct = data.total > 0 ? ((data.amarContrib / data.total) * 100).toFixed(0) : '0';
+                const priyaPct = data.total > 0 ? ((data.priyaContrib / data.total) * 100).toFixed(0) : '0';
+                return `
+                    <div class="border border-gray-200 rounded-lg overflow-hidden">
+                        <div class="p-4 cursor-pointer hover:bg-gray-50 transition-colors" onclick="toggleNetSpendCategory('${catEncoded}')">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background: var(--gradient-primary);">
+                                        <i class="fas ${icon} text-white text-sm"></i>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <div class="font-bold text-gray-800 truncate">${escapeHtml(cat)}</div>
+                                        <div class="text-xs text-gray-500">${data.expenses.length} expense${data.expenses.length !== 1 ? 's' : ''} • ${pctOfTotal}% of total</div>
+                                    </div>
+                                </div>
+                                <div class="text-right flex-shrink-0 flex items-center gap-3">
+                                    <div>
+                                        <div class="text-lg font-bold text-gray-800">$${data.total.toFixed(2)}</div>
+                                        <div class="text-xs text-gray-400">
+                                            <span class="text-blue-500">A:${amarPct}%</span>
+                                            <span class="mx-1">•</span>
+                                            <span class="text-pink-500">P:${priyaPct}%</span>
+                                        </div>
+                                    </div>
+                                    <i class="fas fa-chevron-down text-gray-400 text-xs transition-transform" id="netSpendChevron_${idx}"></i>
+                                </div>
+                            </div>
+                            <div class="mt-2 flex gap-1 h-1.5 rounded-full overflow-hidden bg-gray-100">
+                                <div class="rounded-full" style="width: ${amarPct}%; background: #4facfe;"></div>
+                                <div class="rounded-full" style="width: ${priyaPct}%; background: #f093fb;"></div>
+                            </div>
+                        </div>
+                        <div id="netSpendDetail_${idx}" class="hidden border-t border-gray-100 bg-gray-50 max-h-80 overflow-y-auto" data-category="${catEncoded}">
+                            ${buildNetSpendExpenseRows(data.expenses, cat)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            listEl.innerHTML = rows;
+        }
+
+        const modal = document.getElementById('netSpendModal');
+        if (modal) modal.classList.add('active');
+    } catch (error) {
+        console.error('Error opening net spend modal:', error);
+        showNotification('Error: ' + error.message, 'error');
+    }
+}
+
+function buildNetSpendExpenseRows(expenses, category) {
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const sorted = [...expenses].sort((a, b) => {
+        const dateA = `${a.fields.Year}-${String(a.fields.Month).padStart(2, '0')}-${String(a.fields.Day || 1).padStart(2, '0')}`;
+        const dateB = `${b.fields.Year}-${String(b.fields.Month).padStart(2, '0')}-${String(b.fields.Day || 1).padStart(2, '0')}`;
+        return dateB.localeCompare(dateA);
+    });
+
+    return sorted.map(exp => {
+        const f = exp.fields;
+        const item = escapeHtml(f.Item || 'Unnamed');
+        const amount = (f.Actual || 0).toFixed(2);
+        const day = f.Day || 1;
+        const monthIdx = (parseInt(f.Month) || 1) - 1;
+        const dateStr = `${monthNames[monthIdx]} ${day}, ${f.Year}`;
+        const amarC = (f.AmarContribution || 0).toFixed(2);
+        const priyaC = (f.PriyaContribution || 0).toFixed(2);
+        const isLLC = f.LLC === 'Yes' || f.LLC === true;
+        const tags = f.Tags || '';
+        const notes = f.Notes || '';
+
+        let badges = '';
+        if (isLLC) badges += '<span class="inline-block px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">LLC</span>';
+        if (tags) {
+            tags.split(',').slice(0, 3).forEach(tag => {
+                const t = tag.trim();
+                if (t) badges += ` <span class="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">${escapeHtml(t)}</span>`;
+            });
+        }
+
+        return `
+            <div class="px-4 py-3 border-b border-gray-100 last:border-b-0 hover:bg-white transition-colors">
+                <div class="flex justify-between items-start gap-3">
+                    <div class="min-w-0 flex-1">
+                        <div class="font-semibold text-gray-800 text-sm truncate">${item}</div>
+                        <div class="text-xs text-gray-400 mt-0.5"><i class="far fa-calendar-alt mr-1"></i>${dateStr}</div>
+                        ${notes ? `<div class="text-xs text-gray-400 mt-0.5 truncate"><i class="far fa-sticky-note mr-1"></i>${escapeHtml(notes)}</div>` : ''}
+                        ${badges ? `<div class="mt-1 flex flex-wrap gap-1">${badges}</div>` : ''}
+                    </div>
+                    <div class="text-right flex-shrink-0">
+                        <div class="font-bold text-gray-800 text-sm">$${amount}</div>
+                        <div class="text-xs mt-0.5">
+                            <span class="text-blue-500">A: $${amarC}</span><br>
+                            <span class="text-pink-500">P: $${priyaC}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleNetSpendCategory(catEncoded) {
+    const allDetails = document.querySelectorAll('[id^="netSpendDetail_"]');
+    let targetDetail = null;
+    let targetIdx = null;
+
+    allDetails.forEach((detail, idx) => {
+        if (detail.dataset.category === catEncoded) {
+            targetDetail = detail;
+            targetIdx = idx;
+        }
+    });
+
+    if (!targetDetail) return;
+
+    const isHidden = targetDetail.classList.contains('hidden');
+
+    allDetails.forEach((detail, idx) => {
+        detail.classList.add('hidden');
+        const chevron = document.getElementById(`netSpendChevron_${idx}`);
+        if (chevron) chevron.style.transform = 'rotate(0deg)';
+    });
+
+    if (isHidden) {
+        targetDetail.classList.remove('hidden');
+        const chevron = document.getElementById(`netSpendChevron_${targetIdx}`);
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        targetDetail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+function closeNetSpendModal() {
+    const modal = document.getElementById('netSpendModal');
+    if (modal) modal.classList.remove('active');
+}
+
 function updateCharts() {
     updatePieChart();
     updateLLCChart();
