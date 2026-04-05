@@ -4156,9 +4156,14 @@ function updateStats() {
         llcTotalEl.textContent = `$${llcTotal.toFixed(2)}`;
     }
 
-    const rentalIncomeEl = document.getElementById('rentalIncomeTotal');
-    if (rentalIncomeEl) {
-        rentalIncomeEl.textContent = `$${totalRentalIncome.toFixed(2)}`;
+    const netSpendEl = document.getElementById('netSpendTotal');
+    if (netSpendEl) {
+        const netSpend = totalActual - totalRentalIncome;
+        netSpendEl.textContent = `$${netSpend.toFixed(2)}`;
+    }
+    const rentalSublineEl = document.getElementById('rentalIncomeSubline');
+    if (rentalSublineEl) {
+        rentalSublineEl.innerHTML = `<i class="fas fa-home mr-1"></i>Rental: $${totalRentalIncome.toFixed(2)}`;
     }
 
     // Update remaining: always show Budget - Spent
