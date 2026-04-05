@@ -4035,6 +4035,15 @@ function updateStats() {
             p.fields.PaymentType !== 'RentalIncome')
         .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
 
+    // Track Regular settlement payments separately (person paying toward their share)
+    // These are transfers between people, not new contributions to spending
+    const amarRegularPayments = filteredPayments
+        .filter(p => p.fields.Person === 'Amar' && !p.fields.FromExpense && p.fields.PaymentType === 'Regular')
+        .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+    const priyaRegularPayments = filteredPayments
+        .filter(p => p.fields.Person === 'Priya' && !p.fields.FromExpense && p.fields.PaymentType === 'Regular')
+        .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+
     // Reduce only Amar's mortgage contribution by Priya's mortgage payments, keep non-mortgage contributions unchanged
     const amarAdjustedMortgageContrib = Math.max(0, amarMortgageContrib - priyaMortgageContributions);
     const amarContribTotal = amarNonMortgageContrib + amarAdjustedMortgageContrib + amarContribFromPayments;
@@ -4052,6 +4061,12 @@ function updateStats() {
     let priyaRemaining = priyaBaseRemaining >= 0
         ? priyaBaseRemaining - priyaRentalIncome
         : priyaBaseRemaining + priyaRentalIncome;
+
+    // Regular payments are settlements between people:
+    // When Priya pays Amar, Amar's credit (overpayment) decreases
+    // When Amar pays Priya, Priya's credit (overpayment) decreases
+    amarRemaining += priyaRegularPayments;
+    priyaRemaining += amarRegularPayments;
     
     // Apply rollover from previous month (starting Nov 2025)
     if (selectedYear !== 'all' && selectedMonth !== 'all') {
@@ -7030,13 +7045,18 @@ function checkContributionMismatches() {
             // Track rental income separately (reduces target contributions, not counted as contribution)
             if (payment.fields.PaymentType === 'RentalIncome') {
                 monthlyData[key].rentalIncome += (payment.fields.Amount || 0);
-                // Don't add to contributions - rental income reduces target instead
             }
             // Handle Priya's mortgage contributions separately
             else if (payment.fields.Person === 'Priya' && payment.fields.PaymentType === 'PriyaMortgageContribution') {
                 // Don't add yet - will be used to adjust Amar's mortgage contribution
             }
-            // Add regular payments (excluding rental income) to respective person
+            // Skip Regular payments for mismatch detection - they are settlements
+            // between people (transfers), not contributions toward spending
+            else if (payment.fields.PaymentType === 'Regular') {
+                // Regular payments are net-zero: one person pays the other
+                // They don't represent new spending or new contributions to expenses
+            }
+            // Add non-regular, non-rental payments to respective person
             else {
                 if (payment.fields.Person === 'Amar') {
                     monthlyData[key].amarNonMortgage += (payment.fields.Amount || 0);

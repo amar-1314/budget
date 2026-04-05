@@ -286,8 +286,8 @@ body.modal-open {
 @keyframes slideIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
 .notification.success { border-left: 4px solid #10b981; }
 .notification.error { border-left: 4px solid #ef4444; }
-.fab { position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; font-size: 24px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); cursor: pointer; z-index: 100; display: flex; align-items: center; justify-content: center; }
-.fab:active { transform: scale(0.95); }
+.fab { position: fixed; bottom: 20px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); right: 20px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; font-size: 24px; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); cursor: pointer; z-index: 100; display: flex; align-items: center; justify-content: center; -webkit-transform: translateZ(0); transform: translateZ(0); -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+.fab:active { transform: scale(0.95) translateZ(0); }
 
 /* Full-page loading overlay */
 #fullPageLoader {
