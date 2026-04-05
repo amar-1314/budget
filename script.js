@@ -145,29 +145,32 @@ const HOUSEHOLD_PROFILE = {
     location: 'Herndon, VA'
 };
 
+// dmvMedian = typical monthly spend for a DMV family of 3, $11k/mo income
 const FINANCIAL_BENCHMARKS = {
-    'Groceries':      { min: 600,  max: 900,  icon: 'fa-shopping-cart', note: 'USDA moderate plan, family of 3, DMV area' },
-    'Dining':         { min: 150,  max: 300,  icon: 'fa-utensils',     note: '~2-3% of take-home income' },
-    'Gas':            { min: 150,  max: 300,  icon: 'fa-gas-pump',     note: 'Two-car household, VA commute' },
-    'Utilities':      { min: 150,  max: 300,  icon: 'fa-bolt',         note: 'Apartment in Herndon' },
-    'Insurance':      { min: 300,  max: 500,  icon: 'fa-shield-alt',   note: 'Auto + renters, family coverage' },
-    'Car':            { min: 300,  max: 600,  icon: 'fa-car',          note: 'Two car payments, mid-range vehicles' },
-    'Subscriptions':  { min: 50,   max: 150,  icon: 'fa-redo',         note: 'Streaming, software, memberships' },
-    'Shopping':       { min: 100,  max: 300,  icon: 'fa-shopping-bag', note: 'General household purchases' },
-    'Entertainment':  { min: 50,   max: 200,  icon: 'fa-film',         note: 'Family activities and outings' },
-    'Baby':           { min: 100,  max: 300,  icon: 'fa-baby',         note: 'Diapers, formula, clothes, gear' },
-    'Health':         { min: 100,  max: 300,  icon: 'fa-heartbeat',    note: 'Copays, prescriptions, wellness' },
-    'Healthcare':     { min: 100,  max: 300,  icon: 'fa-heartbeat',    note: 'Copays, prescriptions, wellness' },
-    'Personal Care':  { min: 50,   max: 150,  icon: 'fa-spa',          note: 'Grooming, hygiene, self-care' },
-    'Clothing':       { min: 50,   max: 200,  icon: 'fa-tshirt',       note: 'Family clothing needs' },
-    'Education':      { min: 0,    max: 200,  icon: 'fa-graduation-cap', note: 'Courses, books, development' },
-    'Travel':         { min: 0,    max: 300,  icon: 'fa-plane',        note: 'Occasional family trips (amortized)' },
-    'Phone':          { min: 50,   max: 150,  icon: 'fa-mobile-alt',   note: 'Two phone plans' },
-    'Internet':       { min: 50,   max: 100,  icon: 'fa-wifi',         note: 'Home internet service' },
-    'Maintenance':    { min: 50,   max: 200,  icon: 'fa-wrench',       note: 'Car and home maintenance' },
-    'Pets':           { min: 0,    max: 100,  icon: 'fa-paw',          note: 'Pet care if applicable' },
-    'Gifts':          { min: 0,    max: 150,  icon: 'fa-gift',         note: 'Gifts and donations (amortized)' }
+    'Groceries':      { min: 600,  max: 900,  dmvMedian: 750,  icon: 'fa-shopping-cart', note: 'USDA moderate plan, family of 3, DMV area' },
+    'Dining':         { min: 150,  max: 300,  dmvMedian: 220,  icon: 'fa-utensils',     note: '~2-3% of take-home income' },
+    'Gas':            { min: 150,  max: 300,  dmvMedian: 200,  icon: 'fa-gas-pump',     note: 'Two-car household, VA commute' },
+    'Utilities':      { min: 150,  max: 300,  dmvMedian: 220,  icon: 'fa-bolt',         note: 'Apartment in Herndon' },
+    'Insurance':      { min: 300,  max: 500,  dmvMedian: 380,  icon: 'fa-shield-alt',   note: 'Auto + renters, family coverage' },
+    'Car':            { min: 300,  max: 600,  dmvMedian: 450,  icon: 'fa-car',          note: 'Two car payments, mid-range vehicles' },
+    'Subscriptions':  { min: 50,   max: 150,  dmvMedian: 85,   icon: 'fa-redo',         note: 'Streaming, software, memberships' },
+    'Shopping':       { min: 100,  max: 300,  dmvMedian: 180,  icon: 'fa-shopping-bag', note: 'General household purchases' },
+    'Entertainment':  { min: 50,   max: 200,  dmvMedian: 120,  icon: 'fa-film',         note: 'Family activities and outings' },
+    'Baby':           { min: 100,  max: 300,  dmvMedian: 200,  icon: 'fa-baby',         note: 'Diapers, formula, clothes, gear' },
+    'Health':         { min: 100,  max: 300,  dmvMedian: 180,  icon: 'fa-heartbeat',    note: 'Copays, prescriptions, wellness' },
+    'Healthcare':     { min: 100,  max: 300,  dmvMedian: 180,  icon: 'fa-heartbeat',    note: 'Copays, prescriptions, wellness' },
+    'Personal Care':  { min: 50,   max: 150,  dmvMedian: 80,   icon: 'fa-spa',          note: 'Grooming, hygiene, self-care' },
+    'Clothing':       { min: 50,   max: 200,  dmvMedian: 120,  icon: 'fa-tshirt',       note: 'Family clothing needs' },
+    'Education':      { min: 0,    max: 200,  dmvMedian: 50,   icon: 'fa-graduation-cap', note: 'Courses, books, development' },
+    'Travel':         { min: 0,    max: 300,  dmvMedian: 150,  icon: 'fa-plane',        note: 'Occasional family trips (amortized)' },
+    'Phone':          { min: 50,   max: 150,  dmvMedian: 100,  icon: 'fa-mobile-alt',   note: 'Two phone plans' },
+    'Internet':       { min: 50,   max: 100,  dmvMedian: 75,   icon: 'fa-wifi',         note: 'Home internet service' },
+    'Maintenance':    { min: 50,   max: 200,  dmvMedian: 100,  icon: 'fa-wrench',       note: 'Car and home maintenance' },
+    'Pets':           { min: 0,    max: 100,  dmvMedian: 40,   icon: 'fa-paw',          note: 'Pet care if applicable' },
+    'Gifts':          { min: 0,    max: 150,  dmvMedian: 60,   icon: 'fa-gift',         note: 'Gifts and donations (amortized)' }
 };
+// DMV benchmark for total non-housing monthly spending (family of 3, $11k income)
+const DMV_TOTAL_NON_HOUSING_MEDIAN = 3500;
 
 // Supabase Table Configuration
 const TABLE_NAME = 'Budget';
@@ -13453,6 +13456,21 @@ function generateFinancialAnalysis() {
 
     categoryResults.sort((a, b) => b.avg - a.avg);
 
+    // Build monthly totals for trend chart
+    const monthlyTotals = {};  // { 'YYYY-MM': { spent, rental, net } }
+    sortedMonthKeys.forEach(mk => { monthlyTotals[mk] = { spent: 0, rental: 0 }; });
+    analysisExpenses.forEach(exp => {
+        const mk = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+        if (monthlyTotals[mk]) monthlyTotals[mk].spent += (exp.fields.Actual || 0);
+    });
+    analysisPayments.filter(p => p.fields.PaymentType === 'RentalIncome').forEach(p => {
+        const mk = `${p.fields.Year}-${String(p.fields.Month).padStart(2, '0')}`;
+        if (monthlyTotals[mk]) monthlyTotals[mk].rental += (p.fields.Amount || 0);
+    });
+    sortedMonthKeys.forEach(mk => {
+        monthlyTotals[mk].net = monthlyTotals[mk].spent - monthlyTotals[mk].rental;
+    });
+
     const healthScore = computeHealthScore(categoryResults, housingRatio, savingsRate, discretionaryRatio);
     const insights = generateFinancialInsights(categoryResults, housingRatio, savingsRate, netHousingCost, avgRentalIncome, avgMortgage, avgTotalSpent, salary, totalMonthlyIncome, monthlySurplus);
 
@@ -13460,7 +13478,8 @@ function generateFinancialAnalysis() {
         healthScore, salary, avgRentalIncome, totalMonthlyIncome,
         avgTotalSpent, avgMortgage, netHousingCost, monthlySurplus,
         savingsRate, housingRatio, discretionaryRatio, nonHousingSpend,
-        categoryResults, insights, monthCount
+        categoryResults, insights, monthCount,
+        sortedMonthKeys, monthlyTotals, categoryMonthly
     });
 }
 
@@ -13655,7 +13674,8 @@ function renderFinancialAnalysis(container, data) {
         healthScore, salary, avgRentalIncome, totalMonthlyIncome,
         avgTotalSpent, avgMortgage, netHousingCost, monthlySurplus,
         savingsRate, housingRatio, discretionaryRatio, nonHousingSpend,
-        categoryResults, insights, monthCount
+        categoryResults, insights, monthCount,
+        sortedMonthKeys, monthlyTotals, categoryMonthly
     } = data;
 
     const scoreColor = healthScore.score >= 70 ? '#10b981' : healthScore.score >= 50 ? '#f59e0b' : '#ef4444';
@@ -13664,32 +13684,103 @@ function renderFinancialAnalysis(container, data) {
         : healthScore.score >= 50
             ? 'linear-gradient(135deg, #f59e0b, #d97706)'
             : 'linear-gradient(135deg, #ef4444, #dc2626)';
-
+    const scoreEmoji = healthScore.score >= 85 ? '🟢' : healthScore.score >= 70 ? '🟡' : healthScore.score >= 50 ? '🟠' : '🔴';
     const spendBarWidth = totalMonthlyIncome > 0 ? Math.min(100, (avgTotalSpent / totalMonthlyIncome) * 100) : 100;
-    const surplusColor = monthlySurplus >= 0 ? 'color: #059669' : 'color: #dc2626';
-    const surplusBg = monthlySurplus >= 0 ? 'background: rgba(16,185,129,0.1)' : 'background: rgba(239,68,68,0.1)';
+    const surplusColor = monthlySurplus >= 0 ? '#059669' : '#dc2626';
+
+    // DMV peer comparison for overall non-housing spend
+    const nonHousingDiff = nonHousingSpend - DMV_TOTAL_NON_HOUSING_MEDIAN;
+    const nonHousingDiffPct = DMV_TOTAL_NON_HOUSING_MEDIAN > 0 ? ((nonHousingDiff / DMV_TOTAL_NON_HOUSING_MEDIAN) * 100) : 0;
 
     let html = `<div style="display: flex; flex-direction: column; gap: 20px;">`;
 
-    // 1. Health Score Card
+    // 1. Health Score — large visual indicator
     html += `
-        <div style="background: ${scoreGradient}; border-radius: var(--radius-lg); padding: 24px; color: white; box-shadow: var(--shadow-md);">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="background: ${scoreGradient}; border-radius: var(--radius-lg); padding: 24px; color: white; box-shadow: var(--shadow-md); position: relative; overflow: hidden;">
+            <div style="position: absolute; top: -20px; right: -20px; font-size: 100px; opacity: 0.1;">${scoreEmoji}</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1;">
                 <div style="flex: 1;">
-                    <div style="font-size: 18px; font-weight: 800; margin-bottom: 6px;">Financial Health Score</div>
-                    <div style="font-size: 13px; opacity: 0.9; line-height: 1.4;">${healthScore.message}</div>
+                    <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; font-weight: 600;">Financial Health</div>
+                    <div style="font-size: 22px; font-weight: 800; margin: 4px 0;">${healthScore.score >= 85 ? 'Excellent' : healthScore.score >= 70 ? 'Good' : healthScore.score >= 50 ? 'Needs Attention' : 'Critical'}</div>
+                    <div style="font-size: 12px; opacity: 0.9; line-height: 1.5; max-width: 280px;">${healthScore.message}</div>
                 </div>
                 <div style="text-align: center; margin-left: 16px;">
-                    <div style="font-size: 48px; font-weight: 800; line-height: 1;">${healthScore.score}</div>
-                    <div style="font-size: 14px; font-weight: 600; opacity: 0.8;">Grade: ${healthScore.grade}</div>
+                    <div style="width: 80px; height: 80px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.15);">
+                        <div>
+                            <div style="font-size: 32px; font-weight: 800; line-height: 1;">${healthScore.score}</div>
+                            <div style="font-size: 10px; opacity: 0.7;">/ 100</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 13px; font-weight: 700; margin-top: 6px; opacity: 0.9;">Grade ${healthScore.grade}</div>
                 </div>
-            </div>
-            <div style="margin-top: 16px; background: rgba(255,255,255,0.2); border-radius: 99px; height: 10px;">
-                <div style="width: ${healthScore.score}%; background: white; border-radius: 99px; height: 10px; transition: width 0.5s ease;"></div>
             </div>
         </div>`;
 
-    // 2. Income vs Expenses Summary
+    // 2. DMV Peer Comparison — overall standing
+    const peerVerdict = nonHousingDiffPct <= -10 ? { label: 'Below Average', color: '#059669', icon: 'fa-arrow-down', bg: 'rgba(16,185,129,0.06)' }
+        : nonHousingDiffPct <= 10 ? { label: 'On Par', color: '#3b82f6', icon: 'fa-equals', bg: 'rgba(59,130,246,0.06)' }
+        : nonHousingDiffPct <= 25 ? { label: 'Above Average', color: '#f59e0b', icon: 'fa-arrow-up', bg: 'rgba(245,158,11,0.06)' }
+        : { label: 'Well Above', color: '#ef4444', icon: 'fa-exclamation-triangle', bg: 'rgba(239,68,68,0.06)' };
+
+    html += `
+        <div class="card" style="padding: 20px; border-left: 4px solid ${peerVerdict.color}; background: ${peerVerdict.bg};">
+            <div style="font-weight: 700; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
+                <i class="fas fa-users" style="color: ${peerVerdict.color};"></i>How You Compare <span style="font-weight: 400; font-size: 12px; color: #9ca3af;">vs DMV families, $11k income</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 14px;">
+                <div style="width: 56px; height: 56px; border-radius: 50%; background: ${peerVerdict.bg}; border: 2px solid ${peerVerdict.color}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas ${peerVerdict.icon}" style="font-size: 20px; color: ${peerVerdict.color};"></i>
+                </div>
+                <div>
+                    <div style="font-size: 18px; font-weight: 800; color: ${peerVerdict.color};">${peerVerdict.label} Spender</div>
+                    <div style="font-size: 13px; color: #4b5563;">Your non-housing spend is <strong style="color: ${peerVerdict.color};">${nonHousingDiffPct > 0 ? '+' : ''}${nonHousingDiffPct.toFixed(0)}%</strong> ${nonHousingDiffPct >= 0 ? 'above' : 'below'} the DMV median ($${DMV_TOTAL_NON_HOUSING_MEDIAN}/mo)</div>
+                </div>
+            </div>`;
+
+    // Per-category peer comparisons (top deviations)
+    const peerComparisons = categoryResults
+        .filter(r => r.benchmark && r.benchmark.dmvMedian)
+        .map(r => {
+            const diff = r.avg - r.benchmark.dmvMedian;
+            const diffPct = r.benchmark.dmvMedian > 0 ? (diff / r.benchmark.dmvMedian) * 100 : 0;
+            return { ...r, diff, diffPct };
+        })
+        .filter(r => Math.abs(r.diffPct) >= 10)
+        .sort((a, b) => Math.abs(b.diffPct) - Math.abs(a.diffPct))
+        .slice(0, 5);
+
+    if (peerComparisons.length > 0) {
+        html += `<div style="display: flex; flex-direction: column; gap: 6px;">`;
+        peerComparisons.forEach(r => {
+            const isOver = r.diffPct > 0;
+            const color = isOver ? (r.diffPct > 25 ? '#ef4444' : '#f59e0b') : '#10b981';
+            const arrow = isOver ? '↑' : '↓';
+            html += `
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: white; border-radius: var(--radius-md); border: 1px solid #f3f4f6;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas ${(r.benchmark && r.benchmark.icon) || 'fa-tag'}" style="color: #6b7280; font-size: 12px;"></i>
+                        <span style="font-size: 13px; font-weight: 600; color: #1f2937;">${escapeHtml(r.cat)}</span>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-size: 13px; font-weight: 700; color: ${color};">${arrow} ${Math.abs(r.diffPct).toFixed(0)}% ${isOver ? 'more' : 'less'}</span>
+                        <span style="font-size: 11px; color: #9ca3af; margin-left: 6px;">($${r.avg.toFixed(0)} vs $${r.benchmark.dmvMedian})</span>
+                    </div>
+                </div>`;
+        });
+        html += `</div>`;
+    }
+    html += `</div>`;
+
+    // 3. Net Spending Trend Chart
+    html += `
+        <div class="card" style="padding: 20px;">
+            <div style="font-weight: 700; font-size: 15px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
+                <i class="fas fa-chart-line" style="color: var(--color-primary);"></i>Monthly Spending Trend
+            </div>
+            <div style="height: 220px; position: relative;"><canvas id="finAnalysisTrendChart"></canvas></div>
+        </div>`;
+
+    // 4. Income vs Expenses Summary
     html += `
         <div class="card" style="padding: 20px;">
             <div style="font-weight: 700; font-size: 15px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
@@ -13708,9 +13799,9 @@ function renderFinancialAnalysis(container, data) {
                     <div style="font-size: 11px; font-weight: 600; color: #8b5cf6; text-transform: uppercase; letter-spacing: 0.5px;">Total Income</div>
                     <div style="font-size: 20px; font-weight: 800; color: #1f2937;">$${totalMonthlyIncome.toFixed(0)}</div>
                 </div>
-                <div style="${surplusBg}; border-radius: var(--radius-md); padding: 12px; text-align: center;">
-                    <div style="font-size: 11px; font-weight: 600; ${surplusColor}; text-transform: uppercase; letter-spacing: 0.5px;">${monthlySurplus >= 0 ? 'Surplus' : 'Deficit'}</div>
-                    <div style="font-size: 20px; font-weight: 800; ${surplusColor};">${monthlySurplus >= 0 ? '+' : '-'}$${Math.abs(monthlySurplus).toFixed(0)}</div>
+                <div style="background: ${monthlySurplus >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}; border-radius: var(--radius-md); padding: 12px; text-align: center;">
+                    <div style="font-size: 11px; font-weight: 600; color: ${surplusColor}; text-transform: uppercase; letter-spacing: 0.5px;">${monthlySurplus >= 0 ? 'Surplus' : 'Deficit'}</div>
+                    <div style="font-size: 20px; font-weight: 800; color: ${surplusColor};">${monthlySurplus >= 0 ? '+' : '-'}$${Math.abs(monthlySurplus).toFixed(0)}</div>
                 </div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -13724,18 +13815,18 @@ function renderFinancialAnalysis(container, data) {
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <span style="font-size: 11px; color: #6b7280; width: 60px;">Spending</span>
                     <div style="flex: 1; background: #f3f4f6; border-radius: 99px; height: 12px;">
-                        <div style="width: ${spendBarWidth}%; background: ${spendBarWidth > 90 ? '#ef4444' : spendBarWidth > 75 ? '#f59e0b' : '#10b981'}; border-radius: 99px; height: 12px; transition: width 0.5s ease;"></div>
+                        <div style="width: ${spendBarWidth}%; background: ${spendBarWidth > 90 ? '#ef4444' : spendBarWidth > 75 ? '#f59e0b' : '#10b981'}; border-radius: 99px; height: 12px;"></div>
                     </div>
                     <span style="font-size: 12px; font-weight: 700; color: #374151; width: 70px; text-align: right;">$${avgTotalSpent.toFixed(0)}</span>
                 </div>
             </div>
             <div style="margin-top: 12px; display: flex; gap: 16px; font-size: 12px; color: #6b7280;">
                 <span>Savings: <strong style="color: ${savingsRate >= 20 ? '#059669' : savingsRate >= 10 ? '#d97706' : '#dc2626'};">${savingsRate.toFixed(0)}%</strong></span>
-                <span>Non-Housing Spend: <strong>${discretionaryRatio.toFixed(0)}%</strong> of salary</span>
+                <span>Non-Housing: <strong>${discretionaryRatio.toFixed(0)}%</strong> of salary</span>
             </div>
         </div>`;
 
-    // 3. Housing Analysis
+    // 5. Housing Analysis
     const housingBorderColor = housingRatio <= 28 ? '#10b981' : housingRatio <= 35 ? '#f59e0b' : '#ef4444';
     html += `
         <div class="card" style="padding: 20px; border-left: 4px solid ${housingBorderColor};">
@@ -13767,10 +13858,9 @@ function renderFinancialAnalysis(container, data) {
                 <span style="font-size: 12px; font-weight: 700; color: ${housingBorderColor};">${housingRatio.toFixed(0)}%</span>
                 <span style="font-size: 10px; color: #9ca3af;">(target: &lt;28%)</span>
             </div>
-            <div style="margin-top: 8px; font-size: 11px; color: #9ca3af;"><i class="fas fa-info-circle" style="margin-right: 4px;"></i>Mortgage is investment property cost, offset by rental income. Ratio uses salary only.</div>
         </div>`;
 
-    // 4. Category Benchmark Grid
+    // 6. Category Benchmarks with Peer Comparison
     html += `
         <div>
             <div style="font-weight: 700; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
@@ -13801,12 +13891,23 @@ function renderFinancialAnalysis(container, data) {
 
         const freq = r.frequency || {};
         const freqBadge = freq.type && freq.type !== 'monthly'
-            ? `<span style="display: inline-block; padding: 1px 6px; background: rgba(59,130,246,0.1); color: #2563eb; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 6px;" title="${freq.detail || ''}">${freq.label}</span>`
+            ? `<span style="display: inline-block; padding: 1px 6px; background: rgba(59,130,246,0.1); color: #2563eb; border-radius: 4px; font-size: 10px; font-weight: 600; margin-left: 6px;">${freq.label}</span>`
             : '';
 
+        // Peer comparison line
+        let peerLine = '';
+        if (r.benchmark && r.benchmark.dmvMedian) {
+            const pDiff = r.avg - r.benchmark.dmvMedian;
+            const pPct = (pDiff / r.benchmark.dmvMedian) * 100;
+            if (Math.abs(pPct) >= 5) {
+                const pColor = pPct > 25 ? '#ef4444' : pPct > 0 ? '#f59e0b' : '#10b981';
+                peerLine = `<div style="font-size: 11px; color: ${pColor}; margin-top: 2px;"><i class="fas fa-users" style="margin-right: 3px;"></i>${pPct > 0 ? '+' : ''}${pPct.toFixed(0)}% vs DMV peers ($${r.benchmark.dmvMedian}/mo typical)</div>`;
+            }
+        }
+
         html += `
-            <div class="card" style="padding: 12px 14px; display: flex; align-items: center; gap: 12px; border-left: 3px solid ${dotColor};">
-                <div style="width: 32px; height: 32px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--gradient-primary);">
+            <div class="card" style="padding: 12px 14px; display: flex; align-items: flex-start; gap: 12px; border-left: 3px solid ${dotColor};">
+                <div style="width: 32px; height: 32px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--gradient-primary); margin-top: 2px;">
                     <i class="fas ${icon}" style="color: white; font-size: 12px;"></i>
                 </div>
                 <div style="flex: 1; min-width: 0;">
@@ -13819,10 +13920,11 @@ function renderFinancialAnalysis(container, data) {
                             </span>
                         </div>
                     </div>
+                    ${peerLine}
                     ${freq.type && freq.type !== 'monthly' ? `<div style="font-size: 11px; color: #3b82f6; margin-top: 2px;"><i class="fas fa-calendar-alt" style="margin-right: 4px;"></i>${freq.detail} (total: $${r.total.toFixed(0)} over ${monthCount} mo)</div>` : ''}
                     <div style="margin-top: 6px; display: flex; align-items: center; gap: 8px;">
                         <div style="flex: 1; background: #e5e7eb; border-radius: 99px; height: 5px;">
-                            <div style="width: ${barPct}%; background: ${barColor}; border-radius: 99px; height: 5px; transition: width 0.5s ease;"></div>
+                            <div style="width: ${barPct}%; background: ${barColor}; border-radius: 99px; height: 5px;"></div>
                         </div>
                         <span style="font-size: 10px; color: #9ca3af; flex-shrink: 0;">${benchmarkRange}</span>
                     </div>
@@ -13832,14 +13934,14 @@ function renderFinancialAnalysis(container, data) {
 
     html += `</div></div>`;
 
-    // 5. Key Takeaways / Insights
+    // 7. Key Takeaways / Insights
     if (insights.length > 0) {
         html += `
             <div>
                 <div style="font-weight: 700; font-size: 15px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; color: #1f2937;">
                     <i class="fas fa-lightbulb" style="color: #f59e0b;"></i>Key Takeaways
                 </div>
-                <div style="display: grid; grid-template-columns: 1fr; gap: 10px;">`;
+                <div style="display: flex; flex-direction: column; gap: 10px;">`;
 
         insights.forEach(insight => {
             const accentColor = insight.type === 'warning' ? '#ef4444'
@@ -13866,8 +13968,87 @@ function renderFinancialAnalysis(container, data) {
     }
 
     html += `</div>`;
-
     container.innerHTML = html;
+
+    // Render the trend chart after DOM is ready
+    setTimeout(() => renderFinancialTrendChart(sortedMonthKeys, monthlyTotals, salary), 50);
+}
+
+function renderFinancialTrendChart(sortedMonthKeys, monthlyTotals, salary) {
+    const canvas = document.getElementById('finAnalysisTrendChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const labels = sortedMonthKeys.map(mk => {
+        const [y, m] = mk.split('-');
+        return `${monthNames[parseInt(m) - 1]} ${y.slice(2)}`;
+    });
+
+    const spentData = sortedMonthKeys.map(mk => monthlyTotals[mk]?.spent || 0);
+    const netData = sortedMonthKeys.map(mk => monthlyTotals[mk]?.net || 0);
+    const incomeData = sortedMonthKeys.map(() => salary);
+
+    if (canvas._finChart) canvas._finChart.destroy();
+
+    canvas._finChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Total Spent',
+                    data: spentData,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239,68,68,0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#ef4444'
+                },
+                {
+                    label: 'Net Spend (after rental)',
+                    data: netData,
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102,126,234,0.08)',
+                    fill: true,
+                    tension: 0.3,
+                    borderWidth: 2,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#667eea'
+                },
+                {
+                    label: 'Salary Income',
+                    data: incomeData,
+                    borderColor: '#10b981',
+                    borderDash: [6, 4],
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) { return `${ctx.dataset.label}: $${ctx.parsed.y.toLocaleString()}`; }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: v => `$${(v / 1000).toFixed(0)}k`, font: { size: 11 } },
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                },
+                x: { ticks: { font: { size: 11 } }, grid: { display: false } }
+            }
+        }
+    });
 }
 
 function openAdvancedAnalytics() {
