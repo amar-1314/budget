@@ -119,6 +119,14 @@
                         <div class="text-xs text-gray-500">Smart spending analysis & tips</div>
                     </div>
                 </button>
+                <button onclick="openAnalyzeFinances(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-green-50 transition-colors flex items-center gap-3 border border-green-200">
+                    <i class="fas fa-stethoscope text-green-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Analyze Finances</div>
+                        <div class="text-xs text-gray-500">Financial health check vs benchmarks</div>
+                    </div>
+                </button>
                 <button onclick="openAdvancedAnalytics(); toggleMenu();"
                     class="w-full text-left px-4 py-3 rounded-lg hover:bg-purple-50 transition-colors flex items-center gap-3">
                     <i class="fas fa-chart-pie text-purple-600 text-xl"></i>
@@ -1595,6 +1603,24 @@
                 <div class="text-center py-8 text-gray-400">
                     <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
                     <p>Analyzing your spending data...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Analyze Finances Modal -->
+    <div id="analyzeFinancesModal" class="modal">
+        <div class="modal-content" style="max-width: 1000px;">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-stethoscope mr-2 text-green-600"></i>Financial Health Check</h2>
+                    <div class="text-sm text-gray-500" id="analyzeFinancesSubtitle"></div>
+                </div>
+                <button onclick="closeAnalyzeFinances()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-2xl"></i></button>
+            </div>
+            <div id="analyzeFinancesContent">
+                <div class="text-center py-8 text-gray-400">
+                    <i class="fas fa-spinner fa-spin text-4xl mb-3"></i>
+                    <p>Analyzing your financial health...</p>
                 </div>
             </div>
         </div>

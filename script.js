@@ -138,6 +138,37 @@ console.log(`🎬 SCRIPT STARTING TO LOAD... (v${APP_VERSION})`);
 console.log('💾 Data Source: 100% Supabase (PostgreSQL)');
 console.log(`🕐 Build: ${BUILD_TIMESTAMP}`);
 
+// Household Financial Profile & Benchmarks (Herndon VA, couple mid-30s, 1 infant)
+const HOUSEHOLD_PROFILE = {
+    monthlySalary: 11000,       // Amar $6k + Priya $5k post-tax
+    members: 3,
+    location: 'Herndon, VA'
+};
+
+const FINANCIAL_BENCHMARKS = {
+    'Groceries':      { min: 600,  max: 900,  icon: 'fa-shopping-cart', note: 'USDA moderate plan, family of 3, DMV area' },
+    'Dining':         { min: 150,  max: 300,  icon: 'fa-utensils',     note: '~2-3% of take-home income' },
+    'Gas':            { min: 150,  max: 300,  icon: 'fa-gas-pump',     note: 'Two-car household, VA commute' },
+    'Utilities':      { min: 150,  max: 300,  icon: 'fa-bolt',         note: 'Apartment in Herndon' },
+    'Insurance':      { min: 300,  max: 500,  icon: 'fa-shield-alt',   note: 'Auto + renters, family coverage' },
+    'Car':            { min: 300,  max: 600,  icon: 'fa-car',          note: 'Two car payments, mid-range vehicles' },
+    'Subscriptions':  { min: 50,   max: 150,  icon: 'fa-redo',         note: 'Streaming, software, memberships' },
+    'Shopping':       { min: 100,  max: 300,  icon: 'fa-shopping-bag', note: 'General household purchases' },
+    'Entertainment':  { min: 50,   max: 200,  icon: 'fa-film',         note: 'Family activities and outings' },
+    'Baby':           { min: 100,  max: 300,  icon: 'fa-baby',         note: 'Diapers, formula, clothes, gear' },
+    'Health':         { min: 100,  max: 300,  icon: 'fa-heartbeat',    note: 'Copays, prescriptions, wellness' },
+    'Healthcare':     { min: 100,  max: 300,  icon: 'fa-heartbeat',    note: 'Copays, prescriptions, wellness' },
+    'Personal Care':  { min: 50,   max: 150,  icon: 'fa-spa',          note: 'Grooming, hygiene, self-care' },
+    'Clothing':       { min: 50,   max: 200,  icon: 'fa-tshirt',       note: 'Family clothing needs' },
+    'Education':      { min: 0,    max: 200,  icon: 'fa-graduation-cap', note: 'Courses, books, development' },
+    'Travel':         { min: 0,    max: 300,  icon: 'fa-plane',        note: 'Occasional family trips (amortized)' },
+    'Phone':          { min: 50,   max: 150,  icon: 'fa-mobile-alt',   note: 'Two phone plans' },
+    'Internet':       { min: 50,   max: 100,  icon: 'fa-wifi',         note: 'Home internet service' },
+    'Maintenance':    { min: 50,   max: 200,  icon: 'fa-wrench',       note: 'Car and home maintenance' },
+    'Pets':           { min: 0,    max: 100,  icon: 'fa-paw',          note: 'Pet care if applicable' },
+    'Gifts':          { min: 0,    max: 150,  icon: 'fa-gift',         note: 'Gifts and donations (amortized)' }
+};
+
 // Supabase Table Configuration
 const TABLE_NAME = 'Budget';
 const PAYMENTS_TABLE = 'Payments';
@@ -13288,6 +13319,442 @@ function calculateBudgetEfficiency() {
     }
 
     return { score: Math.max(0, Math.round(score)), message };
+}
+
+// ── Analyze Finances ─────────────────────────────────────────────────
+
+function openAnalyzeFinances() {
+    closeAllModalsExcept('analyzeFinancesModal');
+    document.getElementById('analyzeFinancesModal').classList.add('active');
+    generateFinancialAnalysis();
+}
+
+function closeAnalyzeFinances() {
+    document.getElementById('analyzeFinancesModal').classList.remove('active');
+}
+
+function generateFinancialAnalysis() {
+    const container = document.getElementById('analyzeFinancesContent');
+    if (!container) return;
+
+    if (allExpenses.length === 0) {
+        container.innerHTML = '<div class="text-center py-8 text-gray-400"><i class="fas fa-inbox text-4xl mb-3"></i><p>No expenses to analyze. Add some expenses first!</p></div>';
+        return;
+    }
+
+    const now = new Date();
+    const analysisMonths = getAnalysisMonths(now, 3);
+    const monthCount = analysisMonths.length || 1;
+
+    const subtitleEl = document.getElementById('analyzeFinancesSubtitle');
+    if (subtitleEl) {
+        const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        if (analysisMonths.length > 0) {
+            const first = analysisMonths[0];
+            const last = analysisMonths[analysisMonths.length - 1];
+            subtitleEl.textContent = `Based on ${monthNames[first.m - 1]} ${first.y} – ${monthNames[last.m - 1]} ${last.y} (${monthCount}-month avg)`;
+        }
+    }
+
+    const monthlyExpenses = filterExpensesToMonths(analysisMonths);
+    const monthlyPayments = filterPaymentsToMonths(analysisMonths);
+
+    const totalRentalIncome = monthlyPayments
+        .filter(p => p.fields.PaymentType === 'RentalIncome')
+        .reduce((sum, p) => sum + (p.fields.Amount || 0), 0);
+    const avgRentalIncome = totalRentalIncome / monthCount;
+
+    const salary = HOUSEHOLD_PROFILE.monthlySalary;
+    const totalMonthlyIncome = salary + avgRentalIncome;
+
+    const categoryTotals = {};
+    let totalSpent = 0;
+    let mortgageTotal = 0;
+    monthlyExpenses.forEach(exp => {
+        const cat = (exp.fields.Category || 'Other').trim();
+        const amt = exp.fields.Actual || 0;
+        categoryTotals[cat] = (categoryTotals[cat] || 0) + amt;
+        totalSpent += amt;
+        if (cat === 'Mortgage') mortgageTotal += amt;
+    });
+
+    const avgTotalSpent = totalSpent / monthCount;
+    const avgMortgage = mortgageTotal / monthCount;
+    const netHousingCost = avgMortgage - avgRentalIncome;
+    const nonHousingSpend = avgTotalSpent - avgMortgage;
+    const monthlySurplus = totalMonthlyIncome - avgTotalSpent;
+    const savingsRate = totalMonthlyIncome > 0 ? (monthlySurplus / totalMonthlyIncome) * 100 : 0;
+    const housingRatio = salary > 0 ? (Math.max(0, netHousingCost) / salary) * 100 : 0;
+    const discretionaryRatio = salary > 0 ? (nonHousingSpend / salary) * 100 : 0;
+
+    const categoryResults = [];
+    Object.entries(categoryTotals).forEach(([cat, total]) => {
+        if (cat === 'Mortgage') return;
+        const avg = total / monthCount;
+        const benchmark = FINANCIAL_BENCHMARKS[cat];
+        let status, statusLabel, statusColor, benchmarkNote;
+        if (benchmark) {
+            if (avg <= benchmark.max) {
+                status = 'healthy';
+                statusLabel = 'Healthy';
+                statusColor = 'green';
+            } else if (avg <= benchmark.max * 1.25) {
+                status = 'watch';
+                statusLabel = 'Watch';
+                statusColor = 'yellow';
+            } else {
+                status = 'concerning';
+                statusLabel = 'Over Benchmark';
+                statusColor = 'red';
+            }
+            benchmarkNote = benchmark.note;
+        } else {
+            status = 'info';
+            statusLabel = 'No Benchmark';
+            statusColor = 'gray';
+            benchmarkNote = 'No benchmark defined for this category';
+        }
+        categoryResults.push({ cat, avg, total, benchmark, status, statusLabel, statusColor, benchmarkNote });
+    });
+
+    categoryResults.sort((a, b) => b.avg - a.avg);
+
+    const healthScore = computeHealthScore(categoryResults, housingRatio, savingsRate, discretionaryRatio);
+    const insights = generateFinancialInsights(categoryResults, housingRatio, savingsRate, netHousingCost, avgRentalIncome, avgMortgage, avgTotalSpent, salary, totalMonthlyIncome, monthlySurplus);
+
+    renderFinancialAnalysis(container, {
+        healthScore, salary, avgRentalIncome, totalMonthlyIncome,
+        avgTotalSpent, avgMortgage, netHousingCost, monthlySurplus,
+        savingsRate, housingRatio, discretionaryRatio, nonHousingSpend,
+        categoryResults, insights, monthCount
+    });
+}
+
+function getAnalysisMonths(now, count) {
+    const months = [];
+    for (let i = count - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({ y: d.getFullYear(), m: d.getMonth() + 1 });
+    }
+    return months;
+}
+
+function filterExpensesToMonths(months) {
+    const keys = new Set(months.map(m => `${m.y}-${String(m.m).padStart(2, '0')}`));
+    return allExpenses.filter(exp => {
+        const k = `${exp.fields.Year}-${String(exp.fields.Month).padStart(2, '0')}`;
+        return keys.has(k);
+    });
+}
+
+function filterPaymentsToMonths(months) {
+    const keys = new Set(months.map(m => `${m.y}-${String(m.m).padStart(2, '0')}`));
+    return allPayments.filter(p => {
+        const k = `${p.fields.Year}-${String(p.fields.Month).padStart(2, '0')}`;
+        return keys.has(k);
+    });
+}
+
+function computeHealthScore(categoryResults, housingRatio, savingsRate, discretionaryRatio) {
+    let score = 100;
+    let deductions = [];
+
+    categoryResults.forEach(r => {
+        if (r.status === 'watch') {
+            score -= 3;
+            deductions.push(`${r.cat}: slightly over benchmark (-3)`);
+        } else if (r.status === 'concerning') {
+            const overPct = r.benchmark ? ((r.avg - r.benchmark.max) / r.benchmark.max) * 100 : 50;
+            const penalty = Math.min(10, Math.round(overPct / 10) + 5);
+            score -= penalty;
+            deductions.push(`${r.cat}: over benchmark (-${penalty})`);
+        }
+    });
+
+    if (housingRatio > 28) {
+        const penalty = Math.min(15, Math.round((housingRatio - 28) / 2));
+        score -= penalty;
+        deductions.push(`Housing ratio ${housingRatio.toFixed(0)}% > 28% target (-${penalty})`);
+    }
+
+    if (savingsRate < 10) {
+        const penalty = Math.min(15, Math.round((10 - savingsRate) * 1.5));
+        score -= penalty;
+        deductions.push(`Savings rate ${savingsRate.toFixed(0)}% < 10% target (-${penalty})`);
+    } else if (savingsRate >= 20) {
+        score = Math.min(100, score + 5);
+    }
+
+    if (discretionaryRatio > 70) {
+        const penalty = Math.min(10, Math.round((discretionaryRatio - 70) / 3));
+        score -= penalty;
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    let grade, message;
+    if (score >= 85) { grade = 'A'; message = 'Excellent financial health! You\'re managing spending well across categories.'; }
+    else if (score >= 70) { grade = 'B'; message = 'Good overall. A few areas could use attention, but you\'re on track.'; }
+    else if (score >= 55) { grade = 'C'; message = 'Fair. Several spending categories exceed benchmarks. Review the areas flagged below.'; }
+    else if (score >= 40) { grade = 'D'; message = 'Needs improvement. Spending exceeds benchmarks in multiple areas.'; }
+    else { grade = 'F'; message = 'Critical. Spending is significantly above healthy levels in many categories.'; }
+
+    return { score, grade, message, deductions };
+}
+
+function generateFinancialInsights(categoryResults, housingRatio, savingsRate, netHousingCost, avgRentalIncome, avgMortgage, avgTotalSpent, salary, totalMonthlyIncome, monthlySurplus) {
+    const insights = [];
+
+    if (avgRentalIncome > 0) {
+        const coveragePct = avgMortgage > 0 ? ((avgRentalIncome / avgMortgage) * 100).toFixed(0) : 0;
+        if (avgRentalIncome >= avgMortgage) {
+            insights.push({ type: 'success', icon: 'fa-home', title: 'Rental Income Covers Mortgage', message: `Your rental income ($${avgRentalIncome.toFixed(0)}/mo) covers ${coveragePct}% of your mortgage ($${avgMortgage.toFixed(0)}/mo). Net housing cost: $${netHousingCost.toFixed(0)}/mo.`, action: null });
+        } else {
+            insights.push({ type: 'info', icon: 'fa-home', title: 'Partial Mortgage Offset', message: `Rental income ($${avgRentalIncome.toFixed(0)}/mo) covers ${coveragePct}% of your mortgage ($${avgMortgage.toFixed(0)}/mo). You pay $${netHousingCost.toFixed(0)}/mo out of pocket for housing.`, action: 'Consider if rental rates can be adjusted to improve coverage.' });
+        }
+    }
+
+    if (monthlySurplus > 0) {
+        insights.push({ type: 'success', icon: 'fa-piggy-bank', title: 'Positive Cash Flow', message: `You have $${monthlySurplus.toFixed(0)}/mo surplus after all expenses. That\'s a ${savingsRate.toFixed(0)}% savings rate.`, action: savingsRate < 20 ? 'Aim for 20%+ savings rate for long-term wealth building.' : null });
+    } else {
+        insights.push({ type: 'warning', icon: 'fa-exclamation-triangle', title: 'Spending Exceeds Income', message: `You\'re spending $${Math.abs(monthlySurplus).toFixed(0)}/mo more than your income. This is unsustainable.`, action: 'Urgently review discretionary spending and find areas to cut.' });
+    }
+
+    if (housingRatio > 28) {
+        insights.push({ type: 'warning', icon: 'fa-building', title: 'High Net Housing Cost', message: `Net housing cost is ${housingRatio.toFixed(0)}% of salary (benchmark: under 28%). Even with rental income, housing is a heavy load.`, action: 'The rental income helps, but monitor mortgage rates for refinancing opportunities.' });
+    }
+
+    const overCategories = categoryResults.filter(r => r.status === 'concerning');
+    if (overCategories.length > 0) {
+        const names = overCategories.slice(0, 3).map(r => r.cat).join(', ');
+        const totalOver = overCategories.reduce((sum, r) => sum + (r.avg - (r.benchmark ? r.benchmark.max : 0)), 0);
+        insights.push({ type: 'warning', icon: 'fa-chart-bar', title: `${overCategories.length} Categories Over Benchmark`, message: `${names} exceed healthy spending levels by a combined $${totalOver.toFixed(0)}/mo.`, action: 'Focus on the largest over-benchmark category first for maximum impact.' });
+    }
+
+    const healthyCount = categoryResults.filter(r => r.status === 'healthy').length;
+    const totalBenchmarked = categoryResults.filter(r => r.benchmark).length;
+    if (healthyCount > 0 && totalBenchmarked > 0) {
+        insights.push({ type: 'success', icon: 'fa-check-circle', title: 'Categories Within Benchmark', message: `${healthyCount} of ${totalBenchmarked} tracked categories are within healthy spending ranges.`, action: null });
+    }
+
+    const topCategory = categoryResults[0];
+    if (topCategory && topCategory.cat !== 'Mortgage') {
+        const pctOfIncome = ((topCategory.avg / salary) * 100).toFixed(0);
+        insights.push({ type: 'info', icon: 'fa-arrow-up', title: `Biggest Non-Housing Expense: ${topCategory.cat}`, message: `${topCategory.cat} averages $${topCategory.avg.toFixed(0)}/mo (${pctOfIncome}% of salary).`, action: topCategory.status !== 'healthy' ? `Review ${topCategory.cat} spending for potential savings.` : null });
+    }
+
+    return insights;
+}
+
+function renderFinancialAnalysis(container, data) {
+    const {
+        healthScore, salary, avgRentalIncome, totalMonthlyIncome,
+        avgTotalSpent, avgMortgage, netHousingCost, monthlySurplus,
+        savingsRate, housingRatio, discretionaryRatio, nonHousingSpend,
+        categoryResults, insights, monthCount
+    } = data;
+
+    const scoreGradient = healthScore.score >= 70
+        ? 'from-green-500 to-emerald-600'
+        : healthScore.score >= 50
+            ? 'from-yellow-500 to-orange-500'
+            : 'from-red-500 to-pink-600';
+
+    const incomeBarWidth = 100;
+    const spendBarWidth = totalMonthlyIncome > 0 ? Math.min(100, (avgTotalSpent / totalMonthlyIncome) * 100) : 100;
+    const surplusColor = monthlySurplus >= 0 ? 'text-green-600' : 'text-red-600';
+
+    let html = `<div class="space-y-6">`;
+
+    // 1. Health Score Card
+    html += `
+        <div class="rounded-xl p-6 bg-gradient-to-br ${scoreGradient} text-white">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-xl font-bold mb-1">Financial Health Score</h3>
+                    <p class="text-sm opacity-90">${healthScore.message}</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-5xl font-bold">${healthScore.score}</div>
+                    <div class="text-lg font-semibold opacity-75">Grade: ${healthScore.grade}</div>
+                </div>
+            </div>
+            <div class="mt-4 bg-white/20 rounded-full h-3">
+                <div class="bg-white rounded-full h-3 transition-all" style="width: ${healthScore.score}%"></div>
+            </div>
+        </div>`;
+
+    // 2. Income vs Expenses Summary
+    html += `
+        <div class="card p-5">
+            <h3 class="font-bold text-gray-800 mb-4 flex items-center gap-2"><i class="fas fa-balance-scale text-blue-500"></i>Income vs Expenses (Monthly Avg)</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div class="bg-blue-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-blue-600 font-semibold">Salary</div>
+                    <div class="text-lg font-bold text-blue-800">$${salary.toLocaleString()}</div>
+                </div>
+                <div class="bg-green-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-green-600 font-semibold">Rental Income</div>
+                    <div class="text-lg font-bold text-green-800">$${avgRentalIncome.toFixed(0)}</div>
+                </div>
+                <div class="bg-purple-50 rounded-lg p-3 text-center">
+                    <div class="text-xs text-purple-600 font-semibold">Total Income</div>
+                    <div class="text-lg font-bold text-purple-800">$${totalMonthlyIncome.toFixed(0)}</div>
+                </div>
+                <div class="rounded-lg p-3 text-center ${monthlySurplus >= 0 ? 'bg-green-50' : 'bg-red-50'}">
+                    <div class="text-xs font-semibold ${surplusColor}">${monthlySurplus >= 0 ? 'Surplus' : 'Deficit'}</div>
+                    <div class="text-lg font-bold ${surplusColor}">${monthlySurplus >= 0 ? '' : '-'}$${Math.abs(monthlySurplus).toFixed(0)}</div>
+                </div>
+            </div>
+            <div class="space-y-2">
+                <div class="flex items-center gap-3">
+                    <div class="text-xs text-gray-500 w-16">Income</div>
+                    <div class="flex-1 bg-gray-100 rounded-full h-4">
+                        <div class="bg-blue-500 rounded-full h-4" style="width: ${incomeBarWidth}%"></div>
+                    </div>
+                    <div class="text-xs font-semibold text-gray-700 w-20 text-right">$${totalMonthlyIncome.toFixed(0)}</div>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="text-xs text-gray-500 w-16">Spending</div>
+                    <div class="flex-1 bg-gray-100 rounded-full h-4">
+                        <div class="${spendBarWidth > 90 ? 'bg-red-500' : spendBarWidth > 75 ? 'bg-yellow-500' : 'bg-green-500'} rounded-full h-4" style="width: ${spendBarWidth}%"></div>
+                    </div>
+                    <div class="text-xs font-semibold text-gray-700 w-20 text-right">$${avgTotalSpent.toFixed(0)}</div>
+                </div>
+            </div>
+            <div class="mt-3 flex gap-4 text-xs text-gray-500">
+                <span>Savings Rate: <span class="font-bold ${savingsRate >= 20 ? 'text-green-600' : savingsRate >= 10 ? 'text-yellow-600' : 'text-red-600'}">${savingsRate.toFixed(0)}%</span></span>
+                <span>Discretionary: <span class="font-bold">${discretionaryRatio.toFixed(0)}%</span> of salary</span>
+            </div>
+        </div>`;
+
+    // 3. Housing Analysis
+    html += `
+        <div class="card p-5 border-l-4 ${housingRatio <= 28 ? 'border-green-500' : housingRatio <= 35 ? 'border-yellow-500' : 'border-red-500'}">
+            <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-home ${housingRatio <= 28 ? 'text-green-500' : housingRatio <= 35 ? 'text-yellow-500' : 'text-red-500'}"></i>Housing Analysis</h3>
+            <div class="grid grid-cols-3 gap-3 mb-3">
+                <div class="text-center">
+                    <div class="text-xs text-gray-500">Mortgage</div>
+                    <div class="text-lg font-bold text-gray-800">$${avgMortgage.toFixed(0)}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-xs text-gray-500">Rental Income</div>
+                    <div class="text-lg font-bold text-green-600">-$${avgRentalIncome.toFixed(0)}</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-xs text-gray-500">Net Housing Cost</div>
+                    <div class="text-lg font-bold ${netHousingCost <= 0 ? 'text-green-600' : 'text-gray-800'}">$${netHousingCost.toFixed(0)}</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="text-xs text-gray-500">Housing-to-Salary Ratio:</div>
+                <div class="flex-1 bg-gray-100 rounded-full h-2.5">
+                    <div class="rounded-full h-2.5 ${housingRatio <= 28 ? 'bg-green-500' : housingRatio <= 35 ? 'bg-yellow-500' : 'bg-red-500'}" style="width: ${Math.min(100, housingRatio * 2)}%"></div>
+                </div>
+                <div class="text-xs font-bold ${housingRatio <= 28 ? 'text-green-600' : housingRatio <= 35 ? 'text-yellow-600' : 'text-red-600'}">${housingRatio.toFixed(0)}%</div>
+                <div class="text-xs text-gray-400">(target: &lt;28%)</div>
+            </div>
+            <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Mortgage is treated as investment property cost, offset by rental income. Ratio uses salary only (not rental income).</p>
+        </div>`;
+
+    // 4. Category Benchmark Grid
+    html += `
+        <div>
+            <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-th-list text-purple-500"></i>Category Benchmarks (${monthCount}-Month Avg)</h3>
+            <div class="space-y-2">`;
+
+    categoryResults.forEach(r => {
+        const icon = (r.benchmark && r.benchmark.icon) || FINANCIAL_BENCHMARKS[r.cat]?.icon || 'fa-tag';
+        const statusDot = r.statusColor === 'green' ? 'bg-green-500'
+            : r.statusColor === 'yellow' ? 'bg-yellow-500'
+            : r.statusColor === 'red' ? 'bg-red-500' : 'bg-gray-400';
+        const statusBg = r.statusColor === 'green' ? 'bg-green-50'
+            : r.statusColor === 'yellow' ? 'bg-yellow-50'
+            : r.statusColor === 'red' ? 'bg-red-50' : 'bg-gray-50';
+        const statusText = r.statusColor === 'green' ? 'text-green-700'
+            : r.statusColor === 'yellow' ? 'text-yellow-700'
+            : r.statusColor === 'red' ? 'text-red-700' : 'text-gray-600';
+
+        let barPct = 0;
+        let barColor = 'bg-gray-300';
+        let benchmarkRange = 'No benchmark';
+        if (r.benchmark) {
+            barPct = Math.min(100, (r.avg / (r.benchmark.max * 1.5)) * 100);
+            barColor = r.statusColor === 'green' ? 'bg-green-500'
+                : r.statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-red-500';
+            benchmarkRange = `$${r.benchmark.min} – $${r.benchmark.max}`;
+        }
+
+        html += `
+            <div class="card p-3 flex items-center gap-3 ${statusBg} border-l-3" style="border-left: 3px solid;">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background: var(--gradient-primary);">
+                    <i class="fas ${icon} text-white text-xs"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between">
+                        <div class="font-semibold text-gray-800 text-sm truncate">${escapeHtml(r.cat)}</div>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <span class="text-sm font-bold text-gray-800">$${r.avg.toFixed(0)}/mo</span>
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold ${statusText} ${statusBg}">
+                                <span class="w-1.5 h-1.5 rounded-full ${statusDot}"></span>${r.statusLabel}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mt-1 flex items-center gap-2">
+                        <div class="flex-1 bg-gray-200 rounded-full h-1.5">
+                            <div class="${barColor} rounded-full h-1.5 transition-all" style="width: ${barPct}%"></div>
+                        </div>
+                        <span class="text-xs text-gray-400 flex-shrink-0">${benchmarkRange}</span>
+                    </div>
+                </div>
+            </div>`;
+    });
+
+    html += `</div></div>`;
+
+    // 5. Key Takeaways / Insights
+    if (insights.length > 0) {
+        html += `
+            <div>
+                <h3 class="font-bold text-gray-800 mb-3 flex items-center gap-2"><i class="fas fa-lightbulb text-yellow-500"></i>Key Takeaways</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
+
+        insights.forEach(insight => {
+            const borderColor = insight.type === 'warning' ? 'border-red-500'
+                : insight.type === 'success' ? 'border-green-500'
+                : insight.type === 'info' ? 'border-blue-500' : 'border-yellow-500';
+            const bgColor = insight.type === 'warning' ? 'bg-red-50'
+                : insight.type === 'success' ? 'bg-green-50'
+                : insight.type === 'info' ? 'bg-blue-50' : 'bg-yellow-50';
+            const iconColor = insight.type === 'warning' ? 'text-red-600'
+                : insight.type === 'success' ? 'text-green-600'
+                : insight.type === 'info' ? 'text-blue-600' : 'text-yellow-600';
+            const actionColor = insight.type === 'warning' ? 'text-red-700'
+                : insight.type === 'success' ? 'text-green-700'
+                : insight.type === 'info' ? 'text-blue-700' : 'text-yellow-700';
+
+            html += `
+                <div class="card p-4 border-l-4 ${borderColor} ${bgColor}">
+                    <div class="flex items-start gap-3">
+                        <i class="fas ${insight.icon} text-xl ${iconColor} mt-0.5"></i>
+                        <div class="flex-1">
+                            <h4 class="font-bold text-gray-800 text-sm mb-1">${insight.title}</h4>
+                            <p class="text-xs text-gray-700 mb-2">${insight.message}</p>
+                            ${insight.action ? `<div class="text-xs font-semibold ${actionColor}"><i class="fas fa-lightbulb mr-1"></i>${insight.action}</div>` : ''}
+                        </div>
+                    </div>
+                </div>`;
+        });
+
+        html += `</div></div>`;
+    }
+
+    html += `
+        <div class="text-center mt-4">
+            <button onclick="closeAnalyzeFinances()" class="btn-secondary">Close</button>
+        </div>
+    </div>`;
+
+    container.innerHTML = html;
 }
 
 function openAdvancedAnalytics() {
