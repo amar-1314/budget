@@ -111,3 +111,106 @@ create policy "push_weekly_digests_sent_service_role_only"
 -- insert into storage.buckets (id, name, public)
 -- values ('receipts', 'receipts', false)
 -- on conflict (id) do nothing;
+
+-- ============================================================
+-- Ingredient analyzer (multi-device sync)
+-- ------------------------------------------------------------
+-- These tables back the per-user diet profile, daily macro
+-- targets, and scan history. Images themselves are not stored
+-- here — they live in pCloud (WebDAV) and the row only keeps
+-- a JSON pointer (see image_pointer in ingredient_scans).
+--
+-- Access pattern matches the Budget table: direct REST access
+-- with the anon key. RLS is enabled with a permissive policy
+-- so existing client code keeps working without changes.
+-- ============================================================
+
+create table if not exists public.ingredient_profiles (
+  id text primary key,                       -- 'household' (single row today; ready for per-person later)
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists trg_ingredient_profiles_updated_at on public.ingredient_profiles;
+create trigger trg_ingredient_profiles_updated_at
+before update on public.ingredient_profiles
+for each row
+execute function public.set_updated_at();
+
+alter table public.ingredient_profiles enable row level security;
+
+drop policy if exists "ingredient_profiles_anon_all" on public.ingredient_profiles;
+create policy "ingredient_profiles_anon_all"
+  on public.ingredient_profiles
+  for all
+  to anon
+  using (true)
+  with check (true);
+
+create table if not exists public.ingredient_targets (
+  id text primary key,                       -- 'amar' | 'priya' | 'both'
+  data jsonb not null,                       -- { calories, protein_g, fiber_g, added_sugar_g, sodium_mg, saturated_fat_g }
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists trg_ingredient_targets_updated_at on public.ingredient_targets;
+create trigger trg_ingredient_targets_updated_at
+before update on public.ingredient_targets
+for each row
+execute function public.set_updated_at();
+
+alter table public.ingredient_targets enable row level security;
+
+drop policy if exists "ingredient_targets_anon_all" on public.ingredient_targets;
+create policy "ingredient_targets_anon_all"
+  on public.ingredient_targets
+  for all
+  to anon
+  using (true)
+  with check (true);
+
+create table if not exists public.ingredient_scans (
+  id text primary key,                       -- client-generated: scan_<ts>_<rand>
+  ts bigint not null,                        -- ms since epoch (matches the legacy field)
+  person text not null,                      -- 'amar' | 'priya' | 'both'
+  product text,
+  score numeric,
+  verdict text,
+  tier text,
+  frequency_tier text,
+  frequency_label text,
+  red_flag_count int not null default 0,
+  nutrition_facts jsonb,
+  quality_score numeric,
+  source text,
+  analysis jsonb,
+  ocr_text text,
+  logged jsonb,                              -- { servings, loggedAt }
+  thumb text,                                -- inline ~96px base64 thumb (fast list rendering)
+  image_pointer jsonb,                       -- { storage:'pcloud_webdav', baseUrl, path, type, size }
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists ingredient_scans_ts_idx
+  on public.ingredient_scans (ts desc);
+create index if not exists ingredient_scans_person_ts_idx
+  on public.ingredient_scans (person, ts desc);
+
+drop trigger if exists trg_ingredient_scans_updated_at on public.ingredient_scans;
+create trigger trg_ingredient_scans_updated_at
+before update on public.ingredient_scans
+for each row
+execute function public.set_updated_at();
+
+alter table public.ingredient_scans enable row level security;
+
+drop policy if exists "ingredient_scans_anon_all" on public.ingredient_scans;
+create policy "ingredient_scans_anon_all"
+  on public.ingredient_scans
+  for all
+  to anon
+  using (true)
+  with check (true);

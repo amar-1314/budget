@@ -15793,6 +15793,14 @@ function scheduleDailyRefresh() {
 document.addEventListener('DOMContentLoaded', () => {
     loadAutoRefreshState();
     scheduleDailyRefresh();
+    // Pull profile, targets, and scan history from Supabase so all
+    // devices show the same data. Local cache continues to act as the
+    // synchronous read source for the analyzer UI.
+    if (typeof loadIngredientCloudState === 'function') {
+        loadIngredientCloudState().catch(err =>
+            console.warn('[ingredient-cloud] initial load failed:', err?.message || err)
+        );
+    }
 });
 
 function saveSettings() {
@@ -15818,6 +15826,14 @@ function saveSettings() {
         
         // Reload data with new credentials
         loadData();
+        // Re-pull ingredient state under the new project.
+        _ingredientCloudBootPromise = null;
+        _ingredientCloudBooted = false;
+        if (typeof loadIngredientCloudState === 'function') {
+            loadIngredientCloudState().catch(err =>
+                console.warn('[ingredient-cloud] reload after settings failed:', err?.message || err)
+            );
+        }
     } else {
         alert('Please provide both Supabase URL and Key.');
     }
@@ -15844,6 +15860,7 @@ function openIngredientAnalyzer() {
     modal.classList.add('active');
     syncIngredientGoalBanner();
     syncIngredientAisleToggleButton();
+    renderIngredientTodayStrip();
     resetIngredientAnalyzer();
 }
 
@@ -15885,12 +15902,18 @@ function handleIngredientImageFile(input) {
         const img = document.getElementById('ingredientImagePreview');
         const results = document.getElementById('ingredientResults');
         const status = document.getElementById('ingredientStatusCard');
+        const aisle = document.getElementById('ingredientAisleResults');
+        const coach = document.getElementById('ingredientPhotoCoach');
 
         if (img) img.src = dataUrl;
         if (placeholder) placeholder.classList.add('hidden');
         if (preview) preview.classList.remove('hidden');
         if (results) results.classList.add('hidden');
+        if (aisle) aisle.classList.add('hidden');
         if (status) status.classList.add('hidden');
+        if (coach) coach.classList.add('hidden');
+
+        evaluateAndShowIngredientPhotoCoach(dataUrl).catch(err => console.warn('Coach failed', err));
     };
     reader.onerror = () => showNotification('Could not read the selected image', 'error');
     reader.readAsDataURL(file);
@@ -15904,17 +15927,27 @@ function resetIngredientAnalyzer() {
     const placeholder = document.getElementById('ingredientUploadPlaceholder');
     const preview = document.getElementById('ingredientUploadPreview');
     const results = document.getElementById('ingredientResults');
+    const aisle = document.getElementById('ingredientAisleResults');
     const status = document.getElementById('ingredientStatusCard');
+    const coach = document.getElementById('ingredientPhotoCoach');
+    const logCard = document.getElementById('ingredientLogServingCard');
     const btn = document.getElementById('ingredientAnalyzeBtn');
 
     if (placeholder) placeholder.classList.remove('hidden');
     if (preview) preview.classList.add('hidden');
     if (results) results.classList.add('hidden');
+    if (aisle) aisle.classList.add('hidden');
     if (status) status.classList.add('hidden');
+    if (coach) coach.classList.add('hidden');
+    if (logCard) logCard.classList.add('hidden');
     if (btn) {
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-wand-magic-sparkles mr-2"></i>Analyze Health';
     }
+
+    _currentIngredientScanId = null;
+    _currentIngredientLogServings = 1;
+    _ingredientPhotoCoachLast = null;
 
     const fg = document.getElementById('ingredientScoreGaugeFg');
     if (fg) fg.style.strokeDashoffset = INGREDIENT_GAUGE_CIRCUMFERENCE;
@@ -16021,6 +16054,27 @@ async function analyzeIngredientsWithAI() {
         }
 
         hideIngredientStatus();
+
+        // Persist to scan history (best-effort; never blocks the UI).
+        try {
+            const profileSnapshot = getActiveIngredientProfile();
+            const qualityScore = _ingredientPhotoCoachLast?.score;
+            const record = await recordIngredientScan({
+                analysis,
+                sourceLabel,
+                ocrText: textForRawDisplay,
+                imageDataUrl: currentIngredientImageDataUrl,
+                profileSnapshot,
+                qualityScore
+            });
+            if (record) {
+                _currentIngredientScanId = record.id;
+                _currentIngredientLogServings = 1;
+            }
+        } catch (histErr) {
+            console.warn('Could not save scan to history', histErr);
+        }
+
         renderIngredientAnalysis(analysis, textForRawDisplay, sourceLabel);
         showNotification('Analysis complete', 'success');
     } catch (err) {
@@ -16404,6 +16458,7 @@ function renderIngredientAnalysis(analysis, ocrText, sourceLabel) {
     lastIngredientSourceLabel = sourceLabel || '';
 
     setIngredientSourceBadge(sourceLabel);
+    renderIngredientTodayStrip();
 
     if (isIngredientAisleModeOn()) {
         renderIngredientAisleVerdict(analysis);
@@ -16450,6 +16505,8 @@ function renderIngredientAnalysis(analysis, ocrText, sourceLabel) {
 
     const rawEl = document.getElementById('ingredientRawText');
     if (rawEl) rawEl.textContent = ocrText ? ocrText : '(No OCR text — vision-only analysis was used.)';
+
+    renderIngredientLogCard();
 }
 
 function animateIngredientScore(score) {
@@ -16861,6 +16918,10 @@ function saveIngredientProfileObject(profile) {
     try {
         localStorage.setItem(INGREDIENT_PROFILE_KEY, JSON.stringify(profile));
     } catch (_e) { /* quota issues only */ }
+    ingredientCloudFireAndForget(
+        upsertIngredientProfileCloud(profile),
+        'save profile'
+    );
 }
 
 function formatProfileForPrompt(profile) {
@@ -17148,3 +17209,1367 @@ ${fmtBlock(perServing)}
 
 Note: prefer per-serving values when populating "nutrition_facts". Fall back to per-100g if per-serving is missing.`;
 }
+
+// ============================================================
+// INGREDIENT ANALYZER — Scan History
+// localStorage-persisted log of every successful analysis. Powers
+// recap, compare, trend, and the macro target tracker.
+// ============================================================
+
+// ============================================================
+// INGREDIENT ANALYZER — Cloud Sync
+// Profile + targets + scan history sync across devices via
+// Supabase REST. Images go straight to pCloud through the
+// ingredient-upload edge function — they are never persisted
+// to Supabase Storage. localStorage is kept as an offline
+// cache and as the synchronous read source for the UI.
+// ============================================================
+
+const INGREDIENT_PROFILE_TABLE  = 'ingredient_profiles';
+const INGREDIENT_TARGETS_TABLE  = 'ingredient_targets';
+const INGREDIENT_SCANS_TABLE    = 'ingredient_scans';
+const INGREDIENT_PROFILE_ROW_ID = 'household';
+
+const INGREDIENT_CLOUD_COLUMNS = [
+    'id', 'ts', 'person', 'product', 'score', 'verdict', 'tier',
+    'frequency_tier', 'frequency_label', 'red_flag_count',
+    'nutrition_facts', 'quality_score', 'source', 'analysis',
+    'ocr_text', 'logged', 'thumb', 'image_pointer'
+].join(',');
+
+let _ingredientCloudBooted = false;
+let _ingredientCloudBootPromise = null;
+
+function ingredientCloudAvailable() {
+    return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+
+// Maps a local scan record (snake_case + camelCase mix from history)
+// onto the canonical row shape stored in Supabase.
+function ingredientScanRecordToRow(rec) {
+    if (!rec) return null;
+    return {
+        id:               String(rec.id),
+        ts:               Number(rec.ts) || Date.now(),
+        person:           String(rec.person || 'both'),
+        product:          rec.product || null,
+        score:            rec.score == null ? null : Number(rec.score),
+        verdict:          rec.verdict || null,
+        tier:             rec.tier || null,
+        frequency_tier:   rec.frequency_tier || null,
+        frequency_label:  rec.frequency_label || null,
+        red_flag_count:   Number(rec.red_flag_count) || 0,
+        nutrition_facts:  rec.nutrition_facts || null,
+        quality_score:    rec.quality_score == null ? null : Number(rec.quality_score),
+        source:           rec.source || null,
+        analysis:         rec.analysis || null,
+        ocr_text:         rec.ocr_text || null,
+        logged:           rec.logged || null,
+        thumb:            rec.thumb || null,
+        image_pointer:    rec.image_pointer || null
+    };
+}
+
+// Inverse: maps a server row back to the in-memory record shape the
+// rest of the analyzer code expects. Largely 1:1 — defensive defaults
+// only.
+function ingredientScanRowToRecord(row) {
+    if (!row) return null;
+    return {
+        id:               String(row.id),
+        ts:               Number(row.ts) || 0,
+        person:           row.person || 'both',
+        product:          row.product || '',
+        score:            row.score == null ? null : Number(row.score),
+        verdict:          row.verdict || '',
+        tier:             row.tier || '',
+        frequency_tier:   row.frequency_tier || null,
+        frequency_label:  row.frequency_label || '',
+        red_flag_count:   Number(row.red_flag_count) || 0,
+        nutrition_facts:  row.nutrition_facts || null,
+        quality_score:    row.quality_score == null ? null : Number(row.quality_score),
+        source:           row.source || '',
+        analysis:         row.analysis || null,
+        ocr_text:         row.ocr_text || '',
+        logged:           row.logged || null,
+        thumb:            row.thumb || '',
+        image_pointer:    row.image_pointer || null
+    };
+}
+
+async function supabaseUpsertIngredient(tableName, row) {
+    if (!ingredientCloudAvailable()) {
+        throw new Error('Supabase credentials not configured');
+    }
+    const resp = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/${tableName}`, {
+        method: 'POST',
+        headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates,return=representation'
+        },
+        body: JSON.stringify(row)
+    });
+    if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`Upsert ${tableName} failed ${resp.status}: ${txt}`);
+    }
+    const data = await resp.json().catch(() => null);
+    return Array.isArray(data) ? data[0] : data;
+}
+
+// Fire-and-forget wrapper used by every save path — failures are
+// logged but never surface to the user. Cloud is "eventually
+// consistent" with local; the offline cache always wins for UX.
+function ingredientCloudFireAndForget(promise, label) {
+    if (!promise || typeof promise.then !== 'function') return;
+    promise.catch(err => {
+        console.warn(`[ingredient-cloud] ${label} failed:`, err?.message || err);
+    });
+}
+
+async function upsertIngredientProfileCloud(profile) {
+    if (!ingredientCloudAvailable()) return null;
+    return await supabaseUpsertIngredient(INGREDIENT_PROFILE_TABLE, {
+        id:   INGREDIENT_PROFILE_ROW_ID,
+        data: profile
+    });
+}
+
+async function upsertIngredientTargetsCloud(person, targets) {
+    if (!ingredientCloudAvailable()) return null;
+    return await supabaseUpsertIngredient(INGREDIENT_TARGETS_TABLE, {
+        id:   String(person),
+        data: targets
+    });
+}
+
+async function deleteIngredientTargetsCloud(person) {
+    if (!ingredientCloudAvailable()) return null;
+    return await supabaseDelete(INGREDIENT_TARGETS_TABLE, String(person));
+}
+
+async function insertIngredientScanCloud(record) {
+    if (!ingredientCloudAvailable()) return null;
+    const row = ingredientScanRecordToRow(record);
+    return await supabaseUpsertIngredient(INGREDIENT_SCANS_TABLE, row);
+}
+
+async function patchIngredientScanCloud(id, patch) {
+    if (!ingredientCloudAvailable()) return null;
+    // Only forward columns the table knows about.
+    const allowed = new Set([
+        'ts', 'person', 'product', 'score', 'verdict', 'tier',
+        'frequency_tier', 'frequency_label', 'red_flag_count',
+        'nutrition_facts', 'quality_score', 'source', 'analysis',
+        'ocr_text', 'logged', 'thumb', 'image_pointer'
+    ]);
+    const body = {};
+    Object.keys(patch || {}).forEach(k => {
+        if (allowed.has(k)) body[k] = patch[k];
+    });
+    if (Object.keys(body).length === 0) return null;
+    return await supabasePatch(INGREDIENT_SCANS_TABLE, id, body);
+}
+
+async function deleteIngredientScanCloud(id) {
+    if (!ingredientCloudAvailable()) return null;
+    return await supabaseDelete(INGREDIENT_SCANS_TABLE, id);
+}
+
+async function clearIngredientScansCloud() {
+    if (!ingredientCloudAvailable()) return null;
+    // No bulk DELETE helper — use raw REST with a filter that matches all rows.
+    const url = `${SUPABASE_URL}/rest/v1/${INGREDIENT_SCANS_TABLE}?id=neq.__never__`;
+    const resp = await fetchWithRetry(url, {
+        method: 'DELETE',
+        headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Prefer': 'return=minimal'
+        }
+    });
+    if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(`Clear ${INGREDIENT_SCANS_TABLE} failed ${resp.status}: ${txt}`);
+    }
+}
+
+// POSTs the original capture to ingredient-upload, which writes it
+// straight to pCloud and returns a {storage:'pcloud_webdav', ...}
+// pointer. Returns null on any failure — the scan still gets saved,
+// just without the original image (thumb stays inline).
+async function uploadIngredientImageToCloud(scanId, dataUrl, ts) {
+    if (!ingredientCloudAvailable()) return null;
+    if (!dataUrl || !dataUrl.startsWith('data:')) return null;
+
+    const date = new Date(ts || Date.now());
+    const endpoint = `${SUPABASE_URL}/functions/v1/ingredient-upload`;
+    const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({
+            scanId,
+            dataUrl,
+            year:  date.getUTCFullYear(),
+            month: String(date.getUTCMonth() + 1).padStart(2, '0')
+        })
+    });
+    const data = await resp.json().catch(() => null);
+    if (!resp.ok) {
+        throw new Error(data?.error || `ingredient-upload failed: ${resp.status}`);
+    }
+    return data?.pointer || null;
+}
+
+// Pulls server state into the local cache on app boot. Idempotent —
+// also runs a one-time migration if local has data the cloud doesn't
+// (handles the rollout: each device's existing localStorage history
+// gets pushed up the first time it sees the new schema).
+async function loadIngredientCloudState() {
+    if (!ingredientCloudAvailable()) return;
+    if (_ingredientCloudBootPromise) return _ingredientCloudBootPromise;
+
+    _ingredientCloudBootPromise = (async () => {
+        try {
+            const [profileRows, targetRows, scanRows] = await Promise.all([
+                supabaseGet(INGREDIENT_PROFILE_TABLE, { id: INGREDIENT_PROFILE_ROW_ID }, 1, 'id,data').catch(() => []),
+                supabaseGet(INGREDIENT_TARGETS_TABLE, {}, 10, 'id,data').catch(() => []),
+                supabaseGet(INGREDIENT_SCANS_TABLE, {}, INGREDIENT_HISTORY_MAX, INGREDIENT_CLOUD_COLUMNS, 'ts.desc').catch(() => [])
+            ]);
+
+            // Profile — cloud wins if a row exists; otherwise push local up.
+            const cloudProfileRow = Array.isArray(profileRows) ? profileRows[0] : null;
+            if (cloudProfileRow?.data) {
+                try {
+                    localStorage.setItem(INGREDIENT_PROFILE_KEY, JSON.stringify(cloudProfileRow.data));
+                } catch (_e) { /* quota */ }
+            } else {
+                const localRaw = localStorage.getItem(INGREDIENT_PROFILE_KEY);
+                if (localRaw) {
+                    try {
+                        ingredientCloudFireAndForget(
+                            upsertIngredientProfileCloud(JSON.parse(localRaw)),
+                            'seed profile from local'
+                        );
+                    } catch (_e) { /* ignore */ }
+                }
+            }
+
+            // Targets — same per-person logic.
+            if (Array.isArray(targetRows) && targetRows.length > 0) {
+                const all = {};
+                targetRows.forEach(r => { if (r?.id) all[r.id] = r.data || {}; });
+                try {
+                    localStorage.setItem(INGREDIENT_TARGETS_KEY, JSON.stringify(all));
+                } catch (_e) { /* quota */ }
+            } else {
+                try {
+                    const localTargets = JSON.parse(localStorage.getItem(INGREDIENT_TARGETS_KEY) || '{}');
+                    Object.keys(localTargets || {}).forEach(person => {
+                        ingredientCloudFireAndForget(
+                            upsertIngredientTargetsCloud(person, localTargets[person] || {}),
+                            `seed targets for ${person}`
+                        );
+                    });
+                } catch (_e) { /* ignore */ }
+            }
+
+            // History — merge: cloud is the source of truth, but local-only
+            // scans that pre-date the rollout get pushed up so users don't
+            // lose anything they already scanned today.
+            const cloudScans = Array.isArray(scanRows)
+                ? scanRows.map(ingredientScanRowToRecord).filter(Boolean)
+                : [];
+            const cloudIds = new Set(cloudScans.map(s => s.id));
+
+            let localScans = [];
+            try {
+                const raw = localStorage.getItem(INGREDIENT_HISTORY_KEY);
+                localScans = raw ? JSON.parse(raw) : [];
+                if (!Array.isArray(localScans)) localScans = [];
+            } catch (_e) { localScans = []; }
+
+            const localOnly = localScans.filter(s => s && s.id && !cloudIds.has(s.id));
+            localOnly.forEach(rec => {
+                ingredientCloudFireAndForget(
+                    insertIngredientScanCloud(rec),
+                    `seed scan ${rec.id}`
+                );
+            });
+
+            const merged = [...cloudScans, ...localOnly]
+                .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+                .slice(0, INGREDIENT_HISTORY_MAX);
+
+            _ingredientHistoryCache = merged;
+            try {
+                localStorage.setItem(INGREDIENT_HISTORY_KEY, JSON.stringify(merged));
+            } catch (_e) { /* quota */ }
+
+            _ingredientCloudBooted = true;
+            console.log(`[ingredient-cloud] booted: ${cloudScans.length} cloud + ${localOnly.length} local-seeded scans`);
+        } catch (e) {
+            console.warn('[ingredient-cloud] boot failed:', e?.message || e);
+        }
+    })();
+
+    return _ingredientCloudBootPromise;
+}
+
+const INGREDIENT_HISTORY_KEY = 'ingredient_scans_v1';
+const INGREDIENT_HISTORY_MAX = 100;
+const INGREDIENT_HISTORY_THUMB_PX = 96;
+const INGREDIENT_HISTORY_THUMB_QUALITY = 0.55;
+
+let _ingredientHistoryCache = null;
+const _ingredientHistoryUI = {
+    personFilter: 'all',     // 'all' | 'amar' | 'priya' | 'both'
+    compareMode: false,
+    compareIds: []
+};
+
+function getIngredientHistory() {
+    if (_ingredientHistoryCache) return _ingredientHistoryCache;
+    try {
+        const raw = localStorage.getItem(INGREDIENT_HISTORY_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        _ingredientHistoryCache = Array.isArray(parsed) ? parsed : [];
+    } catch (_e) {
+        _ingredientHistoryCache = [];
+    }
+    return _ingredientHistoryCache;
+}
+
+function saveIngredientHistory(list) {
+    _ingredientHistoryCache = Array.isArray(list) ? list : [];
+    try {
+        localStorage.setItem(INGREDIENT_HISTORY_KEY, JSON.stringify(_ingredientHistoryCache));
+    } catch (e) {
+        // Quota — drop oldest until it fits, then retry.
+        try {
+            while (_ingredientHistoryCache.length > 25) {
+                _ingredientHistoryCache.pop();
+                try {
+                    localStorage.setItem(INGREDIENT_HISTORY_KEY, JSON.stringify(_ingredientHistoryCache));
+                    return;
+                } catch (_) { /* keep trimming */ }
+            }
+        } catch (_) { /* give up silently */ }
+        console.warn('Could not persist scan history', e);
+    }
+}
+
+function makeIngredientScanId() {
+    return 'scan_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+async function makeIngredientThumb(dataUrl) {
+    if (!dataUrl) return '';
+    try {
+        const img = await loadImageFromDataUrl(dataUrl);
+        const w = img.width || 1;
+        const h = img.height || 1;
+        const scale = Math.min(1, INGREDIENT_HISTORY_THUMB_PX / Math.max(w, h));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(w * scale));
+        canvas.height = Math.max(1, Math.round(h * scale));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return '';
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL('image/jpeg', INGREDIENT_HISTORY_THUMB_QUALITY);
+    } catch (_e) {
+        return '';
+    }
+}
+
+async function recordIngredientScan({ analysis, sourceLabel, ocrText, imageDataUrl, profileSnapshot, qualityScore }) {
+    if (!analysis) return null;
+    const thumb = await makeIngredientThumb(imageDataUrl);
+    const profile = profileSnapshot || getActiveIngredientProfile();
+    const ts = Date.now();
+    const record = {
+        id: makeIngredientScanId(),
+        ts,
+        product: analysis.product_guess || '',
+        score: analysis.score == null ? null : Number(analysis.score),
+        verdict: analysis.verdict || '',
+        tier: getIngredientVerdictTier(analysis.verdict, analysis.score),
+        frequency_tier: analysis.consumption_frequency?.tier || null,
+        frequency_label: analysis.consumption_frequency?.label || '',
+        red_flag_count: Array.isArray(analysis.red_flags) ? analysis.red_flags.length : 0,
+        nutrition_facts: analysis.nutrition_facts || null,
+        source: sourceLabel || '',
+        thumb,
+        person: profile.activeUser || 'both',
+        quality_score: typeof qualityScore === 'number' ? qualityScore : null,
+        analysis,
+        ocr_text: String(ocrText || '').slice(0, 8000),
+        logged: null,           // { servings, loggedAt }
+        image_pointer: null
+    };
+
+    // Best-effort image upload to pCloud BEFORE we mirror to local — so
+    // the pointer rides with the row from the start and we never have to
+    // patch it in (which would race with the not-yet-inserted insert).
+    if (ingredientCloudAvailable() && imageDataUrl) {
+        try {
+            const pointer = await uploadIngredientImageToCloud(record.id, imageDataUrl, ts);
+            if (pointer) record.image_pointer = pointer;
+        } catch (uploadErr) {
+            console.warn('[ingredient-cloud] image upload failed:', uploadErr?.message || uploadErr);
+        }
+    }
+
+    // Local cache — single source of truth for the UI.
+    const list = [record, ...getIngredientHistory()].slice(0, INGREDIENT_HISTORY_MAX);
+    saveIngredientHistory(list);
+
+    // Push the full row up. Any failure here leaves the local cache
+    // intact and the next boot will retry seeding via loadIngredientCloudState.
+    ingredientCloudFireAndForget(
+        insertIngredientScanCloud(record),
+        `insert scan ${record.id}`
+    );
+
+    return record;
+}
+
+function deleteIngredientScan(id) {
+    const list = getIngredientHistory().filter(r => r.id !== id);
+    saveIngredientHistory(list);
+    ingredientCloudFireAndForget(
+        deleteIngredientScanCloud(id),
+        `delete scan ${id}`
+    );
+}
+
+function clearIngredientHistory() {
+    saveIngredientHistory([]);
+    ingredientCloudFireAndForget(
+        clearIngredientScansCloud(),
+        'clear scan history'
+    );
+}
+
+function getIngredientScanById(id) {
+    return getIngredientHistory().find(r => r.id === id) || null;
+}
+
+function updateIngredientScan(id, patch) {
+    const list = getIngredientHistory();
+    const idx = list.findIndex(r => r.id === id);
+    if (idx === -1) return null;
+    list[idx] = { ...list[idx], ...patch };
+    saveIngredientHistory(list);
+    ingredientCloudFireAndForget(
+        patchIngredientScanCloud(id, patch),
+        `patch scan ${id}`
+    );
+    return list[idx];
+}
+
+function formatRelativeTime(ts) {
+    const ms = Date.now() - ts;
+    const sec = Math.round(ms / 1000);
+    if (sec < 60) return 'just now';
+    const min = Math.round(sec / 60);
+    if (min < 60) return `${min}m ago`;
+    const hr = Math.round(min / 60);
+    if (hr < 24) return `${hr}h ago`;
+    const day = Math.round(hr / 24);
+    if (day < 7) return `${day}d ago`;
+    const wk = Math.round(day / 7);
+    if (wk < 5) return `${wk}w ago`;
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : '2-digit' });
+}
+
+function openIngredientHistory() {
+    const modal = document.getElementById('ingredientHistoryModal');
+    if (!modal) return;
+    modal.classList.add('active');
+    _ingredientHistoryUI.compareMode = false;
+    _ingredientHistoryUI.compareIds = [];
+    syncIngredientHistoryFilters();
+    syncIngredientHistoryCompareUI();
+    renderIngredientHistory();
+    renderIngredientHistoryTrend();
+}
+
+function closeIngredientHistory() {
+    const modal = document.getElementById('ingredientHistoryModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function setIngredientHistoryFilter(person) {
+    _ingredientHistoryUI.personFilter = person;
+    syncIngredientHistoryFilters();
+    renderIngredientHistory();
+}
+
+function syncIngredientHistoryFilters() {
+    const row = document.getElementById('ingredientHistoryFilterRow');
+    if (!row) return;
+    const filters = [
+        { id: 'all',   label: 'All' },
+        { id: 'amar',  label: 'Amar' },
+        { id: 'priya', label: 'Priya' },
+        { id: 'both',  label: 'Both' }
+    ];
+    const active = _ingredientHistoryUI.personFilter;
+    row.innerHTML = filters.map(f => `
+        <button type="button" class="ingredient-history-filter-pill ${active === f.id ? 'is-active' : ''}"
+                onclick="setIngredientHistoryFilter('${f.id}')">${escapeIngredientHtml(f.label)}</button>
+    `).join('');
+}
+
+function getFilteredIngredientHistory() {
+    const list = getIngredientHistory();
+    const term = String(document.getElementById('ingredientHistorySearch')?.value || '').trim().toLowerCase();
+    const person = _ingredientHistoryUI.personFilter;
+    return list.filter(r => {
+        if (person !== 'all' && r.person !== person) return false;
+        if (!term) return true;
+        const hay = `${r.product || ''} ${r.verdict || ''} ${r.source || ''}`.toLowerCase();
+        return hay.includes(term);
+    });
+}
+
+function renderIngredientHistory() {
+    const listEl = document.getElementById('ingredientHistoryList');
+    const emptyEl = document.getElementById('ingredientHistoryEmpty');
+    if (!listEl || !emptyEl) return;
+
+    const items = getFilteredIngredientHistory();
+    if (items.length === 0) {
+        listEl.innerHTML = '';
+        emptyEl.classList.remove('hidden');
+        return;
+    }
+    emptyEl.classList.add('hidden');
+
+    const selected = new Set(_ingredientHistoryUI.compareIds);
+
+    listEl.innerHTML = items.map(r => {
+        const tier = r.tier || getIngredientVerdictTier(r.verdict, r.score);
+        const score = r.score == null ? '—' : r.score;
+        const product = r.product || '(unknown product)';
+        const personLabel = r.person === 'amar' ? 'Amar' : r.person === 'priya' ? 'Priya' : 'Both';
+        const loggedTag = r.logged ? '<span class="ingredient-history-tag is-logged"><i class="fas fa-utensils mr-1"></i>Logged</span>' : '';
+        const thumb = r.thumb
+            ? `<div class="ingredient-history-thumb" style="background-image:url('${r.thumb}')"></div>`
+            : `<div class="ingredient-history-thumb"><i class="fas fa-leaf"></i></div>`;
+        const isSel = selected.has(r.id);
+        return `
+            <div class="ingredient-history-item ${isSel ? 'is-selected' : ''}" data-id="${r.id}" onclick="onIngredientHistoryItemClick('${r.id}')">
+                ${thumb}
+                <div class="ingredient-history-meta">
+                    <div class="ingredient-history-product">${escapeIngredientHtml(product)}</div>
+                    <div class="ingredient-history-row">
+                        <span><i class="fas fa-clock mr-1"></i>${escapeIngredientHtml(formatRelativeTime(r.ts))}</span>
+                        <span class="ingredient-history-tag">${escapeIngredientHtml(personLabel)}</span>
+                        ${r.frequency_label ? `<span class="ingredient-history-tag"><i class="fas fa-calendar-day mr-1"></i>${escapeIngredientHtml(r.frequency_label)}</span>` : ''}
+                        ${loggedTag}
+                    </div>
+                </div>
+                <div class="ingredient-history-score" data-tier="${tier}">${escapeIngredientHtml(score)}</div>
+                <button class="ingredient-history-delete" onclick="event.stopPropagation(); confirmDeleteIngredientScan('${r.id}')" aria-label="Delete">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderIngredientHistoryTrend() {
+    const wrap = document.getElementById('ingredientHistoryTrend');
+    if (!wrap) return;
+    const list = getIngredientHistory();
+    if (list.length < 3) {
+        wrap.classList.add('hidden');
+        wrap.innerHTML = '';
+        return;
+    }
+    const last7Cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const recent = list.filter(r => r.ts >= last7Cutoff);
+    const sample = recent.length >= 3 ? recent : list.slice(0, 10);
+    const scored = sample.filter(r => typeof r.score === 'number');
+    const avg = scored.length ? Math.round(scored.reduce((s, r) => s + r.score, 0) / scored.length) : null;
+    const goodCount = sample.filter(r => (r.tier === 'excellent' || r.tier === 'good')).length;
+    const goodPct = sample.length ? Math.round((goodCount / sample.length) * 100) : 0;
+    const totalScans = list.length;
+
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = `
+        <div class="ingredient-history-trend-tile">
+            <div class="ingredient-history-trend-label">Avg score</div>
+            <div class="ingredient-history-trend-value">${avg == null ? '—' : avg}</div>
+            <div class="ingredient-history-trend-sub">${recent.length >= 3 ? 'last 7 days' : 'last 10 scans'}</div>
+        </div>
+        <div class="ingredient-history-trend-tile">
+            <div class="ingredient-history-trend-label">Good picks</div>
+            <div class="ingredient-history-trend-value">${goodPct}%</div>
+            <div class="ingredient-history-trend-sub">scoring 60+</div>
+        </div>
+        <div class="ingredient-history-trend-tile">
+            <div class="ingredient-history-trend-label">Total scans</div>
+            <div class="ingredient-history-trend-value">${totalScans}</div>
+            <div class="ingredient-history-trend-sub">all time</div>
+        </div>
+    `;
+}
+
+function onIngredientHistoryItemClick(id) {
+    if (_ingredientHistoryUI.compareMode) {
+        const idx = _ingredientHistoryUI.compareIds.indexOf(id);
+        if (idx >= 0) {
+            _ingredientHistoryUI.compareIds.splice(idx, 1);
+        } else {
+            _ingredientHistoryUI.compareIds.push(id);
+            if (_ingredientHistoryUI.compareIds.length > 2) {
+                _ingredientHistoryUI.compareIds.shift();
+            }
+        }
+        renderIngredientHistory();
+        renderIngredientHistoryCompareResult();
+        return;
+    }
+    replayIngredientScan(id);
+}
+
+function replayIngredientScan(id) {
+    const r = getIngredientScanById(id);
+    if (!r || !r.analysis) {
+        showNotification('Scan no longer available', 'error');
+        return;
+    }
+    closeIngredientHistory();
+    const analyzerModal = document.getElementById('ingredientAnalyzerModal');
+    if (analyzerModal && !analyzerModal.classList.contains('active')) {
+        analyzerModal.classList.add('active');
+        syncIngredientGoalBanner();
+        syncIngredientAisleToggleButton();
+    }
+    if (r.thumb) {
+        const img = document.getElementById('ingredientImagePreview');
+        const placeholder = document.getElementById('ingredientUploadPlaceholder');
+        const preview = document.getElementById('ingredientUploadPreview');
+        const coach = document.getElementById('ingredientPhotoCoach');
+        if (img) img.src = r.thumb;
+        if (placeholder) placeholder.classList.add('hidden');
+        if (preview) preview.classList.remove('hidden');
+        if (coach) coach.classList.add('hidden');
+    }
+    _currentIngredientScanId = r.id;
+    _currentIngredientLogServings = r.logged?.servings || 1;
+    renderIngredientAnalysis(r.analysis, r.ocr_text || '', r.source || '');
+    const aisle = document.getElementById('ingredientAisleResults');
+    const results = document.getElementById('ingredientResults');
+    if (results) results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else if (aisle) aisle.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function confirmDeleteIngredientScan(id) {
+    if (!confirm('Delete this scan from history?')) return;
+    deleteIngredientScan(id);
+    renderIngredientHistory();
+    renderIngredientHistoryTrend();
+    renderIngredientTodayStrip();
+}
+
+function clearIngredientHistoryConfirm() {
+    if (!confirm('Clear ALL ingredient scan history? This cannot be undone.')) return;
+    clearIngredientHistory();
+    renderIngredientHistory();
+    renderIngredientHistoryTrend();
+    renderIngredientTodayStrip();
+    showNotification('Scan history cleared', 'success');
+}
+
+function exportIngredientHistory() {
+    const list = getIngredientHistory();
+    if (list.length === 0) {
+        showNotification('Nothing to export', 'info');
+        return;
+    }
+    const slim = list.map(r => ({
+        id: r.id,
+        ts: new Date(r.ts).toISOString(),
+        product: r.product,
+        score: r.score,
+        verdict: r.verdict,
+        person: r.person,
+        source: r.source,
+        nutrition_facts: r.nutrition_facts,
+        red_flag_count: r.red_flag_count,
+        consumption_frequency: r.frequency_label,
+        logged: r.logged
+    }));
+    const blob = new Blob([JSON.stringify(slim, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ingredient-scans-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function toggleIngredientHistoryCompareMode() {
+    _ingredientHistoryUI.compareMode = !_ingredientHistoryUI.compareMode;
+    if (!_ingredientHistoryUI.compareMode) _ingredientHistoryUI.compareIds = [];
+    syncIngredientHistoryCompareUI();
+    renderIngredientHistory();
+    renderIngredientHistoryCompareResult();
+}
+
+function syncIngredientHistoryCompareUI() {
+    const banner = document.getElementById('ingredientHistoryCompareBanner');
+    const btn = document.getElementById('ingredientHistoryCompareBtn');
+    if (banner) banner.classList.toggle('hidden', !_ingredientHistoryUI.compareMode);
+    if (btn) btn.classList.toggle('is-active', _ingredientHistoryUI.compareMode);
+    const text = document.getElementById('ingredientHistoryCompareBannerText');
+    if (text) {
+        const n = _ingredientHistoryUI.compareIds.length;
+        text.textContent = n === 0 ? 'Tap two scans to compare' : (n === 1 ? 'Tap one more scan to compare' : 'Comparing two scans');
+    }
+}
+
+function renderIngredientHistoryCompareResult() {
+    const wrap = document.getElementById('ingredientHistoryCompareResult');
+    if (!wrap) return;
+    if (!_ingredientHistoryUI.compareMode || _ingredientHistoryUI.compareIds.length !== 2) {
+        wrap.classList.add('hidden');
+        wrap.innerHTML = '';
+        return;
+    }
+    const [a, b] = _ingredientHistoryUI.compareIds.map(getIngredientScanById);
+    if (!a || !b) {
+        wrap.classList.add('hidden');
+        wrap.innerHTML = '';
+        return;
+    }
+    const fmt = (v, suffix) => v == null ? '—' : `${v}${suffix || ''}`;
+    const cmp = (av, bv, lowerIsBetter) => {
+        if (av == null || bv == null || av === bv) return ['', ''];
+        const aBetter = lowerIsBetter ? av < bv : av > bv;
+        return aBetter ? ['is-better', 'is-worse'] : ['is-worse', 'is-better'];
+    };
+    const rows = [
+        { key: 'Score',          aV: a.score, bV: b.score, suffix: '', lower: false },
+        { key: 'Protein',        aV: a.nutrition_facts?.protein_g, bV: b.nutrition_facts?.protein_g, suffix: 'g', lower: false },
+        { key: 'Fiber',          aV: a.nutrition_facts?.fiber_g,   bV: b.nutrition_facts?.fiber_g,   suffix: 'g', lower: false },
+        { key: 'Added sugar',    aV: a.nutrition_facts?.added_sugar_g, bV: b.nutrition_facts?.added_sugar_g, suffix: 'g', lower: true },
+        { key: 'Sodium',         aV: a.nutrition_facts?.sodium_mg, bV: b.nutrition_facts?.sodium_mg, suffix: 'mg', lower: true },
+        { key: 'Saturated fat',  aV: a.nutrition_facts?.saturated_fat_g, bV: b.nutrition_facts?.saturated_fat_g, suffix: 'g', lower: true },
+        { key: 'Calories',       aV: a.nutrition_facts?.calories,  bV: b.nutrition_facts?.calories,  suffix: '', lower: true },
+        { key: 'Red flags',      aV: a.red_flag_count, bV: b.red_flag_count, suffix: '', lower: true }
+    ];
+
+    wrap.classList.remove('hidden');
+    wrap.innerHTML = `
+        <div class="ingredient-history-compare-grid">
+            <div class="ingredient-history-compare-col">
+                <h4>${escapeIngredientHtml(a.product || '(unknown)')}</h4>
+                <div style="font-size:11px;color:#64748b">${escapeIngredientHtml(formatRelativeTime(a.ts))} &middot; ${escapeIngredientHtml(a.verdict || '')}</div>
+            </div>
+            <div class="ingredient-history-compare-col">
+                <h4>${escapeIngredientHtml(b.product || '(unknown)')}</h4>
+                <div style="font-size:11px;color:#64748b">${escapeIngredientHtml(formatRelativeTime(b.ts))} &middot; ${escapeIngredientHtml(b.verdict || '')}</div>
+            </div>
+        </div>
+        ${rows.map(row => {
+            const [aClass, bClass] = cmp(row.aV, row.bV, row.lower);
+            return `
+                <div class="ingredient-history-compare-row">
+                    <div class="ingredient-history-compare-cell ${aClass}">${escapeIngredientHtml(fmt(row.aV, row.suffix))}</div>
+                    <div class="ingredient-history-compare-key">${escapeIngredientHtml(row.key)}</div>
+                    <div class="ingredient-history-compare-cell ${bClass}">${escapeIngredientHtml(fmt(row.bV, row.suffix))}</div>
+                </div>
+            `;
+        }).join('')}
+    `;
+}
+
+// ============================================================
+// INGREDIENT ANALYZER — Macro Target Tracker
+// Per-person daily targets stored in localStorage, credited
+// against logged scans from history. Resets at local midnight.
+// ============================================================
+
+const INGREDIENT_TARGETS_KEY = 'ingredient_targets_v1';
+
+const INGREDIENT_TARGET_FIELDS = [
+    { key: 'calories',     label: 'Calories',    unit: 'kcal', max: false, defaults: { amar: 2400, priya: 1800, both: 2100 } },
+    { key: 'protein_g',    label: 'Protein',     unit: 'g',    max: false, defaults: { amar: 150,  priya: 110,  both: 130  } },
+    { key: 'fiber_g',      label: 'Fiber',       unit: 'g',    max: false, defaults: { amar: 38,   priya: 30,   both: 35   } },
+    { key: 'added_sugar_g',label: 'Added sugar', unit: 'g',    max: true,  defaults: { amar: 30,   priya: 25,   both: 25   } },
+    { key: 'sodium_mg',    label: 'Sodium',      unit: 'mg',   max: true,  defaults: { amar: 2300, priya: 2000, both: 2300 } },
+    { key: 'saturated_fat_g', label: 'Sat fat',  unit: 'g',    max: true,  defaults: { amar: 22,   priya: 18,   both: 20   } }
+];
+
+let _ingredientTargetsTodayWho = null;       // person scope for the targets modal view
+const INGREDIENT_TODAY_STRIP_FIELDS = ['protein_g', 'fiber_g', 'added_sugar_g', 'sodium_mg'];
+
+function getIngredientTargetDefaults(person) {
+    const out = {};
+    INGREDIENT_TARGET_FIELDS.forEach(f => { out[f.key] = f.defaults[person] ?? f.defaults.both; });
+    return out;
+}
+
+function getAllIngredientTargets() {
+    try {
+        const raw = localStorage.getItem(INGREDIENT_TARGETS_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (_e) {
+        return {};
+    }
+}
+
+function getIngredientTargetsFor(person) {
+    const all = getAllIngredientTargets();
+    const stored = all[person] && typeof all[person] === 'object' ? all[person] : {};
+    const defaults = getIngredientTargetDefaults(person);
+    const merged = {};
+    INGREDIENT_TARGET_FIELDS.forEach(f => {
+        const v = Number(stored[f.key]);
+        merged[f.key] = isFinite(v) && v > 0 ? v : defaults[f.key];
+    });
+    return merged;
+}
+
+function saveIngredientTargetsFor(person, targets) {
+    const all = getAllIngredientTargets();
+    all[person] = { ...(all[person] || {}), ...targets };
+    try {
+        localStorage.setItem(INGREDIENT_TARGETS_KEY, JSON.stringify(all));
+    } catch (_e) { /* quota */ }
+    ingredientCloudFireAndForget(
+        upsertIngredientTargetsCloud(person, all[person]),
+        `save targets for ${person}`
+    );
+}
+
+function dayKeyForTimestamp(ts) {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getTodayLoggedEntries(person) {
+    const today = dayKeyForTimestamp(Date.now());
+    return getIngredientHistory().filter(r => {
+        if (!r.logged || !r.logged.loggedAt) return false;
+        if (person && person !== 'all' && r.person !== person) return false;
+        return dayKeyForTimestamp(r.logged.loggedAt) === today;
+    });
+}
+
+function aggregateLoggedNutrition(entries) {
+    const totals = {};
+    INGREDIENT_TARGET_FIELDS.forEach(f => { totals[f.key] = 0; });
+    entries.forEach(r => {
+        const facts = r.nutrition_facts || {};
+        const servings = Number(r.logged?.servings || 1);
+        INGREDIENT_TARGET_FIELDS.forEach(f => {
+            const v = Number(facts[f.key]);
+            if (isFinite(v)) totals[f.key] += v * servings;
+        });
+    });
+    INGREDIENT_TARGET_FIELDS.forEach(f => {
+        totals[f.key] = Math.round(totals[f.key] * 10) / 10;
+    });
+    return totals;
+}
+
+function computeTargetTone(field, consumed, target) {
+    if (!target || !isFinite(target) || target <= 0) return 'neutral';
+    const pct = (consumed / target) * 100;
+    if (field.max) {
+        if (pct >= 100) return 'bad';
+        if (pct >= 80) return 'warn';
+        return 'good';
+    }
+    if (pct >= 100) return 'good';
+    if (pct >= 60) return 'warn';
+    return 'bad';
+}
+
+function openIngredientTargets() {
+    const modal = document.getElementById('ingredientTargetsModal');
+    if (!modal) return;
+    modal.classList.add('active');
+    if (!_ingredientTargetsTodayWho) {
+        _ingredientTargetsTodayWho = getActiveIngredientProfile().activeUser || 'both';
+    }
+    renderIngredientTargetsWhoRow();
+    renderIngredientTargetsToday();
+    renderIngredientTargetsEditor();
+}
+
+function closeIngredientTargets() {
+    const modal = document.getElementById('ingredientTargetsModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function setIngredientTargetsWho(person) {
+    _ingredientTargetsTodayWho = person;
+    renderIngredientTargetsWhoRow();
+    renderIngredientTargetsToday();
+    renderIngredientTargetsEditor();
+}
+
+function renderIngredientTargetsWhoRow() {
+    const row = document.getElementById('ingredientTargetsWhoRow');
+    if (!row) return;
+    row.innerHTML = INGREDIENT_PROFILE_PEOPLE.map(p => `
+        <button type="button" class="ingredient-profile-who-btn ${_ingredientTargetsTodayWho === p.id ? 'is-active' : ''}"
+                onclick="setIngredientTargetsWho('${p.id}')">
+            <i class="fas ${p.icon}"></i>${escapeIngredientHtml(p.label)}
+        </button>
+    `).join('');
+}
+
+function renderIngredientTargetsToday() {
+    const grid = document.getElementById('ingredientTargetsTodayGrid');
+    const dateEl = document.getElementById('ingredientTargetsTodayDate');
+    const listEl = document.getElementById('ingredientTargetsLoggedList');
+    if (!grid) return;
+
+    if (dateEl) {
+        const d = new Date();
+        dateEl.textContent = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+
+    const targets = getIngredientTargetsFor(_ingredientTargetsTodayWho);
+    const entries = getTodayLoggedEntries(_ingredientTargetsTodayWho);
+    const totals = aggregateLoggedNutrition(entries);
+
+    grid.innerHTML = INGREDIENT_TARGET_FIELDS.map(f => {
+        const consumed = totals[f.key] || 0;
+        const target = targets[f.key];
+        const tone = computeTargetTone(f, consumed, target);
+        const pct = target ? Math.min(150, (consumed / target) * 100) : 0;
+        const ringPct = Math.min(100, pct);
+        const r = 32;
+        const c = 2 * Math.PI * r;
+        const offset = c * (1 - ringPct / 100);
+        const labelPct = Math.round(pct);
+        const valueDisplay = `${formatTargetNumber(consumed)} <small>/ ${formatTargetNumber(target)} ${escapeIngredientHtml(f.unit)}</small>`;
+        const arrow = f.max ? 'max' : 'goal';
+        return `
+            <div class="ingredient-target-tile" data-tone="${tone}">
+                <div class="ingredient-target-ring-wrap">
+                    <svg width="80" height="80" viewBox="0 0 80 80">
+                        <circle class="ingredient-target-ring-bg" cx="40" cy="40" r="${r}"></circle>
+                        <circle class="ingredient-target-ring-fg" cx="40" cy="40" r="${r}"
+                            stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"
+                            transform="rotate(-90 40 40)"></circle>
+                    </svg>
+                    <div class="ingredient-target-ring-center">
+                        <span class="pct">${labelPct}%</span>
+                        <span class="of">${arrow}</span>
+                    </div>
+                </div>
+                <div class="ingredient-target-tile-label">${escapeIngredientHtml(f.label)}</div>
+                <div class="ingredient-target-tile-value">${valueDisplay}</div>
+            </div>
+        `;
+    }).join('');
+
+    if (listEl) {
+        if (entries.length === 0) {
+            listEl.innerHTML = '';
+        } else {
+            listEl.innerHTML = entries.map(r => {
+                const servings = r.logged?.servings || 1;
+                const cal = r.nutrition_facts?.calories;
+                const calStr = cal != null ? `${Math.round(cal * servings)} kcal` : '';
+                const protein = r.nutrition_facts?.protein_g;
+                const proteinStr = protein != null ? `${Math.round(protein * servings * 10) / 10} g protein` : '';
+                const meta = [calStr, proteinStr, `${servings}× serving`].filter(Boolean).join(' · ');
+                return `
+                    <div class="ingredient-targets-logged-row">
+                        <div class="ingredient-targets-logged-name">${escapeIngredientHtml(r.product || '(unknown)')}</div>
+                        <div class="ingredient-targets-logged-meta">${escapeIngredientHtml(meta)}</div>
+                        <button class="ingredient-targets-logged-remove" onclick="unlogIngredientScan('${r.id}')" title="Remove from today">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+}
+
+function formatTargetNumber(n) {
+    if (n == null || !isFinite(n)) return '—';
+    if (Math.abs(n) >= 100) return String(Math.round(n));
+    return String(Math.round(n * 10) / 10);
+}
+
+function renderIngredientTargetsEditor() {
+    const grid = document.getElementById('ingredientTargetsEditorGrid');
+    if (!grid) return;
+    const targets = getIngredientTargetsFor(_ingredientTargetsTodayWho);
+    grid.innerHTML = INGREDIENT_TARGET_FIELDS.map(f => `
+        <div class="ingredient-targets-editor-row">
+            <label>${escapeIngredientHtml(f.label)} ${f.max ? '(max)' : ''} <span style="color:#94a3b8">(${escapeIngredientHtml(f.unit)})</span></label>
+            <input type="number" min="0" step="1" data-field="${f.key}" value="${targets[f.key]}">
+        </div>
+    `).join('');
+}
+
+function saveIngredientTargetsFromForm() {
+    const grid = document.getElementById('ingredientTargetsEditorGrid');
+    if (!grid) return;
+    const inputs = grid.querySelectorAll('input[data-field]');
+    const next = {};
+    inputs.forEach(inp => {
+        const field = inp.getAttribute('data-field');
+        const v = Number(inp.value);
+        if (field && isFinite(v) && v > 0) next[field] = v;
+    });
+    saveIngredientTargetsFor(_ingredientTargetsTodayWho, next);
+    renderIngredientTargetsToday();
+    renderIngredientTodayStrip();
+    showNotification('Targets saved', 'success');
+}
+
+function resetIngredientTargetsToDefaults() {
+    if (!confirm(`Reset targets for ${_ingredientTargetsTodayWho} to defaults?`)) return;
+    const all = getAllIngredientTargets();
+    delete all[_ingredientTargetsTodayWho];
+    try { localStorage.setItem(INGREDIENT_TARGETS_KEY, JSON.stringify(all)); } catch (_e) { /* quota */ }
+    ingredientCloudFireAndForget(
+        deleteIngredientTargetsCloud(_ingredientTargetsTodayWho),
+        `reset targets for ${_ingredientTargetsTodayWho}`
+    );
+    renderIngredientTargetsEditor();
+    renderIngredientTargetsToday();
+    renderIngredientTodayStrip();
+    showNotification('Targets reset to defaults', 'success');
+}
+
+function unlogIngredientScan(id) {
+    updateIngredientScan(id, { logged: null });
+    if (_currentIngredientScanId === id) {
+        _currentIngredientLogServings = 1;
+        renderIngredientLogCard();
+    }
+    renderIngredientTargetsToday();
+    renderIngredientTodayStrip();
+}
+
+// Today strip on the analyzer page (above capture area).
+function renderIngredientTodayStrip() {
+    const strip = document.getElementById('ingredientTodayStrip');
+    const bars = document.getElementById('ingredientTodayStripBars');
+    const whoEl = document.getElementById('ingredientTodayWho');
+    if (!strip || !bars) return;
+
+    const profile = getActiveIngredientProfile();
+    const person = profile.activeUser || 'both';
+    const entries = getTodayLoggedEntries(person);
+    if (entries.length === 0) {
+        strip.classList.add('hidden');
+        bars.innerHTML = '';
+        return;
+    }
+    strip.classList.remove('hidden');
+    if (whoEl) {
+        const labelMap = { amar: 'Amar', priya: 'Priya', both: 'You' };
+        whoEl.textContent = labelMap[person] || 'You';
+    }
+    const targets = getIngredientTargetsFor(person);
+    const totals = aggregateLoggedNutrition(entries);
+    bars.innerHTML = INGREDIENT_TODAY_STRIP_FIELDS.map(key => {
+        const f = INGREDIENT_TARGET_FIELDS.find(x => x.key === key);
+        if (!f) return '';
+        const consumed = totals[key] || 0;
+        const target = targets[key];
+        const tone = computeTargetTone(f, consumed, target);
+        const pct = target ? Math.min(120, Math.round((consumed / target) * 100)) : 0;
+        return `
+            <div class="ingredient-today-bar" data-tone="${tone}">
+                <div class="ingredient-today-bar-label">
+                    <span>${escapeIngredientHtml(f.label)}</span>
+                    <span>${pct}%</span>
+                </div>
+                <div class="ingredient-today-bar-track">
+                    <div class="ingredient-today-bar-fill" style="width:${Math.min(100, pct)}%"></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============================================================
+// INGREDIENT ANALYZER — Log-this-serving card (results panel)
+// ============================================================
+
+let _currentIngredientScanId = null;       // history id of the scan currently rendered
+let _currentIngredientLogServings = 1;     // working "servings" count for the log card
+
+function adjustIngredientLogServings(delta) {
+    let next = (_currentIngredientLogServings || 1) + delta;
+    next = Math.max(0.5, Math.min(20, Math.round(next * 2) / 2));
+    _currentIngredientLogServings = next;
+    const countEl = document.getElementById('ingredientLogServingsCount');
+    if (countEl) countEl.textContent = next % 1 === 0 ? String(next) : next.toFixed(1);
+}
+
+function renderIngredientLogCard() {
+    const card = document.getElementById('ingredientLogServingCard');
+    const previewEl = document.getElementById('ingredientLogServingPreview');
+    const countEl = document.getElementById('ingredientLogServingsCount');
+    const btn = document.getElementById('ingredientLogServingBtn');
+    const btnText = document.getElementById('ingredientLogServingBtnText');
+    if (!card) return;
+
+    const record = _currentIngredientScanId ? getIngredientScanById(_currentIngredientScanId) : null;
+    const facts = record?.nutrition_facts || lastIngredientAnalysis?.nutrition_facts;
+    const hasNutrition = facts && Object.entries(facts).some(([k, v]) => k !== 'serving_size' && k !== 'servings_per_container' && v != null);
+
+    if (!record || !hasNutrition) {
+        card.classList.add('hidden');
+        return;
+    }
+    card.classList.remove('hidden');
+
+    if (record.logged) {
+        _currentIngredientLogServings = Number(record.logged.servings) || 1;
+        card.classList.add('is-logged');
+        if (btnText) btnText.textContent = 'Update / re-log';
+        if (btn) btn.innerHTML = `<i class="fas fa-rotate mr-2"></i><span id="ingredientLogServingBtnText">Update log</span>`;
+    } else {
+        card.classList.remove('is-logged');
+        if (btn) btn.innerHTML = `<i class="fas fa-plus mr-2"></i><span id="ingredientLogServingBtnText">Log serving</span>`;
+    }
+
+    if (countEl) {
+        const n = _currentIngredientLogServings;
+        countEl.textContent = n % 1 === 0 ? String(n) : n.toFixed(1);
+    }
+
+    if (previewEl) {
+        const servings = _currentIngredientLogServings;
+        const parts = [];
+        if (facts.calories != null)  parts.push(`${Math.round(facts.calories * servings)} kcal`);
+        if (facts.protein_g != null) parts.push(`${Math.round(facts.protein_g * servings * 10) / 10} g protein`);
+        if (facts.fiber_g != null)   parts.push(`${Math.round(facts.fiber_g * servings * 10) / 10} g fiber`);
+        if (facts.added_sugar_g != null) parts.push(`${Math.round(facts.added_sugar_g * servings * 10) / 10} g added sugar`);
+        if (facts.sodium_mg != null) parts.push(`${Math.round(facts.sodium_mg * servings)} mg sodium`);
+        previewEl.textContent = parts.join(' · ') || 'Adds nothing — no numeric nutrition extracted.';
+    }
+}
+
+function logCurrentIngredientScanServing() {
+    if (!_currentIngredientScanId) {
+        showNotification('Nothing to log yet — analyze a product first', 'error');
+        return;
+    }
+    const record = getIngredientScanById(_currentIngredientScanId);
+    if (!record) {
+        showNotification('Scan no longer in history', 'error');
+        return;
+    }
+    const servings = Math.max(0.5, _currentIngredientLogServings || 1);
+    updateIngredientScan(_currentIngredientScanId, {
+        logged: { servings, loggedAt: Date.now() }
+    });
+    renderIngredientLogCard();
+    renderIngredientTodayStrip();
+    showNotification(`Logged ${servings}× serving against today's targets`, 'success');
+}
+
+// ============================================================
+// INGREDIENT ANALYZER — Photo Quality Coach
+// Lightweight client-side image quality assessment to coach the
+// user toward better OCR (when barcode lookup fails). Computes:
+//   - dimensions     (rejects too-small images)
+//   - mean brightness (rejects too dark / too washed out)
+//   - global contrast / stddev (rejects flat / low-contrast)
+//   - sharpness proxy via Sobel-style 3x3 magnitude (rejects blurry)
+// ============================================================
+
+const INGREDIENT_PHOTO_COACH_DOWNSCALE = 200; // longest side for the quality calc canvas
+let _ingredientPhotoCoachLast = null;          // { score, issues, dims, brightness, contrast, sharpness }
+
+async function assessIngredientPhotoQuality(dataUrl) {
+    if (!dataUrl) return null;
+    try {
+        const img = await loadImageFromDataUrl(dataUrl);
+        const w = img.width || 0;
+        const h = img.height || 0;
+        if (!w || !h) return null;
+
+        const longest = Math.max(w, h);
+        const scale = longest > INGREDIENT_PHOTO_COACH_DOWNSCALE ? INGREDIENT_PHOTO_COACH_DOWNSCALE / longest : 1;
+        const cw = Math.max(1, Math.round(w * scale));
+        const ch = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return null;
+        ctx.drawImage(img, 0, 0, cw, ch);
+        const imageData = ctx.getImageData(0, 0, cw, ch);
+        const data = imageData.data;
+
+        // Build grayscale + brightness stats
+        const gray = new Uint8ClampedArray(cw * ch);
+        let sum = 0;
+        let sqSum = 0;
+        for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+            // Rec. 601 luma
+            const v = (data[i] * 0.299) + (data[i + 1] * 0.587) + (data[i + 2] * 0.114);
+            gray[j] = v;
+            sum += v;
+            sqSum += v * v;
+        }
+        const px = cw * ch;
+        const mean = sum / px;
+        const variance = (sqSum / px) - (mean * mean);
+        const stddev = Math.sqrt(Math.max(0, variance));
+
+        // Sharpness via Sobel-style magnitude (sample every 2 pixels for speed)
+        let sharpAcc = 0;
+        let sharpCount = 0;
+        for (let y = 1; y < ch - 1; y += 2) {
+            for (let x = 1; x < cw - 1; x += 2) {
+                const i = y * cw + x;
+                const gx = -gray[i - cw - 1] - 2 * gray[i - 1] - gray[i + cw - 1]
+                          + gray[i - cw + 1] + 2 * gray[i + 1] + gray[i + cw + 1];
+                const gy = -gray[i - cw - 1] - 2 * gray[i - cw] - gray[i - cw + 1]
+                          + gray[i + cw - 1] + 2 * gray[i + cw] + gray[i + cw + 1];
+                sharpAcc += Math.abs(gx) + Math.abs(gy);
+                sharpCount++;
+            }
+        }
+        const sharpness = sharpCount ? (sharpAcc / sharpCount) : 0;
+
+        // Issues
+        const issues = [];
+        // Dimensions
+        if (longest < 600) {
+            issues.push({ level: 'bad',  icon: 'fa-magnifying-glass-minus',
+                          text: 'Image is small. Get closer or use a higher-res photo for clean text.' });
+        } else if (longest < 900) {
+            issues.push({ level: 'warn', icon: 'fa-magnifying-glass',
+                          text: 'Photo is on the small side. A higher-res shot OCRs more reliably.' });
+        }
+        // Brightness
+        if (mean < 60) {
+            issues.push({ level: 'bad',  icon: 'fa-moon',
+                          text: 'Too dark. Move under brighter, even light.' });
+        } else if (mean < 90) {
+            issues.push({ level: 'warn', icon: 'fa-cloud',
+                          text: 'A bit dark. More even light improves OCR.' });
+        } else if (mean > 220) {
+            issues.push({ level: 'bad',  icon: 'fa-sun',
+                          text: 'Overexposed / glare washing out text. Tilt the package or step out of direct sun.' });
+        } else if (mean > 200) {
+            issues.push({ level: 'warn', icon: 'fa-sun',
+                          text: 'Looks washed out — check for glare on the label.' });
+        }
+        // Contrast
+        if (stddev < 22) {
+            issues.push({ level: 'warn', icon: 'fa-circle-half-stroke',
+                          text: 'Low contrast. Make sure the label fills the frame and is in focus.' });
+        }
+        // Sharpness (Sobel mag — empirical thresholds from typical phone shots ~50-150)
+        if (sharpness < 18) {
+            issues.push({ level: 'bad',  icon: 'fa-bullseye',
+                          text: 'Photo looks blurry. Hold steady, tap to focus, and try again.' });
+        } else if (sharpness < 32) {
+            issues.push({ level: 'warn', icon: 'fa-bullseye',
+                          text: 'Slight blur — a sharper shot reads better.' });
+        }
+
+        // Score: start 100, subtract per issue
+        let score = 100;
+        issues.forEach(it => { score -= (it.level === 'bad' ? 22 : 10); });
+        score = Math.max(0, Math.min(100, score));
+
+        return {
+            score,
+            issues,
+            dims: { w, h },
+            brightness: Math.round(mean),
+            contrast: Math.round(stddev),
+            sharpness: Math.round(sharpness)
+        };
+    } catch (e) {
+        console.warn('Photo quality assessment failed', e);
+        return null;
+    }
+}
+
+function renderIngredientPhotoCoach(assessment) {
+    const card = document.getElementById('ingredientPhotoCoach');
+    const titleEl = document.getElementById('ingredientPhotoCoachTitle');
+    const subEl = document.getElementById('ingredientPhotoCoachSub');
+    const scoreEl = document.getElementById('ingredientPhotoCoachScore');
+    const iconEl = document.getElementById('ingredientPhotoCoachIcon');
+    const listEl = document.getElementById('ingredientPhotoCoachList');
+    if (!card) return;
+
+    if (!assessment) {
+        card.classList.add('hidden');
+        return;
+    }
+
+    _ingredientPhotoCoachLast = assessment;
+    const { score, issues } = assessment;
+    const worst = issues.some(i => i.level === 'bad') ? 'bad'
+                : issues.some(i => i.level === 'warn') ? 'warn' : 'ok';
+
+    // Stay quiet when the photo is clean — coach only nudges when a real problem
+    // would hurt OCR. Barcode lookup short-circuits OCR for most products anyway.
+    if (worst === 'ok') {
+        card.classList.add('hidden');
+        return;
+    }
+
+    card.setAttribute('data-tone', worst);
+    card.classList.remove('hidden');
+
+    if (scoreEl) scoreEl.textContent = String(score);
+    if (iconEl) {
+        iconEl.className = worst === 'bad'  ? 'fas fa-triangle-exclamation'
+                         : worst === 'warn' ? 'fas fa-circle-exclamation'
+                         : 'fas fa-circle-check';
+    }
+    if (titleEl) {
+        titleEl.textContent = worst === 'bad'  ? 'Photo could be a problem'
+                            : worst === 'warn' ? 'Photo is OK — could be better'
+                            : 'Photo quality looks great';
+    }
+    if (subEl) {
+        subEl.textContent = worst === 'ok'
+            ? `${assessment.dims.w}×${assessment.dims.h} · brightness ${assessment.brightness} · sharpness ${assessment.sharpness}`
+            : 'Barcode lookup will still try first — OCR fallback works best with clean photos.';
+    }
+    if (listEl) {
+        listEl.innerHTML = issues.map(i => `
+            <li data-level="${i.level}"><i class="fas ${i.icon}"></i><span>${escapeIngredientHtml(i.text)}</span></li>
+        `).join('');
+    }
+}
+
+async function evaluateAndShowIngredientPhotoCoach(dataUrl) {
+    const card = document.getElementById('ingredientPhotoCoach');
+    if (card) card.classList.add('hidden');
+    const assessment = await assessIngredientPhotoQuality(dataUrl);
+    renderIngredientPhotoCoach(assessment);
+    return assessment;
+}
+

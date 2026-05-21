@@ -1533,3 +1533,465 @@ body.modal-open {
     color: white;
     border-color: transparent;
 }
+
+/* ============================================================ */
+/* INGREDIENT ANALYZER — Today's Intake Strip                  */
+/* ============================================================ */
+.ingredient-today-strip {
+    margin: 0 16px 12px;
+    padding: 10px 14px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(16,185,129,0.07), rgba(16,185,129,0.02));
+    border: 1px solid rgba(16,185,129,0.2);
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+.ingredient-today-strip:hover { background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.04)); }
+.ingredient-today-strip-head {
+    display: flex; align-items: center;
+    font-size: 12px; font-weight: 700; color: #047857;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.ingredient-today-strip-bars {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 8px; margin-top: 8px;
+}
+.ingredient-today-bar {
+    display: flex; flex-direction: column; gap: 4px;
+}
+.ingredient-today-bar-label {
+    font-size: 10px; font-weight: 700; color: #475569;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.ingredient-today-bar-track {
+    height: 6px; border-radius: 999px;
+    background: rgba(15,23,42,0.07);
+    overflow: hidden;
+}
+.ingredient-today-bar-fill {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #10b981, #059669);
+    transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ingredient-today-bar[data-tone="bad"] .ingredient-today-bar-fill { background: linear-gradient(90deg, #ef4444, #b91c1c); }
+.ingredient-today-bar[data-tone="warn"] .ingredient-today-bar-fill { background: linear-gradient(90deg, #f59e0b, #d97706); }
+
+/* ============================================================ */
+/* INGREDIENT ANALYZER — Photo Quality Coach                   */
+/* ============================================================ */
+.ingredient-photo-coach {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(15,23,42,0.08);
+    background: linear-gradient(180deg, #f8fafc, white 80%);
+}
+.ingredient-photo-coach[data-tone="ok"]   { border-color: rgba(16,185,129,0.25); background: linear-gradient(180deg, rgba(16,185,129,0.05), white 70%); }
+.ingredient-photo-coach[data-tone="warn"] { border-color: rgba(245,158,11,0.35); background: linear-gradient(180deg, rgba(245,158,11,0.08), white 70%); }
+.ingredient-photo-coach[data-tone="bad"]  { border-color: rgba(239,68,68,0.35);  background: linear-gradient(180deg, rgba(239,68,68,0.07), white 70%); }
+.ingredient-photo-coach-head {
+    display: flex; align-items: center; gap: 12px;
+}
+.ingredient-photo-coach-head > i {
+    font-size: 18px; width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 12px; background: white;
+    color: #475569;
+    box-shadow: 0 2px 6px rgba(15,23,42,0.06);
+}
+.ingredient-photo-coach[data-tone="ok"] .ingredient-photo-coach-head > i   { color: #059669; }
+.ingredient-photo-coach[data-tone="warn"] .ingredient-photo-coach-head > i { color: #d97706; }
+.ingredient-photo-coach[data-tone="bad"] .ingredient-photo-coach-head > i  { color: #b91c1c; }
+.ingredient-photo-coach-title { font-size: 13px; font-weight: 700; color: var(--color-text-primary); }
+.ingredient-photo-coach-sub   { font-size: 11px; color: var(--color-text-secondary); margin-top: 2px; }
+.ingredient-photo-coach-score {
+    margin-left: auto;
+    font-size: 16px; font-weight: 800;
+    color: #059669;
+    background: rgba(16,185,129,0.1);
+    padding: 4px 10px; border-radius: 999px;
+    min-width: 48px; text-align: center;
+}
+.ingredient-photo-coach[data-tone="warn"] .ingredient-photo-coach-score { color: #d97706; background: rgba(245,158,11,0.12); }
+.ingredient-photo-coach[data-tone="bad"]  .ingredient-photo-coach-score { color: #b91c1c; background: rgba(239,68,68,0.12); }
+.ingredient-photo-coach-list {
+    margin: 10px 0 0; padding: 0; list-style: none;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.ingredient-photo-coach-list:empty { display: none; }
+.ingredient-photo-coach-list li {
+    font-size: 12px; color: #334155;
+    display: flex; gap: 8px; align-items: flex-start;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: rgba(15,23,42,0.04);
+}
+.ingredient-photo-coach-list li i { margin-top: 2px; }
+.ingredient-photo-coach-list li[data-level="bad"]  { background: rgba(239,68,68,0.08); color: #991b1b; }
+.ingredient-photo-coach-list li[data-level="warn"] { background: rgba(245,158,11,0.10); color: #92400e; }
+
+/* ============================================================ */
+/* INGREDIENT ANALYZER — Log Serving Card                      */
+/* ============================================================ */
+.ingredient-log-card {
+    display: flex; flex-wrap: wrap; gap: 14px;
+    align-items: center; justify-content: space-between;
+    padding: 14px 16px;
+    border-radius: 16px;
+    border: 1.5px dashed rgba(16,185,129,0.4);
+    background: linear-gradient(135deg, rgba(16,185,129,0.06), rgba(16,185,129,0.02));
+}
+.ingredient-log-card.is-logged {
+    border-style: solid;
+    border-color: rgba(16,185,129,0.5);
+    background: linear-gradient(135deg, rgba(16,185,129,0.14), rgba(16,185,129,0.04));
+}
+.ingredient-log-card-info { flex: 1 1 220px; min-width: 0; }
+.ingredient-log-card-eyebrow {
+    font-size: 11px; font-weight: 700; color: #047857;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.ingredient-log-card-title {
+    margin-top: 4px; font-size: 13px; font-weight: 600;
+    color: var(--color-text-primary);
+    line-height: 1.45;
+}
+.ingredient-log-card-actions {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.ingredient-log-stepper {
+    display: inline-flex; align-items: center;
+    background: white;
+    border: 1.5px solid rgba(15,23,42,0.1);
+    border-radius: 999px;
+    padding: 2px;
+}
+.ingredient-log-stepper button {
+    width: 30px; height: 30px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 999px;
+    color: var(--color-primary);
+    transition: all var(--transition-base);
+}
+.ingredient-log-stepper button:hover { background: rgba(16,185,129,0.1); }
+.ingredient-log-stepper span {
+    min-width: 36px; text-align: center;
+    font-weight: 700; color: var(--color-text-primary);
+}
+
+/* ============================================================ */
+/* INGREDIENT ANALYZER — Scan History List                     */
+/* ============================================================ */
+.ingredient-history-controls {
+    display: flex; flex-direction: column; gap: 10px;
+    margin-bottom: 14px;
+}
+.ingredient-history-search-wrap {
+    position: relative;
+}
+.ingredient-history-search-wrap > i {
+    position: absolute; left: 12px; top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8; font-size: 13px;
+}
+.ingredient-history-search-wrap input {
+    width: 100%;
+    padding: 10px 12px 10px 36px;
+    border-radius: 12px;
+    border: 1.5px solid var(--color-border);
+    font-size: 14px;
+    background: white;
+    transition: all var(--transition-base);
+}
+.ingredient-history-search-wrap input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+}
+.ingredient-history-filter-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+}
+.ingredient-history-filter-pill {
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1.5px solid var(--color-border);
+    background: white;
+    font-size: 12px; font-weight: 600;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+.ingredient-history-filter-pill.is-active {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white; border-color: transparent;
+}
+
+.ingredient-history-trend {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 12px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    color: white;
+    margin-bottom: 14px;
+}
+.ingredient-history-trend-tile {
+    display: flex; flex-direction: column;
+    text-align: center;
+}
+.ingredient-history-trend-label {
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.05em; opacity: 0.65;
+    font-weight: 700;
+}
+.ingredient-history-trend-value {
+    margin-top: 4px;
+    font-size: 22px; font-weight: 800;
+    line-height: 1;
+}
+.ingredient-history-trend-sub {
+    margin-top: 2px;
+    font-size: 10px; opacity: 0.75;
+}
+
+.ingredient-history-list {
+    display: flex; flex-direction: column; gap: 10px;
+}
+.ingredient-history-item {
+    display: flex; gap: 12px; align-items: center;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1.5px solid var(--color-border);
+    background: white;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    position: relative;
+}
+.ingredient-history-item:hover {
+    border-color: rgba(16,185,129,0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(15,23,42,0.06);
+}
+.ingredient-history-item.is-selected {
+    border-color: rgba(16,185,129,0.6);
+    background: linear-gradient(135deg, rgba(16,185,129,0.07), rgba(16,185,129,0.02));
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+}
+.ingredient-history-thumb {
+    width: 56px; height: 56px;
+    border-radius: 12px;
+    background: #f1f5f9 center/cover no-repeat;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #94a3b8; font-size: 20px;
+}
+.ingredient-history-meta { flex: 1; min-width: 0; }
+.ingredient-history-product {
+    font-weight: 700; color: var(--color-text-primary);
+    font-size: 14px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ingredient-history-row {
+    display: flex; gap: 8px; align-items: center;
+    margin-top: 4px;
+    font-size: 11px; color: #64748b;
+    flex-wrap: wrap;
+}
+.ingredient-history-tag {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #475569; font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ingredient-history-tag.is-logged { background: rgba(16,185,129,0.12); color: #047857; }
+.ingredient-history-score {
+    flex-shrink: 0;
+    width: 48px; height: 48px;
+    border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 16px;
+    color: white;
+    background: linear-gradient(135deg, #94a3b8, #64748b);
+}
+.ingredient-history-score[data-tier="excellent"] { background: linear-gradient(135deg, #10b981, #059669); }
+.ingredient-history-score[data-tier="good"]      { background: linear-gradient(135deg, #22d3ee, #0ea5e9); }
+.ingredient-history-score[data-tier="mediocre"]  { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.ingredient-history-score[data-tier="avoid"]     { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+.ingredient-history-score[data-tier="unclear"]   { background: linear-gradient(135deg, #94a3b8, #64748b); }
+.ingredient-history-delete {
+    position: absolute; top: 8px; right: 8px;
+    width: 24px; height: 24px;
+    border-radius: 999px;
+    background: white;
+    color: #94a3b8;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    opacity: 0; transition: all var(--transition-base);
+}
+.ingredient-history-item:hover .ingredient-history-delete { opacity: 1; }
+.ingredient-history-delete:hover { color: #b91c1c; background: #fef2f2; }
+
+.ingredient-history-empty {
+    text-align: center; padding: 40px 20px;
+    color: var(--color-text-secondary);
+}
+.ingredient-history-empty i { font-size: 36px; margin-bottom: 10px; opacity: 0.4; }
+.ingredient-history-empty p { font-size: 13px; }
+
+.ingredient-history-compare-banner {
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(99,102,241,0.1), rgba(99,102,241,0.04));
+    border: 1px solid rgba(99,102,241,0.3);
+    display: flex; align-items: center;
+    font-size: 13px; font-weight: 600; color: #4338ca;
+}
+.ingredient-history-compare-result {
+    margin-bottom: 14px;
+    padding: 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(15,23,42,0.08);
+    background: linear-gradient(180deg, #f8fafc, white 80%);
+}
+.ingredient-history-compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.ingredient-history-compare-col {
+    padding: 10px; border-radius: 12px;
+    background: white; border: 1px solid rgba(15,23,42,0.06);
+}
+.ingredient-history-compare-col h4 {
+    font-size: 12px; font-weight: 800;
+    color: var(--color-text-primary);
+    margin-bottom: 6px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ingredient-history-compare-row {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr;
+    align-items: center; gap: 8px;
+    padding: 6px 0;
+    border-top: 1px dashed rgba(15,23,42,0.07);
+    font-size: 12px;
+}
+.ingredient-history-compare-row:first-child { border-top: 0; }
+.ingredient-history-compare-key {
+    text-align: center;
+    font-size: 10px; font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.ingredient-history-compare-cell {
+    text-align: center;
+    font-weight: 700; color: var(--color-text-primary);
+}
+.ingredient-history-compare-cell.is-better { color: #059669; }
+.ingredient-history-compare-cell.is-worse  { color: #b91c1c; }
+
+/* ============================================================ */
+/* INGREDIENT ANALYZER — Daily Targets                         */
+/* ============================================================ */
+.ingredient-targets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+}
+.ingredient-target-tile {
+    padding: 12px;
+    border-radius: 14px;
+    background: white;
+    border: 1px solid rgba(15,23,42,0.08);
+    display: flex; flex-direction: column; gap: 6px;
+}
+.ingredient-target-ring-wrap {
+    position: relative;
+    width: 80px; height: 80px;
+    margin: 0 auto;
+}
+.ingredient-target-ring-bg, .ingredient-target-ring-fg {
+    fill: none; stroke-width: 8;
+}
+.ingredient-target-ring-bg { stroke: rgba(15,23,42,0.07); }
+.ingredient-target-ring-fg {
+    stroke: #10b981;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 800ms cubic-bezier(0.4, 0, 0.2, 1), stroke 200ms;
+}
+.ingredient-target-tile[data-tone="warn"] .ingredient-target-ring-fg { stroke: #f59e0b; }
+.ingredient-target-tile[data-tone="bad"]  .ingredient-target-ring-fg { stroke: #ef4444; }
+.ingredient-target-ring-center {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; color: var(--color-text-primary);
+    flex-direction: column;
+}
+.ingredient-target-ring-center .pct { font-size: 16px; }
+.ingredient-target-ring-center .of  { font-size: 9px; color: #94a3b8; font-weight: 600; margin-top: 1px; letter-spacing: 0.04em; }
+.ingredient-target-tile-label {
+    text-align: center;
+    font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.05em; font-weight: 700; color: #64748b;
+}
+.ingredient-target-tile-value {
+    text-align: center;
+    font-size: 13px; font-weight: 700; color: var(--color-text-primary);
+}
+.ingredient-target-tile-value small {
+    color: #94a3b8; font-weight: 600; font-size: 11px;
+}
+
+.ingredient-targets-logged-list {
+    margin-top: 12px;
+    display: flex; flex-direction: column; gap: 6px;
+}
+.ingredient-targets-logged-list:empty { display: none; }
+.ingredient-targets-logged-row {
+    display: flex; gap: 10px; align-items: center;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: #f8fafc;
+    font-size: 12px;
+}
+.ingredient-targets-logged-name { flex: 1; font-weight: 600; color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ingredient-targets-logged-meta { color: #64748b; font-size: 11px; }
+.ingredient-targets-logged-remove {
+    color: #94a3b8; padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    transition: all var(--transition-base);
+}
+.ingredient-targets-logged-remove:hover { color: #b91c1c; background: #fef2f2; }
+
+.ingredient-targets-editor {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+.ingredient-targets-editor-row {
+    display: flex; flex-direction: column; gap: 4px;
+}
+.ingredient-targets-editor-row label {
+    font-size: 11px; font-weight: 700;
+    color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ingredient-targets-editor-row input {
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1.5px solid var(--color-border);
+    background: white;
+    font-size: 13px; font-weight: 600;
+    color: var(--color-text-primary);
+    transition: all var(--transition-base);
+}
+.ingredient-targets-editor-row input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.15);
+}

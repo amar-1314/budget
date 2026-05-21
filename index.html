@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-    <link rel="stylesheet" href="style.css?v=26.01.06.04">
+    <link rel="stylesheet" href="style.css?v=26.01.06.05">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -2111,6 +2111,12 @@
                         <button id="ingredientAisleToggleBtn" onclick="toggleIngredientAisleMode()" class="ingredient-close-btn" aria-label="Toggle aisle mode" title="Aisle mode (compact)">
                             <i class="fas fa-bolt"></i>
                         </button>
+                        <button onclick="openIngredientTargets()" class="ingredient-close-btn" aria-label="Daily targets" title="Daily macro targets">
+                            <i class="fas fa-bullseye"></i>
+                        </button>
+                        <button onclick="openIngredientHistory()" class="ingredient-close-btn" aria-label="Scan history" title="Scan history">
+                            <i class="fas fa-clock-rotate-left"></i>
+                        </button>
                         <button onclick="openIngredientProfile()" class="ingredient-close-btn" aria-label="Profile" title="Diet profile">
                             <i class="fas fa-user-gear"></i>
                         </button>
@@ -2133,6 +2139,16 @@
                     <button onclick="openIngredientProfile()" class="ingredient-edit-profile-btn" title="Edit profile">
                         <i class="fas fa-pen"></i>
                     </button>
+                </div>
+
+                <!-- Today's intake mini-strip (auto-shows when anything is logged today) -->
+                <div id="ingredientTodayStrip" class="ingredient-today-strip hidden" onclick="openIngredientTargets()" role="button" tabindex="0">
+                    <div class="ingredient-today-strip-head">
+                        <i class="fas fa-utensils mr-2"></i>
+                        <span>Today &middot; <span id="ingredientTodayWho">You</span></span>
+                        <i class="fas fa-chevron-right ml-auto opacity-50 text-xs"></i>
+                    </div>
+                    <div class="ingredient-today-strip-bars" id="ingredientTodayStripBars"></div>
                 </div>
 
                 <!-- Capture / Upload Area -->
@@ -2159,6 +2175,20 @@
 
                     <div id="ingredientUploadPreview" class="ingredient-upload-preview hidden">
                         <img id="ingredientImagePreview" alt="Ingredient label" class="ingredient-preview-img">
+
+                        <!-- Photo quality coach (auto-shown when issues detected) -->
+                        <div id="ingredientPhotoCoach" class="ingredient-photo-coach hidden" data-tone="ok">
+                            <div class="ingredient-photo-coach-head">
+                                <i id="ingredientPhotoCoachIcon" class="fas fa-camera-retro"></i>
+                                <div>
+                                    <div class="ingredient-photo-coach-title" id="ingredientPhotoCoachTitle">Photo quality looks good</div>
+                                    <div class="ingredient-photo-coach-sub" id="ingredientPhotoCoachSub">Ready to analyze</div>
+                                </div>
+                                <div class="ingredient-photo-coach-score" id="ingredientPhotoCoachScore">100</div>
+                            </div>
+                            <ul id="ingredientPhotoCoachList" class="ingredient-photo-coach-list"></ul>
+                        </div>
+
                         <div class="flex gap-3 mt-4">
                             <button id="ingredientAnalyzeBtn" onclick="analyzeIngredientsWithAI()" class="ingredient-cta-btn ingredient-cta-btn--primary flex-1">
                                 <i class="fas fa-wand-magic-sparkles mr-2"></i>Analyze Health
@@ -2287,6 +2317,24 @@
                         <div id="ingredientAlternativesList" class="ingredient-alts-grid"></div>
                     </div>
 
+                    <!-- Log this serving (only when nutrition_facts available) -->
+                    <div id="ingredientLogServingCard" class="ingredient-log-card hidden">
+                        <div class="ingredient-log-card-info">
+                            <div class="ingredient-log-card-eyebrow"><i class="fas fa-bullseye mr-1"></i>Track against today's targets</div>
+                            <div class="ingredient-log-card-title" id="ingredientLogServingPreview">—</div>
+                        </div>
+                        <div class="ingredient-log-card-actions">
+                            <div class="ingredient-log-stepper">
+                                <button type="button" onclick="adjustIngredientLogServings(-0.5)" aria-label="Decrease servings"><i class="fas fa-minus"></i></button>
+                                <span id="ingredientLogServingsCount">1</span>
+                                <button type="button" onclick="adjustIngredientLogServings(0.5)" aria-label="Increase servings"><i class="fas fa-plus"></i></button>
+                            </div>
+                            <button id="ingredientLogServingBtn" onclick="logCurrentIngredientScanServing()" class="ingredient-cta-btn ingredient-cta-btn--primary">
+                                <i class="fas fa-plus mr-2"></i><span id="ingredientLogServingBtnText">Log serving</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Final Recommendation -->
                     <div class="ingredient-recommendation">
                         <div class="ingredient-recommendation-icon"><i class="fas fa-lightbulb"></i></div>
@@ -2380,6 +2428,132 @@
         </div>
     </div>
 
-    <script src="script.js?v=26.01.06.04"></script>
+    <!-- ============================================================ -->
+    <!-- Ingredient Scan History Modal                                -->
+    <!-- ============================================================ -->
+    <div id="ingredientHistoryModal" class="modal">
+        <div class="modal-content ingredient-modal-content" style="max-width: 760px; max-height: 92vh; padding: 0; display: flex; flex-direction: column;">
+            <div class="ingredient-modal-header">
+                <div class="ingredient-modal-header-bg"></div>
+                <div class="relative flex justify-between items-center px-6 py-5">
+                    <div class="flex items-center gap-3">
+                        <div class="ingredient-logo-orb"><i class="fas fa-clock-rotate-left"></i></div>
+                        <div>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Scan History</h2>
+                            <p class="text-[11px] text-white/70 font-medium tracking-wide uppercase">Compare &middot; Recap &middot; Trend</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="ingredientHistoryCompareBtn" onclick="toggleIngredientHistoryCompareMode()" class="ingredient-close-btn" aria-label="Compare" title="Compare two scans">
+                            <i class="fas fa-code-compare"></i>
+                        </button>
+                        <button onclick="closeIngredientHistory()" class="ingredient-close-btn" aria-label="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ingredient-modal-body">
+                <!-- Trend summary -->
+                <div id="ingredientHistoryTrend" class="ingredient-history-trend hidden"></div>
+
+                <!-- Filter / search -->
+                <div class="ingredient-history-controls">
+                    <div class="ingredient-history-search-wrap">
+                        <i class="fas fa-magnifying-glass"></i>
+                        <input type="search" id="ingredientHistorySearch" placeholder="Search by product..." oninput="renderIngredientHistory()">
+                    </div>
+                    <div class="ingredient-history-filter-row" id="ingredientHistoryFilterRow"></div>
+                </div>
+
+                <!-- Compare mode banner -->
+                <div id="ingredientHistoryCompareBanner" class="ingredient-history-compare-banner hidden">
+                    <i class="fas fa-code-compare mr-2"></i>
+                    <span id="ingredientHistoryCompareBannerText">Tap two scans to compare</span>
+                    <button onclick="toggleIngredientHistoryCompareMode()" class="ml-auto text-xs underline">Cancel</button>
+                </div>
+
+                <!-- Compare result -->
+                <div id="ingredientHistoryCompareResult" class="ingredient-history-compare-result hidden"></div>
+
+                <!-- List -->
+                <div id="ingredientHistoryList" class="ingredient-history-list"></div>
+
+                <div id="ingredientHistoryEmpty" class="ingredient-history-empty hidden">
+                    <i class="fas fa-camera-retro"></i>
+                    <p>No scans yet. Analyze a product to start your history.</p>
+                </div>
+
+                <div class="flex gap-3 pt-1 pb-2">
+                    <button onclick="exportIngredientHistory()" class="ingredient-cta-btn ingredient-cta-btn--ghost">
+                        <i class="fas fa-download mr-2"></i>Export
+                    </button>
+                    <button onclick="clearIngredientHistoryConfirm()" class="ingredient-cta-btn ingredient-cta-btn--ghost" style="color:#b91c1c;border-color:#fecaca;">
+                        <i class="fas fa-trash mr-2"></i>Clear all
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Ingredient Daily Targets Modal                              -->
+    <!-- ============================================================ -->
+    <div id="ingredientTargetsModal" class="modal">
+        <div class="modal-content ingredient-modal-content" style="max-width: 720px; max-height: 92vh; padding: 0; display: flex; flex-direction: column;">
+            <div class="ingredient-modal-header">
+                <div class="ingredient-modal-header-bg"></div>
+                <div class="relative flex justify-between items-center px-6 py-5">
+                    <div class="flex items-center gap-3">
+                        <div class="ingredient-logo-orb"><i class="fas fa-bullseye"></i></div>
+                        <div>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Daily Targets</h2>
+                            <p class="text-[11px] text-white/70 font-medium tracking-wide uppercase">Track macros against logged scans</p>
+                        </div>
+                    </div>
+                    <button onclick="closeIngredientTargets()" class="ingredient-close-btn" aria-label="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="ingredient-modal-body">
+                <!-- Person selector -->
+                <div class="ingredient-section">
+                    <h3 class="ingredient-section-title"><i class="fas fa-user text-emerald-600 mr-2"></i>Whose targets</h3>
+                    <div class="ingredient-profile-toggle-row" id="ingredientTargetsWhoRow"></div>
+                </div>
+
+                <!-- Today's progress -->
+                <div class="ingredient-section">
+                    <h3 class="ingredient-section-title">
+                        <i class="fas fa-chart-line text-emerald-600 mr-2"></i>Today
+                        <span id="ingredientTargetsTodayDate" class="ingredient-section-aside"></span>
+                    </h3>
+                    <div id="ingredientTargetsTodayGrid" class="ingredient-targets-grid"></div>
+                    <div id="ingredientTargetsLoggedList" class="ingredient-targets-logged-list"></div>
+                </div>
+
+                <!-- Targets editor -->
+                <div class="ingredient-section">
+                    <h3 class="ingredient-section-title"><i class="fas fa-sliders text-emerald-600 mr-2"></i>Daily targets</h3>
+                    <p class="text-xs text-gray-500 mb-2">Personalize per person. "Max" rows are upper limits (less is better).</p>
+                    <div id="ingredientTargetsEditorGrid" class="ingredient-targets-editor"></div>
+                </div>
+
+                <div class="flex gap-3 pt-1 pb-2">
+                    <button onclick="resetIngredientTargetsToDefaults()" class="ingredient-cta-btn ingredient-cta-btn--ghost">
+                        <i class="fas fa-rotate-left mr-2"></i>Reset
+                    </button>
+                    <button onclick="saveIngredientTargetsFromForm()" class="ingredient-cta-btn ingredient-cta-btn--primary flex-1">
+                        <i class="fas fa-check mr-2"></i>Save Targets
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js?v=26.01.06.05"></script>
 </body>
 </html>
