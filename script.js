@@ -15822,3 +15822,575 @@ function saveSettings() {
         alert('Please provide both Supabase URL and Key.');
     }
 }
+
+// ============================================================
+// INGREDIENT HEALTH ANALYZER
+// Goal: high protein, high fiber, overall health
+// Pipeline: image → OCR.Space (existing) → Gemini analysis
+// Vision-only fallback if OCR text is unusable.
+// ============================================================
+
+const INGREDIENT_GAUGE_CIRCUMFERENCE = 2 * Math.PI * 52; // r=52 in SVG
+
+let currentIngredientImageDataUrl = null;
+let isIngredientAnalysisRunning = false;
+
+function openIngredientAnalyzer() {
+    if (typeof closeAllModalsExcept === 'function') {
+        closeAllModalsExcept('ingredientAnalyzerModal');
+    }
+    const modal = document.getElementById('ingredientAnalyzerModal');
+    if (!modal) return;
+    modal.classList.add('active');
+    resetIngredientAnalyzer();
+}
+
+function closeIngredientAnalyzer() {
+    const modal = document.getElementById('ingredientAnalyzerModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function triggerIngredientCamera() {
+    const input = document.getElementById('ingredientImageInput');
+    if (!input) return;
+    input.setAttribute('capture', 'environment');
+    input.click();
+}
+
+function triggerIngredientUpload() {
+    const input = document.getElementById('ingredientImageInput');
+    if (!input) return;
+    input.removeAttribute('capture');
+    input.click();
+}
+
+function handleIngredientImageFile(input) {
+    if (!input || !input.files || !input.files[0]) return;
+    const file = input.files[0];
+
+    if (!String(file.type || '').startsWith('image/')) {
+        showNotification('Please choose an image file', 'error');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const dataUrl = String(e.target.result || '');
+        currentIngredientImageDataUrl = dataUrl;
+
+        const placeholder = document.getElementById('ingredientUploadPlaceholder');
+        const preview = document.getElementById('ingredientUploadPreview');
+        const img = document.getElementById('ingredientImagePreview');
+        const results = document.getElementById('ingredientResults');
+        const status = document.getElementById('ingredientStatusCard');
+
+        if (img) img.src = dataUrl;
+        if (placeholder) placeholder.classList.add('hidden');
+        if (preview) preview.classList.remove('hidden');
+        if (results) results.classList.add('hidden');
+        if (status) status.classList.add('hidden');
+    };
+    reader.onerror = () => showNotification('Could not read the selected image', 'error');
+    reader.readAsDataURL(file);
+}
+
+function resetIngredientAnalyzer() {
+    currentIngredientImageDataUrl = null;
+    const input = document.getElementById('ingredientImageInput');
+    if (input) input.value = '';
+
+    const placeholder = document.getElementById('ingredientUploadPlaceholder');
+    const preview = document.getElementById('ingredientUploadPreview');
+    const results = document.getElementById('ingredientResults');
+    const status = document.getElementById('ingredientStatusCard');
+    const btn = document.getElementById('ingredientAnalyzeBtn');
+
+    if (placeholder) placeholder.classList.remove('hidden');
+    if (preview) preview.classList.add('hidden');
+    if (results) results.classList.add('hidden');
+    if (status) status.classList.add('hidden');
+    if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-wand-magic-sparkles mr-2"></i>Analyze Health';
+    }
+
+    const fg = document.getElementById('ingredientScoreGaugeFg');
+    if (fg) fg.style.strokeDashoffset = INGREDIENT_GAUGE_CIRCUMFERENCE;
+    const scoreNum = document.getElementById('ingredientScoreNumber');
+    if (scoreNum) scoreNum.textContent = '0';
+}
+
+function setIngredientStatus(title, sub) {
+    const status = document.getElementById('ingredientStatusCard');
+    const tEl = document.getElementById('ingredientStatusTitle');
+    const sEl = document.getElementById('ingredientStatusSub');
+    if (!status) return;
+    status.classList.remove('hidden');
+    if (tEl) tEl.textContent = title;
+    if (sEl) sEl.textContent = sub;
+}
+
+function hideIngredientStatus() {
+    const status = document.getElementById('ingredientStatusCard');
+    if (status) status.classList.add('hidden');
+}
+
+async function analyzeIngredientsWithAI() {
+    if (isIngredientAnalysisRunning) return;
+    if (!currentIngredientImageDataUrl) {
+        showNotification('Take or select a photo first', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('ingredientAnalyzeBtn');
+    const results = document.getElementById('ingredientResults');
+    if (results) results.classList.add('hidden');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Analyzing...';
+    }
+    isIngredientAnalysisRunning = true;
+
+    let imageDataUrl = currentIngredientImageDataUrl;
+
+    try {
+        setIngredientStatus('Preparing image...', 'Compressing for OCR');
+        try {
+            const compressed = await compressReceiptImageToDataUrl(imageDataUrl);
+            if (compressed) imageDataUrl = compressed;
+        } catch (e) {
+            console.warn('Ingredient image compression failed, using original', e);
+        }
+
+        let ocrText = '';
+        try {
+            setIngredientStatus('Reading label...', 'Running OCR.Space');
+            ocrText = await runOcrSpace(imageDataUrl);
+        } catch (ocrErr) {
+            console.warn('OCR failed, will fall back to Gemini vision', ocrErr);
+        }
+
+        let analysis = null;
+        const cleanedOcr = String(ocrText || '').trim();
+
+        if (cleanedOcr.length >= 20) {
+            setIngredientStatus('Analyzing with AI...', 'Gemini reviewing ingredients');
+            try {
+                analysis = await analyzeIngredientHealthFromText(cleanedOcr);
+            } catch (textErr) {
+                console.warn('Gemini text analysis failed, falling back to vision', textErr);
+            }
+        }
+
+        if (!analysis) {
+            setIngredientStatus('Analyzing with AI...', 'Gemini vision (fallback)');
+            analysis = await analyzeIngredientHealthFromImage(imageDataUrl);
+        }
+
+        hideIngredientStatus();
+        renderIngredientAnalysis(analysis, cleanedOcr);
+        showNotification('Analysis complete', 'success');
+    } catch (err) {
+        console.error('Ingredient analysis failed:', err);
+        hideIngredientStatus();
+        showNotification('Analysis failed: ' + (err?.message || 'Unknown error'), 'error');
+    } finally {
+        isIngredientAnalysisRunning = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-wand-magic-sparkles mr-2"></i>Analyze Health';
+        }
+    }
+}
+
+function buildIngredientAnalysisPrompt(extraContext) {
+    return `You are a board-certified clinical nutritionist with deep knowledge of food science, ingredient additives, and macronutrient density.
+
+The user's dietary goals are:
+1. HIGH PROTEIN
+2. HIGH FIBER
+3. Aid OVERALL HEALTH (minimize ultra-processed foods, added sugars, refined oils, artificial additives, excess sodium).
+
+You will be given ${extraContext} from a packaged food's ingredient label (and sometimes a partial nutrition panel).
+
+Return ONLY valid JSON in this EXACT schema (no markdown, no prose):
+{
+  "product_guess": "best guess of product type (e.g. 'Protein bar', 'Greek yogurt', 'Whole-wheat bread')",
+  "score": <integer 0-100>,
+  "verdict": "Excellent" | "Good" | "Mediocre" | "Avoid" | "Unclear",
+  "goal_alignment": {
+    "high_protein":  { "score": <integer 0-10>, "note": "<=120 chars" },
+    "high_fiber":    { "score": <integer 0-10>, "note": "<=120 chars" },
+    "overall_health":{ "score": <integer 0-10>, "note": "<=120 chars" }
+  },
+  "macro_estimate": {
+    "protein_density":  "low" | "medium" | "high",
+    "fiber_density":    "low" | "medium" | "high",
+    "added_sugar":      "none" | "low" | "medium" | "high",
+    "sodium":           "low" | "medium" | "high",
+    "processing_level": "minimally processed" | "processed" | "ultra-processed"
+  },
+  "healthy_ingredients": [
+    { "name": "<ingredient>", "reason": "<why it's good, <=100 chars>" }
+  ],
+  "concerning_ingredients": [
+    { "name": "<ingredient>", "severity": "low" | "medium" | "high", "reason": "<why concerning, <=100 chars>" }
+  ],
+  "red_flags": ["<short tag e.g. 'Added sugar', 'Seed oils', 'Artificial colors'>"],
+  "verdict_summary": "<1-2 sentence overall verdict>",
+  "recommendation": "<1-3 sentence actionable recommendation given the user's high-protein, high-fiber, overall-health goals>"
+}
+
+Scoring rubric (target the 0-100 score):
+- Start from 50.
+- Protein density: high +15, medium +5, low -8
+- Fiber density:   high +15, medium +5, low -8
+- Whole-food / minimally processed first ingredients: +10
+- Quality protein source visible (whey, casein, egg, lean meat, legumes, soy isolate): +5 each (cap +10)
+- Significant fiber source (whole grains, psyllium, legumes, chia, flax, oats, vegetables): +5 each (cap +10)
+- Added sugar: none 0, low -5, medium -12, high -20
+- Sodium: low 0, medium -5, high -10
+- Processing level: minimally processed +5, processed 0, ultra-processed -15
+- Artificial colors, sweeteners (sucralose, aspartame, ace-K), preservatives (BHA/BHT/TBHQ/nitrites), seed oils as primary: -5 each (cap -20)
+- Trans fats / partially hydrogenated: -25 (auto-cap score <= 25)
+- Final score must be clamped to [0, 100].
+
+If the text is clearly not an ingredient list (random receipts, recipes, blank, gibberish), set:
+- "score": null
+- "verdict": "Unclear"
+- "verdict_summary": explain what was found instead
+- "recommendation": ask the user to retake the photo of the back-of-pack ingredient panel
+- empty arrays for healthy_ingredients, concerning_ingredients, red_flags
+
+Be concise. Return ONLY the JSON object.`;
+}
+
+async function analyzeIngredientHealthFromText(ocrText) {
+    const apiKey = await getGeminiApiKey();
+    const prompt = buildIngredientAnalysisPrompt('OCR-extracted text') +
+        `\n\nOCR TEXT:\n${ocrText}`;
+
+    const requestBody = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 4096,
+            responseMimeType: 'application/json',
+            thinkingConfig: { thinkingBudget: 0 }
+        }
+    };
+
+    const parsed = await parseGeminiReceiptResponseWithRetry(apiKey, requestBody);
+    return normalizeIngredientAnalysis(parsed);
+}
+
+async function analyzeIngredientHealthFromImage(imageDataUrl) {
+    const apiKey = await getGeminiApiKey();
+    const m = String(imageDataUrl || '').match(/^data:([^;]+);base64,(.+)$/i);
+    if (!m) throw new Error('Invalid image data');
+
+    const prompt = buildIngredientAnalysisPrompt('an image of the product ingredient label');
+
+    const requestBody = {
+        contents: [{
+            parts: [
+                { text: prompt },
+                { inline_data: { mime_type: m[1], data: m[2] } }
+            ]
+        }],
+        generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 4096,
+            responseMimeType: 'application/json',
+            thinkingConfig: { thinkingBudget: 0 }
+        }
+    };
+
+    const parsed = await parseGeminiReceiptResponseWithRetry(apiKey, requestBody);
+    return normalizeIngredientAnalysis(parsed);
+}
+
+function normalizeIngredientAnalysis(raw) {
+    const allowedDensity = new Set(['low', 'medium', 'high']);
+    const allowedSugar = new Set(['none', 'low', 'medium', 'high']);
+    const allowedProc = new Set(['minimally processed', 'processed', 'ultra-processed']);
+    const allowedSeverity = new Set(['low', 'medium', 'high']);
+    const allowedVerdict = new Set(['Excellent', 'Good', 'Mediocre', 'Avoid', 'Unclear']);
+
+    const clampInt = (val, lo, hi, fallback) => {
+        const n = Number(val);
+        if (!isFinite(n)) return fallback;
+        return Math.max(lo, Math.min(hi, Math.round(n)));
+    };
+
+    const sanitizeArr = (arr, fn) => Array.isArray(arr) ? arr.map(fn).filter(Boolean) : [];
+
+    const goal = raw?.goal_alignment || {};
+    const macro = raw?.macro_estimate || {};
+
+    let verdict = String(raw?.verdict || '').trim();
+    if (!allowedVerdict.has(verdict)) verdict = 'Unclear';
+
+    let score = raw?.score;
+    if (score !== null && score !== undefined) {
+        score = clampInt(score, 0, 100, null);
+    } else {
+        score = null;
+    }
+
+    return {
+        product_guess: String(raw?.product_guess || '').trim() || 'Unknown product',
+        score,
+        verdict,
+        goal_alignment: {
+            high_protein:  normalizeGoalEntry(goal.high_protein),
+            high_fiber:    normalizeGoalEntry(goal.high_fiber),
+            overall_health: normalizeGoalEntry(goal.overall_health)
+        },
+        macro_estimate: {
+            protein_density: allowedDensity.has(macro.protein_density) ? macro.protein_density : 'low',
+            fiber_density:   allowedDensity.has(macro.fiber_density)   ? macro.fiber_density   : 'low',
+            added_sugar:     allowedSugar.has(macro.added_sugar)       ? macro.added_sugar     : 'low',
+            sodium:          allowedDensity.has(macro.sodium)          ? macro.sodium          : 'low',
+            processing_level: allowedProc.has(macro.processing_level)  ? macro.processing_level: 'processed'
+        },
+        healthy_ingredients: sanitizeArr(raw?.healthy_ingredients, (it) => {
+            if (!it) return null;
+            const name = String(it.name || '').trim();
+            if (!name) return null;
+            return { name, reason: String(it.reason || '').trim() };
+        }),
+        concerning_ingredients: sanitizeArr(raw?.concerning_ingredients, (it) => {
+            if (!it) return null;
+            const name = String(it.name || '').trim();
+            if (!name) return null;
+            const sev = String(it.severity || '').toLowerCase().trim();
+            return {
+                name,
+                severity: allowedSeverity.has(sev) ? sev : 'low',
+                reason: String(it.reason || '').trim()
+            };
+        }),
+        red_flags: sanitizeArr(raw?.red_flags, (it) => {
+            const v = String(it || '').trim();
+            return v || null;
+        }),
+        verdict_summary: String(raw?.verdict_summary || '').trim(),
+        recommendation: String(raw?.recommendation || '').trim()
+    };
+}
+
+function normalizeGoalEntry(entry) {
+    const score = Number(entry?.score);
+    const safeScore = isFinite(score) ? Math.max(0, Math.min(10, Math.round(score))) : 0;
+    return {
+        score: safeScore,
+        note: String(entry?.note || '').trim()
+    };
+}
+
+function getIngredientVerdictTier(verdict, score) {
+    const v = String(verdict || '').toLowerCase();
+    if (v === 'excellent') return 'excellent';
+    if (v === 'good') return 'good';
+    if (v === 'mediocre') return 'mediocre';
+    if (v === 'avoid') return 'avoid';
+    if (v === 'unclear') return 'unclear';
+    if (score == null) return 'unclear';
+    if (score >= 80) return 'excellent';
+    if (score >= 60) return 'good';
+    if (score >= 40) return 'mediocre';
+    return 'avoid';
+}
+
+function getMacroTone(field, value) {
+    // Define which direction is "good" per field.
+    const good = (v) => v === 'high';
+    const lowGood = (v) => v === 'low' || v === 'none';
+    switch (field) {
+        case 'protein_density':
+        case 'fiber_density':
+            if (good(value)) return 'good';
+            if (value === 'medium') return 'warn';
+            return 'bad';
+        case 'added_sugar':
+            if (value === 'none' || value === 'low') return 'good';
+            if (value === 'medium') return 'warn';
+            return 'bad';
+        case 'sodium':
+            if (lowGood(value)) return 'good';
+            if (value === 'medium') return 'warn';
+            return 'bad';
+        case 'processing_level':
+            if (value === 'minimally processed') return 'good';
+            if (value === 'processed') return 'warn';
+            return 'bad';
+        default:
+            return 'neutral';
+    }
+}
+
+function formatMacroLabel(field) {
+    return ({
+        protein_density: 'Protein density',
+        fiber_density: 'Fiber density',
+        added_sugar: 'Added sugar',
+        sodium: 'Sodium',
+        processing_level: 'Processing'
+    })[field] || field;
+}
+
+function formatMacroValue(value) {
+    if (!value) return '—';
+    return String(value).replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+}
+
+function escapeIngredientHtml(text) {
+    return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderIngredientAnalysis(analysis, ocrText) {
+    if (!analysis) return;
+    const container = document.getElementById('ingredientResults');
+    if (!container) return;
+    container.classList.remove('hidden');
+
+    const displayScore = (analysis.score == null) ? 0 : analysis.score;
+    animateIngredientScore(displayScore);
+
+    const numEl = document.getElementById('ingredientScoreNumber');
+    if (numEl) numEl.textContent = analysis.score == null ? '—' : String(displayScore);
+
+    const tier = getIngredientVerdictTier(analysis.verdict, analysis.score);
+    const badge = document.getElementById('ingredientVerdictBadge');
+    if (badge) {
+        badge.textContent = analysis.verdict || '—';
+        badge.setAttribute('data-tier', tier);
+    }
+
+    const guess = document.getElementById('ingredientProductGuess');
+    if (guess) guess.textContent = analysis.product_guess || '—';
+
+    const summary = document.getElementById('ingredientVerdictSummary');
+    if (summary) summary.textContent = analysis.verdict_summary || 'No summary available.';
+
+    renderIngredientGoals(analysis.goal_alignment);
+    renderIngredientMacros(analysis.macro_estimate);
+    renderIngredientList('ingredientHealthyList', analysis.healthy_ingredients, 'good');
+    renderIngredientList('ingredientConcerningList', analysis.concerning_ingredients, null);
+    renderIngredientRedFlags(analysis.red_flags);
+
+    const rec = document.getElementById('ingredientRecommendation');
+    if (rec) rec.textContent = analysis.recommendation || '—';
+
+    const rawEl = document.getElementById('ingredientRawText');
+    if (rawEl) rawEl.textContent = ocrText ? ocrText : '(No OCR text — vision-only analysis was used.)';
+}
+
+function animateIngredientScore(score) {
+    const fg = document.getElementById('ingredientScoreGaugeFg');
+    if (!fg) return;
+    const pct = Math.max(0, Math.min(100, score)) / 100;
+    const offset = INGREDIENT_GAUGE_CIRCUMFERENCE * (1 - pct);
+    fg.style.strokeDashoffset = INGREDIENT_GAUGE_CIRCUMFERENCE;
+    requestAnimationFrame(() => {
+        fg.style.strokeDashoffset = offset;
+    });
+
+    const numEl = document.getElementById('ingredientScoreNumber');
+    if (!numEl) return;
+    const start = performance.now();
+    const dur = 1200;
+    const animate = (now) => {
+        const t = Math.min(1, (now - start) / dur);
+        const eased = 1 - Math.pow(1 - t, 3);
+        numEl.textContent = String(Math.round(score * eased));
+        if (t < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+}
+
+function renderIngredientGoals(goals) {
+    const grid = document.getElementById('ingredientGoalGrid');
+    if (!grid) return;
+    const items = [
+        { key: 'high_protein', label: 'High Protein', icon: 'fa-drumstick-bite' },
+        { key: 'high_fiber', label: 'High Fiber', icon: 'fa-seedling' },
+        { key: 'overall_health', label: 'Overall Health', icon: 'fa-heart-pulse' }
+    ];
+
+    grid.innerHTML = items.map(({ key, label, icon }) => {
+        const g = goals?.[key] || { score: 0, note: '' };
+        const pct = Math.max(0, Math.min(10, g.score)) * 10;
+        return `
+            <div class="ingredient-goal-card">
+                <div class="ingredient-goal-card-header">
+                    <div class="ingredient-goal-card-name"><i class="fas ${icon} mr-1 text-emerald-600"></i>${escapeIngredientHtml(label)}</div>
+                    <div class="ingredient-goal-card-score">${g.score}<span style="font-size:11px;color:#94a3b8;font-weight:600">/10</span></div>
+                </div>
+                <div class="ingredient-goal-bar"><div class="ingredient-goal-bar-fill" style="width:${pct}%"></div></div>
+                <div class="ingredient-goal-card-note">${escapeIngredientHtml(g.note || '')}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderIngredientMacros(macro) {
+    const grid = document.getElementById('ingredientMacroGrid');
+    if (!grid) return;
+    const fields = ['protein_density', 'fiber_density', 'added_sugar', 'sodium', 'processing_level'];
+    grid.innerHTML = fields.map((field) => {
+        const value = macro?.[field];
+        const tone = getMacroTone(field, value);
+        return `
+            <div class="ingredient-macro-tile" data-tone="${tone}">
+                <div class="ingredient-macro-label">${escapeIngredientHtml(formatMacroLabel(field))}</div>
+                <div class="ingredient-macro-value">${escapeIngredientHtml(formatMacroValue(value))}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderIngredientList(elementId, items, forcedSeverity) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    if (!items || items.length === 0) {
+        el.innerHTML = `<div class="text-sm text-gray-500">None detected.</div>`;
+        return;
+    }
+    el.innerHTML = items.map((item) => {
+        const severity = forcedSeverity || item.severity || 'low';
+        const dotClass = severity === 'good' ? 'ingredient-row-dot--good' :
+                         severity === 'high' ? 'ingredient-row-dot--high' :
+                         severity === 'medium' ? 'ingredient-row-dot--medium' :
+                         'ingredient-row-dot--low';
+        const reason = item.reason ? `<div class="ingredient-row-reason">${escapeIngredientHtml(item.reason)}</div>` : '';
+        return `
+            <div class="ingredient-row">
+                <span class="ingredient-row-dot ${dotClass}"></span>
+                <div>
+                    <div class="ingredient-row-name">${escapeIngredientHtml(item.name)}</div>
+                    ${reason}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderIngredientRedFlags(flags) {
+    const section = document.getElementById('ingredientRedFlagSection');
+    const list = document.getElementById('ingredientRedFlagList');
+    if (!section || !list) return;
+    if (!flags || flags.length === 0) {
+        section.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+    }
+    section.classList.remove('hidden');
+    list.innerHTML = flags.map(f => `<span class="ingredient-red-flag-chip"><i class="fas fa-flag mr-1"></i>${escapeIngredientHtml(f)}</span>`).join('');
+}

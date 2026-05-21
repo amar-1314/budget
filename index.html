@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-    <link rel="stylesheet" href="style.css?v=25.50.33">
+    <link rel="stylesheet" href="style.css?v=26.01.06.02">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -157,6 +157,14 @@
                     <div>
                         <div class="font-semibold text-gray-800">Receipt Tracker</div>
                         <div class="text-xs text-gray-500">Scan & track item prices</div>
+                    </div>
+                </button>
+                <button onclick="openIngredientAnalyzer(); toggleMenu();"
+                    class="w-full text-left px-4 py-3 rounded-lg hover:bg-emerald-50 transition-colors flex items-center gap-3 border border-emerald-200">
+                    <i class="fas fa-leaf text-emerald-600 text-xl"></i>
+                    <div>
+                        <div class="font-semibold text-gray-800">Ingredient Analyzer</div>
+                        <div class="text-xs text-gray-500">Scan label &middot; AI health score</div>
                     </div>
                 </button>
                 <button onclick="openSettings(); toggleMenu();"
@@ -2081,6 +2089,173 @@
             </div>
         </div>
     </div>
-    <script src="script.js?v=26.01.06.01"></script>
+    <!-- ============================================================ -->
+    <!-- Ingredient Analyzer Modal                                   -->
+    <!-- ============================================================ -->
+    <div id="ingredientAnalyzerModal" class="modal">
+        <div class="modal-content ingredient-modal-content" style="max-width: 760px; max-height: 92vh; padding: 0; display: flex; flex-direction: column;">
+            <!-- Header -->
+            <div class="ingredient-modal-header">
+                <div class="ingredient-modal-header-bg"></div>
+                <div class="relative flex justify-between items-center px-6 py-5">
+                    <div class="flex items-center gap-3">
+                        <div class="ingredient-logo-orb">
+                            <i class="fas fa-leaf"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Ingredient Analyzer</h2>
+                            <p class="text-[11px] text-white/70 font-medium tracking-wide uppercase">AI Health Scoring &middot; Protein &amp; Fiber Focus</p>
+                        </div>
+                    </div>
+                    <button onclick="closeIngredientAnalyzer()" class="ingredient-close-btn" aria-label="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Body (scrollable) -->
+            <div class="ingredient-modal-body">
+                <!-- Goal banner -->
+                <div class="ingredient-goal-banner">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-bullseye"></i>
+                        <span class="font-semibold">Your goals:</span>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <span class="ingredient-goal-chip"><i class="fas fa-drumstick-bite mr-1"></i>High Protein</span>
+                        <span class="ingredient-goal-chip"><i class="fas fa-seedling mr-1"></i>High Fiber</span>
+                        <span class="ingredient-goal-chip"><i class="fas fa-heart-pulse mr-1"></i>Overall Health</span>
+                    </div>
+                </div>
+
+                <!-- Capture / Upload Area -->
+                <div id="ingredientCaptureArea" class="ingredient-capture-card">
+                    <input type="file" id="ingredientImageInput" class="hidden" accept="image/*" capture="environment" onchange="handleIngredientImageFile(this)">
+
+                    <div id="ingredientUploadPlaceholder" class="ingredient-upload-placeholder">
+                        <div class="ingredient-scan-orb">
+                            <i class="fas fa-camera"></i>
+                            <span class="ingredient-scan-ring"></span>
+                            <span class="ingredient-scan-ring ingredient-scan-ring--delay"></span>
+                        </div>
+                        <p class="text-center font-semibold text-gray-800 mt-4">Snap the ingredient list</p>
+                        <p class="text-center text-xs text-gray-500 mt-1 px-4">Point your camera at the back-of-pack ingredient panel. Good lighting &amp; full text in frame.</p>
+                        <div class="flex gap-3 mt-5 w-full">
+                            <button onclick="triggerIngredientCamera()" class="ingredient-cta-btn ingredient-cta-btn--primary">
+                                <i class="fas fa-camera mr-2"></i>Take Photo
+                            </button>
+                            <button onclick="triggerIngredientUpload()" class="ingredient-cta-btn ingredient-cta-btn--ghost">
+                                <i class="fas fa-image mr-2"></i>From Library
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="ingredientUploadPreview" class="ingredient-upload-preview hidden">
+                        <img id="ingredientImagePreview" alt="Ingredient label" class="ingredient-preview-img">
+                        <div class="flex gap-3 mt-4">
+                            <button id="ingredientAnalyzeBtn" onclick="analyzeIngredientsWithAI()" class="ingredient-cta-btn ingredient-cta-btn--primary flex-1">
+                                <i class="fas fa-wand-magic-sparkles mr-2"></i>Analyze Health
+                            </button>
+                            <button onclick="resetIngredientAnalyzer()" class="ingredient-cta-btn ingredient-cta-btn--ghost">
+                                <i class="fas fa-rotate-left mr-2"></i>Retake
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live status (during scan) -->
+                <div id="ingredientStatusCard" class="ingredient-status-card hidden">
+                    <div class="ingredient-status-spinner"></div>
+                    <div>
+                        <div id="ingredientStatusTitle" class="font-semibold text-gray-800">Reading label...</div>
+                        <div id="ingredientStatusSub" class="text-xs text-gray-500">Running OCR</div>
+                    </div>
+                </div>
+
+                <!-- Results -->
+                <div id="ingredientResults" class="ingredient-results hidden">
+                    <!-- Score Hero -->
+                    <div class="ingredient-score-hero">
+                        <div class="ingredient-score-gauge-wrap">
+                            <svg class="ingredient-score-gauge" viewBox="0 0 120 120">
+                                <defs>
+                                    <linearGradient id="ingredientGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stop-color="#ef4444"/>
+                                        <stop offset="50%" stop-color="#f59e0b"/>
+                                        <stop offset="100%" stop-color="#10b981"/>
+                                    </linearGradient>
+                                </defs>
+                                <circle class="ingredient-score-gauge-bg" cx="60" cy="60" r="52"></circle>
+                                <circle id="ingredientScoreGaugeFg" class="ingredient-score-gauge-fg" cx="60" cy="60" r="52"
+                                    transform="rotate(-90 60 60)"></circle>
+                            </svg>
+                            <div class="ingredient-score-center">
+                                <div id="ingredientScoreNumber" class="ingredient-score-number">0</div>
+                                <div class="ingredient-score-out-of">/ 100</div>
+                            </div>
+                        </div>
+                        <div class="ingredient-score-meta">
+                            <div id="ingredientVerdictBadge" class="ingredient-verdict-badge">—</div>
+                            <div id="ingredientProductGuess" class="text-sm text-gray-500 mt-1">—</div>
+                            <p id="ingredientVerdictSummary" class="text-sm text-gray-700 mt-3 leading-relaxed">—</p>
+                        </div>
+                    </div>
+
+                    <!-- Goal Alignment -->
+                    <div class="ingredient-section">
+                        <h3 class="ingredient-section-title"><i class="fas fa-bullseye text-emerald-600 mr-2"></i>Goal Alignment</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="ingredientGoalGrid"></div>
+                    </div>
+
+                    <!-- Macro Snapshot -->
+                    <div class="ingredient-section">
+                        <h3 class="ingredient-section-title"><i class="fas fa-chart-simple text-emerald-600 mr-2"></i>Nutritional Snapshot</h3>
+                        <div class="ingredient-macro-grid" id="ingredientMacroGrid"></div>
+                    </div>
+
+                    <!-- Healthy + Concerning -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="ingredient-section ingredient-section--healthy">
+                            <h3 class="ingredient-section-title"><i class="fas fa-circle-check text-emerald-600 mr-2"></i>What's Healthy</h3>
+                            <div id="ingredientHealthyList" class="space-y-2"></div>
+                        </div>
+                        <div class="ingredient-section ingredient-section--concerning">
+                            <h3 class="ingredient-section-title"><i class="fas fa-triangle-exclamation text-rose-600 mr-2"></i>What's Concerning</h3>
+                            <div id="ingredientConcerningList" class="space-y-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Red Flags -->
+                    <div id="ingredientRedFlagSection" class="ingredient-section ingredient-section--flag hidden">
+                        <h3 class="ingredient-section-title"><i class="fas fa-flag text-rose-600 mr-2"></i>Red Flags</h3>
+                        <div id="ingredientRedFlagList" class="flex flex-wrap gap-2"></div>
+                    </div>
+
+                    <!-- Final Recommendation -->
+                    <div class="ingredient-recommendation">
+                        <div class="ingredient-recommendation-icon"><i class="fas fa-lightbulb"></i></div>
+                        <div>
+                            <div class="font-semibold text-gray-800 mb-1">Recommendation</div>
+                            <p id="ingredientRecommendation" class="text-sm text-gray-700 leading-relaxed">—</p>
+                        </div>
+                    </div>
+
+                    <!-- Raw OCR (collapsible) -->
+                    <details class="ingredient-raw-details">
+                        <summary>View raw extracted text</summary>
+                        <pre id="ingredientRawText" class="ingredient-raw-text"></pre>
+                    </details>
+
+                    <div class="flex gap-3 pt-2">
+                        <button onclick="resetIngredientAnalyzer()" class="ingredient-cta-btn ingredient-cta-btn--ghost flex-1">
+                            <i class="fas fa-camera mr-2"></i>Scan Another
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js?v=26.01.06.02"></script>
 </body>
 </html>
