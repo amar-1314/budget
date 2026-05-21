@@ -16037,6 +16037,12 @@ Return ONLY valid JSON in this EXACT schema (no markdown, no prose):
     { "name": "<ingredient>", "severity": "low" | "medium" | "high", "reason": "<why concerning, <=100 chars>" }
   ],
   "red_flags": ["<short tag e.g. 'Added sugar', 'Seed oils', 'Artificial colors'>"],
+  "consumption_frequency": {
+    "tier": "daily" | "few_times_week" | "weekly" | "monthly" | "rarely" | "never",
+    "label": "<human-readable label matching the tier>",
+    "portion_hint": "<optional, <=80 chars; e.g. '1 serving (30g)' or empty string>",
+    "reason": "<=140 chars explaining why this cadence is appropriate>"
+  },
   "verdict_summary": "<1-2 sentence overall verdict>",
   "recommendation": "<1-3 sentence actionable recommendation given the user's high-protein, high-fiber, overall-health goals>"
 }
@@ -16055,12 +16061,22 @@ Scoring rubric (target the 0-100 score):
 - Trans fats / partially hydrogenated: -25 (auto-cap score <= 25)
 - Final score must be clamped to [0, 100].
 
+Consumption frequency guidance (default mapping; adjust for category context like protein powders, condiments, etc.):
+- score 85-100 AND minimally processed AND no red flags → "daily"
+- score 70-84 → "few_times_week"
+- score 55-69 → "weekly"
+- score 40-54 → "monthly"
+- score 20-39 → "rarely"
+- score 0-19 OR contains trans fats / banned additives / heavy ultra-processing → "never"
+Override the score-based default only when category warrants it (e.g. high-quality protein powder may still be "daily" even at score 75; pure sugar candy is "rarely" or "never" regardless). Tier MUST be one of the six allowed values. Label MUST be human-readable and match the tier ("Daily", "A few times a week", "Once a week", "Once a month", "Rarely / special occasions", "Avoid").
+
 If the text is clearly not an ingredient list (random receipts, recipes, blank, gibberish), set:
 - "score": null
 - "verdict": "Unclear"
 - "verdict_summary": explain what was found instead
 - "recommendation": ask the user to retake the photo of the back-of-pack ingredient panel
 - empty arrays for healthy_ingredients, concerning_ingredients, red_flags
+- "consumption_frequency": { "tier": "never", "label": "Unknown", "portion_hint": "", "reason": "Could not determine — retake the photo." }
 
 Be concise. Return ONLY the JSON object.`;
 }
@@ -16175,8 +16191,43 @@ function normalizeIngredientAnalysis(raw) {
             const v = String(it || '').trim();
             return v || null;
         }),
+        consumption_frequency: normalizeConsumptionFrequency(raw?.consumption_frequency, raw?.score),
         verdict_summary: String(raw?.verdict_summary || '').trim(),
         recommendation: String(raw?.recommendation || '').trim()
+    };
+}
+
+const INGREDIENT_FREQUENCY_TIERS = {
+    daily:           { label: 'Daily',                      icon: 'fa-sun',           tone: 'great' },
+    few_times_week:  { label: 'A few times a week',         icon: 'fa-calendar-week', tone: 'good'  },
+    weekly:          { label: 'Once a week',                icon: 'fa-calendar-day',  tone: 'ok'    },
+    monthly:         { label: 'Once a month',               icon: 'fa-calendar',      tone: 'warn'  },
+    rarely:          { label: 'Rarely / special occasions', icon: 'fa-hourglass-half',tone: 'low'   },
+    never:           { label: 'Avoid',                      icon: 'fa-ban',           tone: 'bad'   }
+};
+
+function deriveFrequencyTierFromScore(score) {
+    if (score == null || !isFinite(score)) return 'rarely';
+    if (score >= 85) return 'daily';
+    if (score >= 70) return 'few_times_week';
+    if (score >= 55) return 'weekly';
+    if (score >= 40) return 'monthly';
+    if (score >= 20) return 'rarely';
+    return 'never';
+}
+
+function normalizeConsumptionFrequency(entry, scoreForFallback) {
+    const rawTier = String(entry?.tier || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+    const tier = INGREDIENT_FREQUENCY_TIERS[rawTier]
+        ? rawTier
+        : deriveFrequencyTierFromScore(Number(scoreForFallback));
+    const meta = INGREDIENT_FREQUENCY_TIERS[tier];
+    const label = String(entry?.label || '').trim() || meta.label;
+    return {
+        tier,
+        label,
+        portion_hint: String(entry?.portion_hint || '').trim(),
+        reason: String(entry?.reason || '').trim()
     };
 }
 
@@ -16279,6 +16330,7 @@ function renderIngredientAnalysis(analysis, ocrText) {
     const summary = document.getElementById('ingredientVerdictSummary');
     if (summary) summary.textContent = analysis.verdict_summary || 'No summary available.';
 
+    renderIngredientFrequency(analysis.consumption_frequency);
     renderIngredientGoals(analysis.goal_alignment);
     renderIngredientMacros(analysis.macro_estimate);
     renderIngredientList('ingredientHealthyList', analysis.healthy_ingredients, 'good');
@@ -16313,6 +16365,24 @@ function animateIngredientScore(score) {
         if (t < 1) requestAnimationFrame(animate);
     };
     requestAnimationFrame(animate);
+}
+
+function renderIngredientFrequency(freq) {
+    const card = document.getElementById('ingredientFrequencyCard');
+    const iconEl = document.getElementById('ingredientFrequencyIcon');
+    const labelEl = document.getElementById('ingredientFrequencyLabel');
+    const portionEl = document.getElementById('ingredientFrequencyPortion');
+    const reasonEl = document.getElementById('ingredientFrequencyReason');
+    if (!card || !iconEl || !labelEl || !portionEl || !reasonEl) return;
+
+    const tier = freq?.tier && INGREDIENT_FREQUENCY_TIERS[freq.tier] ? freq.tier : 'rarely';
+    const meta = INGREDIENT_FREQUENCY_TIERS[tier];
+
+    card.setAttribute('data-tone', meta.tone);
+    iconEl.className = `fas ${meta.icon}`;
+    labelEl.textContent = freq?.label || meta.label;
+    portionEl.textContent = freq?.portion_hint || '';
+    reasonEl.textContent = freq?.reason || '';
 }
 
 function renderIngredientGoals(goals) {

@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-    <link rel="stylesheet" href="style.css?v=26.01.06.02">
+    <link rel="stylesheet" href="style.css?v=26.01.06.03">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -2201,6 +2201,19 @@
                         </div>
                     </div>
 
+                    <!-- Consumption Frequency -->
+                    <div id="ingredientFrequencyCard" class="ingredient-frequency-card" data-tone="ok">
+                        <div class="ingredient-frequency-icon">
+                            <i id="ingredientFrequencyIcon" class="fas fa-calendar-day"></i>
+                        </div>
+                        <div class="ingredient-frequency-body">
+                            <div class="ingredient-frequency-eyebrow">How often you can eat this</div>
+                            <div class="ingredient-frequency-label" id="ingredientFrequencyLabel">—</div>
+                            <div class="ingredient-frequency-portion" id="ingredientFrequencyPortion"></div>
+                            <div class="ingredient-frequency-reason" id="ingredientFrequencyReason">—</div>
+                        </div>
+                    </div>
+
                     <!-- Goal Alignment -->
                     <div class="ingredient-section">
                         <h3 class="ingredient-section-title"><i class="fas fa-bullseye text-emerald-600 mr-2"></i>Goal Alignment</h3>
@@ -2256,6 +2269,6 @@
         </div>
     </div>
 
-    <script src="script.js?v=26.01.06.02"></script>
+    <script src="script.js?v=26.01.06.03"></script>
 </body>
 </html>

@@ -1155,6 +1155,97 @@ body.modal-open {
     font-weight: 600;
 }
 
+/* Consumption Frequency card */
+.ingredient-frequency-card {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-light);
+    background: linear-gradient(135deg, #f8fafc 0%, white 100%);
+    box-shadow: var(--shadow-xs);
+    position: relative;
+    overflow: hidden;
+    animation: fadeSlideUp 0.5s ease both;
+}
+.ingredient-frequency-card::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.6) 100%);
+    pointer-events: none;
+    opacity: 0.3;
+}
+.ingredient-frequency-icon {
+    width: 56px; height: 56px; flex: 0 0 auto;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 22px;
+    box-shadow: var(--shadow-md);
+    position: relative;
+}
+.ingredient-frequency-body { position: relative; flex: 1; min-width: 0; }
+.ingredient-frequency-eyebrow {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--color-text-secondary); font-weight: 700;
+}
+.ingredient-frequency-label {
+    font-size: 20px; font-weight: 800; color: var(--color-text-primary);
+    line-height: 1.2; margin-top: 2px;
+}
+.ingredient-frequency-portion {
+    display: inline-block; margin-top: 6px;
+    font-size: 11px; font-weight: 600;
+    padding: 2px 10px; border-radius: var(--radius-full);
+    background: rgba(15,23,42,0.06); color: var(--color-text-primary);
+}
+.ingredient-frequency-portion:empty { display: none; }
+.ingredient-frequency-reason {
+    font-size: 12px; color: var(--color-text-secondary);
+    line-height: 1.5; margin-top: 8px;
+}
+
+/* Tier color palettes — icon background + subtle card tint */
+.ingredient-frequency-card[data-tone="great"] {
+    background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, white 70%);
+    border-color: rgba(16,185,129,0.25);
+}
+.ingredient-frequency-card[data-tone="great"] .ingredient-frequency-icon {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+.ingredient-frequency-card[data-tone="good"] {
+    background: linear-gradient(135deg, rgba(34,211,238,0.08) 0%, white 70%);
+    border-color: rgba(14,165,233,0.25);
+}
+.ingredient-frequency-card[data-tone="good"] .ingredient-frequency-icon {
+    background: linear-gradient(135deg, #22d3ee 0%, #0ea5e9 100%);
+}
+.ingredient-frequency-card[data-tone="ok"] {
+    background: linear-gradient(135deg, rgba(102,126,234,0.08) 0%, white 70%);
+    border-color: rgba(102,126,234,0.25);
+}
+.ingredient-frequency-card[data-tone="ok"] .ingredient-frequency-icon {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+.ingredient-frequency-card[data-tone="warn"] {
+    background: linear-gradient(135deg, rgba(245,158,11,0.10) 0%, white 70%);
+    border-color: rgba(245,158,11,0.3);
+}
+.ingredient-frequency-card[data-tone="warn"] .ingredient-frequency-icon {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+.ingredient-frequency-card[data-tone="low"] {
+    background: linear-gradient(135deg, rgba(249,115,22,0.10) 0%, white 70%);
+    border-color: rgba(249,115,22,0.3);
+}
+.ingredient-frequency-card[data-tone="low"] .ingredient-frequency-icon {
+    background: linear-gradient(135deg, #fb923c 0%, #ea580c 100%);
+}
+.ingredient-frequency-card[data-tone="bad"] {
+    background: linear-gradient(135deg, rgba(239,68,68,0.10) 0%, white 70%);
+    border-color: rgba(239,68,68,0.3);
+}
+.ingredient-frequency-card[data-tone="bad"] .ingredient-frequency-icon {
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+}
+
 .ingredient-recommendation {
     display: flex; gap: 14px;
     background: linear-gradient(135deg, rgba(67,233,123,0.08) 0%, rgba(102,126,234,0.06) 100%);
