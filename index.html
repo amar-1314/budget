@@ -14,7 +14,7 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-    <link rel="stylesheet" href="style.css?v=26.01.06.03">
+    <link rel="stylesheet" href="style.css?v=26.01.06.04">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script
         src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -2107,25 +2107,32 @@
                             <p class="text-[11px] text-white/70 font-medium tracking-wide uppercase">AI Health Scoring &middot; Protein &amp; Fiber Focus</p>
                         </div>
                     </div>
-                    <button onclick="closeIngredientAnalyzer()" class="ingredient-close-btn" aria-label="Close">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="ingredientAisleToggleBtn" onclick="toggleIngredientAisleMode()" class="ingredient-close-btn" aria-label="Toggle aisle mode" title="Aisle mode (compact)">
+                            <i class="fas fa-bolt"></i>
+                        </button>
+                        <button onclick="openIngredientProfile()" class="ingredient-close-btn" aria-label="Profile" title="Diet profile">
+                            <i class="fas fa-user-gear"></i>
+                        </button>
+                        <button onclick="closeIngredientAnalyzer()" class="ingredient-close-btn" aria-label="Close">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- Body (scrollable) -->
             <div class="ingredient-modal-body">
-                <!-- Goal banner -->
+                <!-- Goal banner (dynamically rebuilt from profile) -->
                 <div class="ingredient-goal-banner">
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 shrink-0">
                         <i class="fas fa-bullseye"></i>
-                        <span class="font-semibold">Your goals:</span>
+                        <span class="font-semibold" id="ingredientActiveProfileLabel">Your goals:</span>
                     </div>
-                    <div class="flex flex-wrap gap-2">
-                        <span class="ingredient-goal-chip"><i class="fas fa-drumstick-bite mr-1"></i>High Protein</span>
-                        <span class="ingredient-goal-chip"><i class="fas fa-seedling mr-1"></i>High Fiber</span>
-                        <span class="ingredient-goal-chip"><i class="fas fa-heart-pulse mr-1"></i>Overall Health</span>
-                    </div>
+                    <div class="flex flex-wrap gap-2 flex-1" id="ingredientGoalChips"></div>
+                    <button onclick="openIngredientProfile()" class="ingredient-edit-profile-btn" title="Edit profile">
+                        <i class="fas fa-pen"></i>
+                    </button>
                 </div>
 
                 <!-- Capture / Upload Area -->
@@ -2172,8 +2179,28 @@
                     </div>
                 </div>
 
+                <!-- Aisle Mode: compact single-screen verdict (shown when aisle mode is ON) -->
+                <div id="ingredientAisleResults" class="ingredient-aisle-results hidden">
+                    <div id="ingredientAisleVerdictCard" class="ingredient-aisle-card" data-tier="unclear">
+                        <div class="ingredient-aisle-decision-icon"><i id="ingredientAisleDecisionIcon" class="fas fa-circle-question"></i></div>
+                        <div id="ingredientAisleDecision" class="ingredient-aisle-decision">—</div>
+                        <div id="ingredientAisleScore" class="ingredient-aisle-score">—<span>/100</span></div>
+                        <div id="ingredientAisleFrequency" class="ingredient-aisle-frequency">—</div>
+                        <div id="ingredientAisleReason" class="ingredient-aisle-reason">—</div>
+                        <button onclick="setIngredientAisleMode(false)" class="ingredient-aisle-details-btn">
+                            <i class="fas fa-list-ul mr-2"></i>Show full breakdown
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Results -->
                 <div id="ingredientResults" class="ingredient-results hidden">
+                    <!-- Data source badge -->
+                    <div id="ingredientSourceBadge" class="ingredient-source-badge hidden">
+                        <i class="fas fa-database mr-2"></i>
+                        <span id="ingredientSourceBadgeText"></span>
+                    </div>
+
                     <!-- Score Hero -->
                     <div class="ingredient-score-hero">
                         <div class="ingredient-score-gauge-wrap">
@@ -2220,6 +2247,16 @@
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3" id="ingredientGoalGrid"></div>
                     </div>
 
+                    <!-- Nutrition Facts (quantitative, only when panel extracted) -->
+                    <div id="ingredientNutritionSection" class="ingredient-section hidden">
+                        <h3 class="ingredient-section-title">
+                            <i class="fas fa-table-list text-emerald-600 mr-2"></i>Nutrition Facts
+                            <span id="ingredientServingSize" class="ingredient-section-aside"></span>
+                        </h3>
+                        <div class="ingredient-nutrition-grid" id="ingredientNutritionGrid"></div>
+                        <div id="ingredientDensityRow" class="ingredient-density-row hidden"></div>
+                    </div>
+
                     <!-- Macro Snapshot -->
                     <div class="ingredient-section">
                         <h3 class="ingredient-section-title"><i class="fas fa-chart-simple text-emerald-600 mr-2"></i>Nutritional Snapshot</h3>
@@ -2242,6 +2279,12 @@
                     <div id="ingredientRedFlagSection" class="ingredient-section ingredient-section--flag hidden">
                         <h3 class="ingredient-section-title"><i class="fas fa-flag text-rose-600 mr-2"></i>Red Flags</h3>
                         <div id="ingredientRedFlagList" class="flex flex-wrap gap-2"></div>
+                    </div>
+
+                    <!-- Better Alternatives -->
+                    <div id="ingredientAlternativesSection" class="ingredient-section ingredient-section--alts hidden">
+                        <h3 class="ingredient-section-title"><i class="fas fa-arrows-rotate text-emerald-600 mr-2"></i>Better Alternatives</h3>
+                        <div id="ingredientAlternativesList" class="ingredient-alts-grid"></div>
                     </div>
 
                     <!-- Final Recommendation -->
@@ -2269,6 +2312,74 @@
         </div>
     </div>
 
-    <script src="script.js?v=26.01.06.03"></script>
+    <!-- ============================================================ -->
+    <!-- Ingredient Profile Sub-Modal                                -->
+    <!-- ============================================================ -->
+    <div id="ingredientProfileModal" class="modal">
+        <div class="modal-content ingredient-modal-content" style="max-width: 640px; max-height: 92vh; padding: 0; display: flex; flex-direction: column;">
+            <div class="ingredient-modal-header">
+                <div class="ingredient-modal-header-bg"></div>
+                <div class="relative flex justify-between items-center px-6 py-5">
+                    <div class="flex items-center gap-3">
+                        <div class="ingredient-logo-orb"><i class="fas fa-user-gear"></i></div>
+                        <div>
+                            <h2 class="text-xl font-extrabold text-white tracking-tight">Diet Profile</h2>
+                            <p class="text-[11px] text-white/70 font-medium tracking-wide uppercase">Personalize every scan</p>
+                        </div>
+                    </div>
+                    <button onclick="closeIngredientProfile()" class="ingredient-close-btn" aria-label="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="ingredient-modal-body">
+                <!-- Who is scanning -->
+                <div class="ingredient-section">
+                    <h3 class="ingredient-section-title"><i class="fas fa-user text-emerald-600 mr-2"></i>Active Profile</h3>
+                    <div class="ingredient-profile-toggle-row" id="ingredientProfileWhoRow"></div>
+                </div>
+
+                <!-- Goal priorities -->
+                <div class="ingredient-section">
+                    <h3 class="ingredient-section-title"><i class="fas fa-bullseye text-emerald-600 mr-2"></i>Goal Priorities</h3>
+                    <p class="text-xs text-gray-500 mb-3">Pick what matters for you. Each scan is judged against these.</p>
+                    <div class="ingredient-pill-grid" id="ingredientProfileGoalsRow"></div>
+                </div>
+
+                <!-- Diet flags -->
+                <div class="ingredient-section">
+                    <h3 class="ingredient-section-title"><i class="fas fa-leaf text-emerald-600 mr-2"></i>Diet &amp; Restrictions</h3>
+                    <p class="text-xs text-gray-500 mb-3">Anything you check becomes a hard rule. Violations auto-down-score the product.</p>
+                    <div class="ingredient-pill-grid" id="ingredientProfileDietRow"></div>
+                </div>
+
+                <!-- Custom avoid -->
+                <div class="ingredient-section">
+                    <h3 class="ingredient-section-title"><i class="fas fa-ban text-rose-600 mr-2"></i>Custom Avoid List</h3>
+                    <p class="text-xs text-gray-500 mb-2">Comma-separated. Any of these in the ingredients = automatic flag.</p>
+                    <input type="text" id="ingredientProfileAvoidInput" class="input-field" placeholder="e.g. high-fructose corn syrup, red 40, carrageenan">
+                </div>
+
+                <!-- Notes -->
+                <div class="ingredient-section">
+                    <h3 class="ingredient-section-title"><i class="fas fa-notes-medical text-emerald-600 mr-2"></i>Context for AI (optional)</h3>
+                    <p class="text-xs text-gray-500 mb-2">Anything else the AI should know (allergies, conditions, training cycle).</p>
+                    <textarea id="ingredientProfileNotesInput" class="input-field" rows="3" placeholder="e.g. lactose intolerant; cutting phase; pregnancy; iron-deficiency"></textarea>
+                </div>
+
+                <div class="flex gap-3 pt-1 pb-2">
+                    <button onclick="resetIngredientProfileToDefaults()" class="ingredient-cta-btn ingredient-cta-btn--ghost">
+                        <i class="fas fa-rotate-left mr-2"></i>Reset
+                    </button>
+                    <button onclick="saveIngredientProfile()" class="ingredient-cta-btn ingredient-cta-btn--primary flex-1">
+                        <i class="fas fa-check mr-2"></i>Save Profile
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js?v=26.01.06.04"></script>
 </body>
 </html>

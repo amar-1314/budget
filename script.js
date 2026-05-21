@@ -15842,6 +15842,8 @@ function openIngredientAnalyzer() {
     const modal = document.getElementById('ingredientAnalyzerModal');
     if (!modal) return;
     modal.classList.add('active');
+    syncIngredientGoalBanner();
+    syncIngredientAisleToggleButton();
     resetIngredientAnalyzer();
 }
 
@@ -15944,7 +15946,9 @@ async function analyzeIngredientsWithAI() {
 
     const btn = document.getElementById('ingredientAnalyzeBtn');
     const results = document.getElementById('ingredientResults');
+    const aisleResults = document.getElementById('ingredientAisleResults');
     if (results) results.classList.add('hidden');
+    if (aisleResults) aisleResults.classList.add('hidden');
     if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Analyzing...';
@@ -15954,7 +15958,7 @@ async function analyzeIngredientsWithAI() {
     let imageDataUrl = currentIngredientImageDataUrl;
 
     try {
-        setIngredientStatus('Preparing image...', 'Compressing for OCR');
+        setIngredientStatus('Preparing image...', 'Compressing image');
         try {
             const compressed = await compressReceiptImageToDataUrl(imageDataUrl);
             if (compressed) imageDataUrl = compressed;
@@ -15962,33 +15966,62 @@ async function analyzeIngredientsWithAI() {
             console.warn('Ingredient image compression failed, using original', e);
         }
 
-        let ocrText = '';
+        // 1. Try barcode + Open Food Facts (free, deterministic, fast)
+        let analysis = null;
+        let sourceLabel = '';
+        let textForRawDisplay = '';
+
         try {
-            setIngredientStatus('Reading label...', 'Running OCR.Space');
-            ocrText = await runOcrSpace(imageDataUrl);
-        } catch (ocrErr) {
-            console.warn('OCR failed, will fall back to Gemini vision', ocrErr);
+            setIngredientStatus('Looking for barcode...', 'Native BarcodeDetector');
+            const barcode = await detectBarcodeFromImage(imageDataUrl);
+            if (barcode) {
+                setIngredientStatus('Found barcode', `Looking up ${barcode} on Open Food Facts`);
+                const offProduct = await fetchOpenFoodFactsProduct(barcode);
+                if (offProduct) {
+                    setIngredientStatus('Analyzing with AI...', 'Gemini reviewing canonical data');
+                    const offPrompt = formatOpenFoodFactsForPrompt(offProduct, barcode);
+                    analysis = await analyzeIngredientHealthFromText(offPrompt);
+                    sourceLabel = `Open Food Facts · barcode ${barcode}`;
+                    textForRawDisplay = offPrompt;
+                }
+            }
+        } catch (barcodeErr) {
+            console.warn('Barcode/OFF lookup failed, continuing with OCR', barcodeErr);
         }
 
-        let analysis = null;
-        const cleanedOcr = String(ocrText || '').trim();
-
-        if (cleanedOcr.length >= 20) {
-            setIngredientStatus('Analyzing with AI...', 'Gemini reviewing ingredients');
+        // 2. Fall back to OCR.Space + Gemini text analysis
+        if (!analysis) {
+            let ocrText = '';
             try {
-                analysis = await analyzeIngredientHealthFromText(cleanedOcr);
-            } catch (textErr) {
-                console.warn('Gemini text analysis failed, falling back to vision', textErr);
+                setIngredientStatus('Reading label...', 'Running OCR.Space');
+                ocrText = await runOcrSpace(imageDataUrl);
+            } catch (ocrErr) {
+                console.warn('OCR failed, will fall back to Gemini vision', ocrErr);
+            }
+
+            const cleanedOcr = String(ocrText || '').trim();
+            if (cleanedOcr.length >= 20) {
+                setIngredientStatus('Analyzing with AI...', 'Gemini reviewing OCR text');
+                try {
+                    analysis = await analyzeIngredientHealthFromText(cleanedOcr);
+                    sourceLabel = 'OCR.Space + Gemini';
+                    textForRawDisplay = cleanedOcr;
+                } catch (textErr) {
+                    console.warn('Gemini text analysis failed, falling back to vision', textErr);
+                }
+            }
+
+            // 3. Final fallback: Gemini vision on the raw image
+            if (!analysis) {
+                setIngredientStatus('Analyzing with AI...', 'Gemini vision (fallback)');
+                analysis = await analyzeIngredientHealthFromImage(imageDataUrl);
+                sourceLabel = 'Gemini vision';
+                textForRawDisplay = cleanedOcr || '(No OCR text — vision-only analysis was used.)';
             }
         }
 
-        if (!analysis) {
-            setIngredientStatus('Analyzing with AI...', 'Gemini vision (fallback)');
-            analysis = await analyzeIngredientHealthFromImage(imageDataUrl);
-        }
-
         hideIngredientStatus();
-        renderIngredientAnalysis(analysis, cleanedOcr);
+        renderIngredientAnalysis(analysis, textForRawDisplay, sourceLabel);
         showNotification('Analysis complete', 'success');
     } catch (err) {
         console.error('Ingredient analysis failed:', err);
@@ -16004,14 +16037,14 @@ async function analyzeIngredientsWithAI() {
 }
 
 function buildIngredientAnalysisPrompt(extraContext) {
+    const profile = getActiveIngredientProfile();
+    const profileBlock = formatProfileForPrompt(profile);
+
     return `You are a board-certified clinical nutritionist with deep knowledge of food science, ingredient additives, and macronutrient density.
 
-The user's dietary goals are:
-1. HIGH PROTEIN
-2. HIGH FIBER
-3. Aid OVERALL HEALTH (minimize ultra-processed foods, added sugars, refined oils, artificial additives, excess sodium).
+${profileBlock}
 
-You will be given ${extraContext} from a packaged food's ingredient label (and sometimes a partial nutrition panel).
+You will be given ${extraContext} from a packaged food's ingredient label and/or nutrition panel.
 
 Return ONLY valid JSON in this EXACT schema (no markdown, no prose):
 {
@@ -16037,6 +16070,23 @@ Return ONLY valid JSON in this EXACT schema (no markdown, no prose):
     { "name": "<ingredient>", "severity": "low" | "medium" | "high", "reason": "<why concerning, <=100 chars>" }
   ],
   "red_flags": ["<short tag e.g. 'Added sugar', 'Seed oils', 'Artificial colors'>"],
+  "nutrition_facts": {
+    "serving_size": "<text e.g. '30 g' or '1 cup (240 ml)'>" | null,
+    "servings_per_container": <number> | null,
+    "calories": <number per serving> | null,
+    "protein_g": <number> | null,
+    "fiber_g": <number> | null,
+    "total_sugar_g": <number> | null,
+    "added_sugar_g": <number> | null,
+    "carbs_g": <number> | null,
+    "fat_g": <number> | null,
+    "saturated_fat_g": <number> | null,
+    "trans_fat_g": <number> | null,
+    "sodium_mg": <number> | null
+  },
+  "alternatives": [
+    { "name": "<specific better product or generic better option>", "why": "<=120 chars, why it's better for the user's goals & restrictions" }
+  ],
   "consumption_frequency": {
     "tier": "daily" | "few_times_week" | "weekly" | "monthly" | "rarely" | "never",
     "label": "<human-readable label matching the tier>",
@@ -16059,7 +16109,18 @@ Scoring rubric (target the 0-100 score):
 - Processing level: minimally processed +5, processed 0, ultra-processed -15
 - Artificial colors, sweeteners (sucralose, aspartame, ace-K), preservatives (BHA/BHT/TBHQ/nitrites), seed oils as primary: -5 each (cap -20)
 - Trans fats / partially hydrogenated: -25 (auto-cap score <= 25)
+- Hard dietary violations from the user's profile (e.g. dairy when user is dairy-free, gluten when gluten-free, animal products when vegan): -40 AND ensure verdict is "Avoid" and frequency is "never"
+- Custom-avoid hits from the user's avoid-list: -10 each (cap -30)
 - Final score must be clamped to [0, 100].
+
+Nutrition facts extraction:
+- If a nutrition facts panel is visible (or available from a database), populate "nutrition_facts" with numeric per-serving values. Use null for fields that are not clearly stated. Do NOT invent numbers.
+- If no nutrition panel is available, set "nutrition_facts" to an object with all-null fields.
+
+Alternatives:
+- If score < 70 OR there is any dietary violation, suggest 2-3 specific better products (real product names where well-known, otherwise generic categories) that meet the user's goals AND respect every dietary restriction.
+- If score >= 70 and no violations, return an empty alternatives array.
+- Never recommend an alternative that violates a hard dietary flag.
 
 Consumption frequency guidance (default mapping; adjust for category context like protein powders, condiments, etc.):
 - score 85-100 AND minimally processed AND no red flags → "daily"
@@ -16191,9 +16252,40 @@ function normalizeIngredientAnalysis(raw) {
             const v = String(it || '').trim();
             return v || null;
         }),
+        nutrition_facts: normalizeNutritionFacts(raw?.nutrition_facts),
+        alternatives: sanitizeArr(raw?.alternatives, (it) => {
+            if (!it) return null;
+            const name = String(it.name || '').trim();
+            if (!name) return null;
+            return { name, why: String(it.why || '').trim() };
+        }).slice(0, 4),
         consumption_frequency: normalizeConsumptionFrequency(raw?.consumption_frequency, raw?.score),
         verdict_summary: String(raw?.verdict_summary || '').trim(),
         recommendation: String(raw?.recommendation || '').trim()
+    };
+}
+
+function normalizeNutritionFacts(raw) {
+    const cleanNum = (v) => {
+        if (v == null || v === '') return null;
+        const n = Number(v);
+        if (!isFinite(n) || n < 0) return null;
+        return n;
+    };
+    const facts = raw || {};
+    return {
+        serving_size: String(facts.serving_size || '').trim() || null,
+        servings_per_container: cleanNum(facts.servings_per_container),
+        calories: cleanNum(facts.calories),
+        protein_g: cleanNum(facts.protein_g),
+        fiber_g: cleanNum(facts.fiber_g),
+        total_sugar_g: cleanNum(facts.total_sugar_g),
+        added_sugar_g: cleanNum(facts.added_sugar_g),
+        carbs_g: cleanNum(facts.carbs_g),
+        fat_g: cleanNum(facts.fat_g),
+        saturated_fat_g: cleanNum(facts.saturated_fat_g),
+        trans_fat_g: cleanNum(facts.trans_fat_g),
+        sodium_mg: cleanNum(facts.sodium_mg)
     };
 }
 
@@ -16305,8 +16397,22 @@ function escapeIngredientHtml(text) {
         .replace(/'/g, '&#39;');
 }
 
-function renderIngredientAnalysis(analysis, ocrText) {
+function renderIngredientAnalysis(analysis, ocrText, sourceLabel) {
     if (!analysis) return;
+    lastIngredientAnalysis = analysis;
+    lastIngredientOcrText = ocrText || '';
+    lastIngredientSourceLabel = sourceLabel || '';
+
+    setIngredientSourceBadge(sourceLabel);
+
+    if (isIngredientAisleModeOn()) {
+        renderIngredientAisleVerdict(analysis);
+        return;
+    }
+
+    const aisleResults = document.getElementById('ingredientAisleResults');
+    if (aisleResults) aisleResults.classList.add('hidden');
+
     const container = document.getElementById('ingredientResults');
     if (!container) return;
     container.classList.remove('hidden');
@@ -16332,10 +16438,12 @@ function renderIngredientAnalysis(analysis, ocrText) {
 
     renderIngredientFrequency(analysis.consumption_frequency);
     renderIngredientGoals(analysis.goal_alignment);
+    renderIngredientNutritionFacts(analysis.nutrition_facts);
     renderIngredientMacros(analysis.macro_estimate);
     renderIngredientList('ingredientHealthyList', analysis.healthy_ingredients, 'good');
     renderIngredientList('ingredientConcerningList', analysis.concerning_ingredients, null);
     renderIngredientRedFlags(analysis.red_flags);
+    renderIngredientAlternatives(analysis.alternatives);
 
     const rec = document.getElementById('ingredientRecommendation');
     if (rec) rec.textContent = analysis.recommendation || '—';
@@ -16463,4 +16571,580 @@ function renderIngredientRedFlags(flags) {
     }
     section.classList.remove('hidden');
     list.innerHTML = flags.map(f => `<span class="ingredient-red-flag-chip"><i class="fas fa-flag mr-1"></i>${escapeIngredientHtml(f)}</span>`).join('');
+}
+
+// ============================================================
+// INGREDIENT ANALYZER — Source badge, alternatives, nutrition facts
+// ============================================================
+
+let lastIngredientAnalysis = null;
+let lastIngredientOcrText = '';
+let lastIngredientSourceLabel = '';
+
+function setIngredientSourceBadge(sourceLabel) {
+    const badge = document.getElementById('ingredientSourceBadge');
+    const text = document.getElementById('ingredientSourceBadgeText');
+    if (!badge || !text) return;
+    if (!sourceLabel) {
+        badge.classList.add('hidden');
+        return;
+    }
+    text.textContent = `Source: ${sourceLabel}`;
+    badge.classList.remove('hidden');
+}
+
+function renderIngredientAlternatives(alternatives) {
+    const section = document.getElementById('ingredientAlternativesSection');
+    const list = document.getElementById('ingredientAlternativesList');
+    if (!section || !list) return;
+    if (!alternatives || alternatives.length === 0) {
+        section.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+    }
+    section.classList.remove('hidden');
+    list.innerHTML = alternatives.map((alt) => `
+        <div class="ingredient-alt-card">
+            <div class="ingredient-alt-name"><i class="fas fa-leaf"></i>${escapeIngredientHtml(alt.name)}</div>
+            ${alt.why ? `<div class="ingredient-alt-why">${escapeIngredientHtml(alt.why)}</div>` : ''}
+        </div>
+    `).join('');
+}
+
+function renderIngredientNutritionFacts(facts) {
+    const section = document.getElementById('ingredientNutritionSection');
+    const grid = document.getElementById('ingredientNutritionGrid');
+    const servingEl = document.getElementById('ingredientServingSize');
+    const densityRow = document.getElementById('ingredientDensityRow');
+    if (!section || !grid) return;
+
+    const hasAny = facts && Object.entries(facts).some(([k, v]) => k !== 'serving_size' && k !== 'servings_per_container' && v != null);
+    if (!hasAny) {
+        section.classList.add('hidden');
+        grid.innerHTML = '';
+        if (densityRow) {
+            densityRow.classList.add('hidden');
+            densityRow.innerHTML = '';
+        }
+        if (servingEl) servingEl.textContent = '';
+        return;
+    }
+
+    if (servingEl) {
+        const parts = [];
+        if (facts.serving_size) parts.push(`per ${facts.serving_size}`);
+        if (facts.servings_per_container) parts.push(`${facts.servings_per_container} servings/pkg`);
+        servingEl.textContent = parts.join(' · ');
+    }
+
+    const tiles = [
+        { key: 'calories',         label: 'Calories',  unit: 'kcal', toneFn: () => 'neutral' },
+        { key: 'protein_g',        label: 'Protein',   unit: 'g',    toneFn: (v) => v >= 10 ? 'good' : (v >= 5 ? 'warn' : 'bad') },
+        { key: 'fiber_g',          label: 'Fiber',     unit: 'g',    toneFn: (v) => v >= 5 ? 'good' : (v >= 3 ? 'warn' : 'bad') },
+        { key: 'added_sugar_g',    label: 'Added sugar', unit: 'g',  toneFn: (v) => v <= 2 ? 'good' : (v <= 8 ? 'warn' : 'bad') },
+        { key: 'total_sugar_g',    label: 'Total sugar', unit: 'g',  toneFn: (v) => v <= 5 ? 'good' : (v <= 15 ? 'warn' : 'bad') },
+        { key: 'carbs_g',          label: 'Carbs',     unit: 'g',    toneFn: () => 'neutral' },
+        { key: 'fat_g',            label: 'Fat',       unit: 'g',    toneFn: () => 'neutral' },
+        { key: 'saturated_fat_g',  label: 'Sat fat',   unit: 'g',    toneFn: (v) => v <= 1 ? 'good' : (v <= 3 ? 'warn' : 'bad') },
+        { key: 'trans_fat_g',      label: 'Trans fat', unit: 'g',    toneFn: (v) => v === 0 ? 'good' : 'bad' },
+        { key: 'sodium_mg',        label: 'Sodium',    unit: 'mg',   toneFn: (v) => v <= 140 ? 'good' : (v <= 400 ? 'warn' : 'bad') }
+    ];
+
+    grid.innerHTML = tiles
+        .filter(t => facts[t.key] != null)
+        .map(t => {
+            const v = facts[t.key];
+            const tone = t.toneFn(v);
+            return `
+                <div class="ingredient-nutrition-tile" data-tone="${tone}">
+                    <div class="ingredient-nutrition-label">${escapeIngredientHtml(t.label)}</div>
+                    <div class="ingredient-nutrition-value">${escapeIngredientHtml(v)} ${escapeIngredientHtml(t.unit)}</div>
+                </div>
+            `;
+        }).join('');
+
+    if (densityRow) {
+        const cal = Number(facts.calories);
+        if (cal > 0 && (facts.protein_g != null || facts.fiber_g != null)) {
+            const density = (g) => g == null ? null : Math.round((g / cal) * 100 * 10) / 10;
+            const proteinDensity = density(facts.protein_g);
+            const fiberDensity = density(facts.fiber_g);
+            const densityTiles = [];
+            if (proteinDensity != null) {
+                const tone = proteinDensity >= 10 ? 'good' : (proteinDensity >= 5 ? 'warn' : 'bad');
+                densityTiles.push(`
+                    <div class="ingredient-density-tile" data-tone="${tone}">
+                        <div class="ingredient-density-icon"><i class="fas fa-drumstick-bite"></i></div>
+                        <div>
+                            <div class="ingredient-density-label">Protein / 100 kcal</div>
+                            <div class="ingredient-density-value">${proteinDensity} g</div>
+                        </div>
+                    </div>
+                `);
+            }
+            if (fiberDensity != null) {
+                const tone = fiberDensity >= 4 ? 'good' : (fiberDensity >= 2 ? 'warn' : 'bad');
+                densityTiles.push(`
+                    <div class="ingredient-density-tile" data-tone="${tone}">
+                        <div class="ingredient-density-icon"><i class="fas fa-seedling"></i></div>
+                        <div>
+                            <div class="ingredient-density-label">Fiber / 100 kcal</div>
+                            <div class="ingredient-density-value">${fiberDensity} g</div>
+                        </div>
+                    </div>
+                `);
+            }
+            if (densityTiles.length) {
+                densityRow.innerHTML = densityTiles.join('');
+                densityRow.classList.remove('hidden');
+            } else {
+                densityRow.classList.add('hidden');
+                densityRow.innerHTML = '';
+            }
+        } else {
+            densityRow.classList.add('hidden');
+            densityRow.innerHTML = '';
+        }
+    }
+
+    section.classList.remove('hidden');
+}
+
+// ============================================================
+// INGREDIENT ANALYZER — Aisle Mode (compact verdict)
+// ============================================================
+
+const INGREDIENT_AISLE_MODE_KEY = 'ingredient_aisle_mode_v1';
+
+function isIngredientAisleModeOn() {
+    try { return localStorage.getItem(INGREDIENT_AISLE_MODE_KEY) === '1'; }
+    catch (_e) { return false; }
+}
+
+function setIngredientAisleModeStorage(on) {
+    try { localStorage.setItem(INGREDIENT_AISLE_MODE_KEY, on ? '1' : '0'); }
+    catch (_e) { /* ignore */ }
+}
+
+function syncIngredientAisleToggleButton() {
+    const btn = document.getElementById('ingredientAisleToggleBtn');
+    if (!btn) return;
+    btn.classList.toggle('is-active', isIngredientAisleModeOn());
+}
+
+function setIngredientAisleMode(on) {
+    setIngredientAisleModeStorage(!!on);
+    syncIngredientAisleToggleButton();
+
+    if (!lastIngredientAnalysis) return;
+    if (on) {
+        const detail = document.getElementById('ingredientResults');
+        if (detail) detail.classList.add('hidden');
+        renderIngredientAisleVerdict(lastIngredientAnalysis);
+    } else {
+        const aisle = document.getElementById('ingredientAisleResults');
+        if (aisle) aisle.classList.add('hidden');
+        renderIngredientAnalysis(lastIngredientAnalysis, lastIngredientOcrText, lastIngredientSourceLabel);
+    }
+}
+
+function toggleIngredientAisleMode() {
+    setIngredientAisleMode(!isIngredientAisleModeOn());
+}
+
+function renderIngredientAisleVerdict(analysis) {
+    const aisleContainer = document.getElementById('ingredientAisleResults');
+    const card = document.getElementById('ingredientAisleVerdictCard');
+    const iconEl = document.getElementById('ingredientAisleDecisionIcon');
+    const decisionEl = document.getElementById('ingredientAisleDecision');
+    const scoreEl = document.getElementById('ingredientAisleScore');
+    const freqEl = document.getElementById('ingredientAisleFrequency');
+    const reasonEl = document.getElementById('ingredientAisleReason');
+    if (!aisleContainer || !card || !decisionEl || !scoreEl || !freqEl || !reasonEl || !iconEl) return;
+
+    const tier = getIngredientVerdictTier(analysis.verdict, analysis.score);
+    card.setAttribute('data-tier', tier);
+
+    const decisionMap = {
+        excellent: { word: 'EAT IT',  icon: 'fa-circle-check' },
+        good:      { word: 'EAT IT',  icon: 'fa-thumbs-up'    },
+        mediocre:  { word: 'CAUTION', icon: 'fa-circle-exclamation' },
+        avoid:     { word: 'SKIP IT', icon: 'fa-circle-xmark' },
+        unclear:   { word: 'UNCLEAR', icon: 'fa-circle-question' }
+    };
+    const d = decisionMap[tier] || decisionMap.unclear;
+    iconEl.className = `fas ${d.icon}`;
+    decisionEl.textContent = d.word;
+
+    if (analysis.score == null) {
+        scoreEl.innerHTML = '—<span>/100</span>';
+    } else {
+        scoreEl.innerHTML = `${analysis.score}<span>/100</span>`;
+    }
+
+    const freqTier = analysis?.consumption_frequency?.tier;
+    const freqMeta = freqTier && INGREDIENT_FREQUENCY_TIERS[freqTier] ? INGREDIENT_FREQUENCY_TIERS[freqTier] : null;
+    freqEl.innerHTML = freqMeta
+        ? `<i class="fas ${freqMeta.icon} mr-2"></i>${escapeIngredientHtml(analysis.consumption_frequency.label || freqMeta.label)}`
+        : '—';
+
+    reasonEl.textContent = analysis.verdict_summary || analysis.recommendation || '—';
+
+    aisleContainer.classList.remove('hidden');
+}
+
+// ============================================================
+// INGREDIENT ANALYZER — Personalization Profile
+// ============================================================
+
+const INGREDIENT_PROFILE_KEY = 'ingredient_profile_v1';
+
+const INGREDIENT_PROFILE_DIET_OPTIONS = [
+    { id: 'vegetarian',  label: 'Vegetarian',   icon: 'fa-carrot' },
+    { id: 'vegan',       label: 'Vegan',        icon: 'fa-seedling' },
+    { id: 'pescatarian', label: 'Pescatarian',  icon: 'fa-fish' },
+    { id: 'dairy_free',  label: 'Dairy-free',   icon: 'fa-cheese' },
+    { id: 'gluten_free', label: 'Gluten-free',  icon: 'fa-wheat-awn' },
+    { id: 'nut_free',    label: 'Nut-free',     icon: 'fa-circle-exclamation' },
+    { id: 'soy_free',    label: 'Soy-free',     icon: 'fa-circle-exclamation' },
+    { id: 'egg_free',    label: 'Egg-free',     icon: 'fa-egg' },
+    { id: 'halal',       label: 'Halal',        icon: 'fa-mosque' },
+    { id: 'kosher',      label: 'Kosher',       icon: 'fa-star-of-david' },
+    { id: 'low_sodium',  label: 'Low sodium',   icon: 'fa-droplet' },
+    { id: 'keto',        label: 'Keto',         icon: 'fa-bacon' },
+    { id: 'low_fodmap',  label: 'Low FODMAP',   icon: 'fa-bowl-food' }
+];
+
+const INGREDIENT_PROFILE_GOAL_OPTIONS = [
+    { id: 'high_protein',   label: 'High protein',    icon: 'fa-drumstick-bite' },
+    { id: 'high_fiber',     label: 'High fiber',      icon: 'fa-seedling' },
+    { id: 'overall_health', label: 'Overall health',  icon: 'fa-heart-pulse' },
+    { id: 'low_sugar',      label: 'Low sugar',       icon: 'fa-cube' },
+    { id: 'low_sodium',     label: 'Low sodium',      icon: 'fa-droplet' },
+    { id: 'whole_foods',    label: 'Whole foods',     icon: 'fa-apple-whole' },
+    { id: 'weight_loss',    label: 'Weight loss',     icon: 'fa-weight-scale' },
+    { id: 'muscle_gain',    label: 'Muscle gain',     icon: 'fa-dumbbell' }
+];
+
+const INGREDIENT_PROFILE_PEOPLE = [
+    { id: 'amar',  label: 'Amar',  icon: 'fa-user' },
+    { id: 'priya', label: 'Priya', icon: 'fa-user' },
+    { id: 'both',  label: 'Both',  icon: 'fa-user-group' }
+];
+
+const INGREDIENT_PROFILE_DEFAULT = {
+    activeUser: 'both',
+    goals: ['high_protein', 'high_fiber', 'overall_health'],
+    diet: [],
+    customAvoid: '',
+    notes: ''
+};
+
+function getActiveIngredientProfile() {
+    try {
+        const raw = localStorage.getItem(INGREDIENT_PROFILE_KEY);
+        if (!raw) return { ...INGREDIENT_PROFILE_DEFAULT };
+        const parsed = JSON.parse(raw);
+        return {
+            activeUser:  String(parsed.activeUser || INGREDIENT_PROFILE_DEFAULT.activeUser),
+            goals:       Array.isArray(parsed.goals) ? parsed.goals.filter(g => typeof g === 'string') : INGREDIENT_PROFILE_DEFAULT.goals,
+            diet:        Array.isArray(parsed.diet)  ? parsed.diet.filter(g => typeof g === 'string')  : [],
+            customAvoid: String(parsed.customAvoid || ''),
+            notes:       String(parsed.notes || '')
+        };
+    } catch (_e) {
+        return { ...INGREDIENT_PROFILE_DEFAULT };
+    }
+}
+
+function saveIngredientProfileObject(profile) {
+    try {
+        localStorage.setItem(INGREDIENT_PROFILE_KEY, JSON.stringify(profile));
+    } catch (_e) { /* quota issues only */ }
+}
+
+function formatProfileForPrompt(profile) {
+    const peopleMap = { amar: 'Amar', priya: 'Priya', both: 'Amar & Priya' };
+    const goalLabels = INGREDIENT_PROFILE_GOAL_OPTIONS.reduce((acc, o) => (acc[o.id] = o.label, acc), {});
+    const dietLabels = INGREDIENT_PROFILE_DIET_OPTIONS.reduce((acc, o) => (acc[o.id] = o.label, acc), {});
+
+    const who = peopleMap[profile.activeUser] || 'the user';
+    const goals = (profile.goals && profile.goals.length ? profile.goals : INGREDIENT_PROFILE_DEFAULT.goals)
+        .map(g => goalLabels[g] || g).join(', ');
+    const diet = (profile.diet || []).map(d => dietLabels[d] || d);
+    const dietBlock = diet.length
+        ? `HARD DIETARY RULES (must never be violated): ${diet.join(', ')}.`
+        : 'No hard dietary restrictions specified.';
+    const avoidBlock = profile.customAvoid && profile.customAvoid.trim()
+        ? `CUSTOM AVOID LIST (treat each as an automatic flag if present): ${profile.customAvoid.trim()}.`
+        : '';
+    const notesBlock = profile.notes && profile.notes.trim()
+        ? `ADDITIONAL USER CONTEXT: ${profile.notes.trim()}.`
+        : '';
+
+    return `USER PROFILE
+- Person: ${who}
+- Goal priorities (ordered): ${goals}
+- ${dietBlock}
+${avoidBlock}
+${notesBlock}`.trim();
+}
+
+function openIngredientProfile() {
+    const modal = document.getElementById('ingredientProfileModal');
+    if (!modal) return;
+    modal.classList.add('active');
+    renderIngredientProfileForm(getActiveIngredientProfile());
+}
+
+function closeIngredientProfile() {
+    const modal = document.getElementById('ingredientProfileModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function resetIngredientProfileToDefaults() {
+    saveIngredientProfileObject({ ...INGREDIENT_PROFILE_DEFAULT });
+    renderIngredientProfileForm({ ...INGREDIENT_PROFILE_DEFAULT });
+    syncIngredientGoalBanner();
+    showNotification('Profile reset to defaults', 'success');
+}
+
+function renderIngredientProfileForm(profile) {
+    const whoRow = document.getElementById('ingredientProfileWhoRow');
+    if (whoRow) {
+        whoRow.innerHTML = INGREDIENT_PROFILE_PEOPLE.map(p => `
+            <button type="button" class="ingredient-profile-who-btn ${profile.activeUser === p.id ? 'is-active' : ''}"
+                    data-who="${p.id}" onclick="setIngredientProfilePerson('${p.id}')">
+                <i class="fas ${p.icon}"></i>${escapeIngredientHtml(p.label)}
+            </button>
+        `).join('');
+    }
+
+    const goalsRow = document.getElementById('ingredientProfileGoalsRow');
+    if (goalsRow) {
+        goalsRow.innerHTML = INGREDIENT_PROFILE_GOAL_OPTIONS.map(g => `
+            <button type="button" class="ingredient-pill ${profile.goals.includes(g.id) ? 'is-active' : ''}"
+                    onclick="toggleIngredientProfileGoal('${g.id}')">
+                <i class="fas ${g.icon}"></i>${escapeIngredientHtml(g.label)}
+            </button>
+        `).join('');
+    }
+
+    const dietRow = document.getElementById('ingredientProfileDietRow');
+    if (dietRow) {
+        dietRow.innerHTML = INGREDIENT_PROFILE_DIET_OPTIONS.map(d => `
+            <button type="button" class="ingredient-pill ${profile.diet.includes(d.id) ? 'is-active-warn' : ''}"
+                    onclick="toggleIngredientProfileDiet('${d.id}')">
+                <i class="fas ${d.icon}"></i>${escapeIngredientHtml(d.label)}
+            </button>
+        `).join('');
+    }
+
+    const avoidInput = document.getElementById('ingredientProfileAvoidInput');
+    if (avoidInput) avoidInput.value = profile.customAvoid || '';
+    const notesInput = document.getElementById('ingredientProfileNotesInput');
+    if (notesInput) notesInput.value = profile.notes || '';
+}
+
+function captureUnsavedProfileFormText(profile) {
+    const avoidEl = document.getElementById('ingredientProfileAvoidInput');
+    const notesEl = document.getElementById('ingredientProfileNotesInput');
+    if (avoidEl) profile.customAvoid = avoidEl.value;
+    if (notesEl) profile.notes = notesEl.value;
+    return profile;
+}
+
+function setIngredientProfilePerson(personId) {
+    const profile = captureUnsavedProfileFormText(getActiveIngredientProfile());
+    profile.activeUser = personId;
+    saveIngredientProfileObject(profile);
+    renderIngredientProfileForm(profile);
+}
+
+function toggleIngredientProfileGoal(goalId) {
+    const profile = captureUnsavedProfileFormText(getActiveIngredientProfile());
+    profile.goals = profile.goals.includes(goalId)
+        ? profile.goals.filter(g => g !== goalId)
+        : [...profile.goals, goalId];
+    saveIngredientProfileObject(profile);
+    renderIngredientProfileForm(profile);
+}
+
+function toggleIngredientProfileDiet(dietId) {
+    const profile = captureUnsavedProfileFormText(getActiveIngredientProfile());
+    profile.diet = profile.diet.includes(dietId)
+        ? profile.diet.filter(g => g !== dietId)
+        : [...profile.diet, dietId];
+    saveIngredientProfileObject(profile);
+    renderIngredientProfileForm(profile);
+}
+
+function saveIngredientProfile() {
+    const profile = getActiveIngredientProfile();
+    const avoidEl = document.getElementById('ingredientProfileAvoidInput');
+    const notesEl = document.getElementById('ingredientProfileNotesInput');
+    if (avoidEl) profile.customAvoid = avoidEl.value.trim();
+    if (notesEl) profile.notes = notesEl.value.trim();
+    saveIngredientProfileObject(profile);
+    syncIngredientGoalBanner();
+    closeIngredientProfile();
+    showNotification('Profile saved', 'success');
+}
+
+function syncIngredientGoalBanner() {
+    const profile = getActiveIngredientProfile();
+    const chipsEl = document.getElementById('ingredientGoalChips');
+    const labelEl = document.getElementById('ingredientActiveProfileLabel');
+    if (!chipsEl) return;
+
+    const peopleMap = { amar: 'Amar', priya: 'Priya', both: 'You' };
+    if (labelEl) labelEl.textContent = `${peopleMap[profile.activeUser] || 'You'}:`;
+
+    const goalLabels = INGREDIENT_PROFILE_GOAL_OPTIONS.reduce((acc, o) => (acc[o.id] = o, acc), {});
+    const dietLabels = INGREDIENT_PROFILE_DIET_OPTIONS.reduce((acc, o) => (acc[o.id] = o, acc), {});
+
+    const goalChips = profile.goals.map(g => {
+        const meta = goalLabels[g];
+        if (!meta) return '';
+        return `<span class="ingredient-goal-chip"><i class="fas ${meta.icon} mr-1"></i>${escapeIngredientHtml(meta.label)}</span>`;
+    });
+    const dietChips = profile.diet.map(d => {
+        const meta = dietLabels[d];
+        if (!meta) return '';
+        return `<span class="ingredient-goal-chip" style="background:#fff7ed;border-color:rgba(234,88,12,0.3);color:#9a3412"><i class="fas ${meta.icon} mr-1"></i>${escapeIngredientHtml(meta.label)}</span>`;
+    });
+
+    chipsEl.innerHTML = [...goalChips, ...dietChips].join('') ||
+        `<span class="ingredient-goal-chip">High Protein</span>`;
+}
+
+// ============================================================
+// INGREDIENT ANALYZER — Barcode + Open Food Facts integration
+// ============================================================
+
+let _ingredientBarcodeDetector = null;
+let _ingredientBarcodeDetectorInitTried = false;
+
+async function getBarcodeDetector() {
+    if (_ingredientBarcodeDetectorInitTried) return _ingredientBarcodeDetector;
+    _ingredientBarcodeDetectorInitTried = true;
+    if (typeof window === 'undefined' || typeof window.BarcodeDetector === 'undefined') {
+        return null;
+    }
+    try {
+        const formats = await window.BarcodeDetector.getSupportedFormats?.();
+        const desired = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'];
+        const usable = Array.isArray(formats) && formats.length
+            ? desired.filter(f => formats.includes(f))
+            : desired;
+        if (!usable.length) return null;
+        _ingredientBarcodeDetector = new window.BarcodeDetector({ formats: usable });
+    } catch (e) {
+        console.warn('BarcodeDetector init failed', e);
+        _ingredientBarcodeDetector = null;
+    }
+    return _ingredientBarcodeDetector;
+}
+
+async function detectBarcodeFromImage(dataUrl) {
+    const detector = await getBarcodeDetector();
+    if (!detector) return null;
+    if (!dataUrl) return null;
+    try {
+        const img = await loadImageFromDataUrl(dataUrl);
+        const detections = await detector.detect(img);
+        if (!detections || !detections.length) return null;
+        const raw = String(detections[0].rawValue || '').trim();
+        if (!raw) return null;
+        if (!/^\d{6,14}$/.test(raw)) return null;
+        return raw;
+    } catch (e) {
+        console.warn('Barcode detection error', e);
+        return null;
+    }
+}
+
+function loadImageFromDataUrl(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load image for barcode detection'));
+        img.src = dataUrl;
+    });
+}
+
+async function fetchOpenFoodFactsProduct(barcode) {
+    const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json?fields=product_name,brands,categories_tags,ingredients_text,ingredients_text_en,allergens_tags,additives_tags,nova_group,nutriscore_grade,nutriments,quantity,serving_size`;
+    try {
+        const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) return null;
+        const json = await resp.json();
+        if (!json || json.status !== 1 || !json.product) return null;
+        return json.product;
+    } catch (e) {
+        console.warn('Open Food Facts fetch failed', e);
+        return null;
+    }
+}
+
+function formatOpenFoodFactsForPrompt(product, barcode) {
+    const name = product.product_name || 'Unknown product';
+    const brand = product.brands ? ` (${product.brands})` : '';
+    const ingredients = product.ingredients_text_en || product.ingredients_text || '(ingredients not listed in Open Food Facts)';
+    const allergens = (product.allergens_tags || []).map(t => t.replace(/^en:/, '')).join(', ') || 'none listed';
+    const additives = (product.additives_tags || []).map(t => t.replace(/^en:/, '')).join(', ') || 'none listed';
+    const novaGroup = product.nova_group ? `NOVA group ${product.nova_group} (1=unprocessed, 4=ultra-processed)` : 'not provided';
+    const nutriScore = product.nutriscore_grade ? product.nutriscore_grade.toUpperCase() : 'not provided';
+    const servingSize = product.serving_size || 'not provided';
+
+    const n = product.nutriments || {};
+    const num = (v) => (v == null || v === '') ? null : Number(v);
+    const per100 = {
+        calories: num(n['energy-kcal_100g']),
+        protein_g: num(n['proteins_100g']),
+        fiber_g: num(n['fiber_100g']),
+        total_sugar_g: num(n['sugars_100g']),
+        added_sugar_g: num(n['added-sugars_100g']),
+        carbs_g: num(n['carbohydrates_100g']),
+        fat_g: num(n['fat_100g']),
+        saturated_fat_g: num(n['saturated-fat_100g']),
+        trans_fat_g: num(n['trans-fat_100g']),
+        sodium_mg: n.sodium_100g != null ? Math.round(Number(n.sodium_100g) * 1000) : (n.salt_100g != null ? Math.round(Number(n.salt_100g) * 400) : null)
+    };
+    const perServing = {
+        calories: num(n['energy-kcal_serving']),
+        protein_g: num(n['proteins_serving']),
+        fiber_g: num(n['fiber_serving']),
+        total_sugar_g: num(n['sugars_serving']),
+        added_sugar_g: num(n['added-sugars_serving']),
+        carbs_g: num(n['carbohydrates_serving']),
+        fat_g: num(n['fat_serving']),
+        saturated_fat_g: num(n['saturated-fat_serving']),
+        trans_fat_g: num(n['trans-fat_serving']),
+        sodium_mg: n.sodium_serving != null ? Math.round(Number(n.sodium_serving) * 1000) : (n.salt_serving != null ? Math.round(Number(n.salt_serving) * 400) : null)
+    };
+
+    const fmtBlock = (obj) => Object.entries(obj)
+        .filter(([, v]) => v != null && isFinite(v))
+        .map(([k, v]) => `  ${k}: ${v}`).join('\n') || '  (no values provided)';
+
+    return `PRODUCT (from Open Food Facts, barcode ${barcode}):
+Name: ${name}${brand}
+Serving size: ${servingSize}
+Categories: ${(product.categories_tags || []).slice(0, 5).map(t => t.replace(/^en:/, '')).join(', ') || 'unknown'}
+NOVA processing class: ${novaGroup}
+Nutri-Score: ${nutriScore}
+Allergens flagged: ${allergens}
+Additives flagged: ${additives}
+
+INGREDIENTS:
+${ingredients}
+
+NUTRITION PER 100 g/ml:
+${fmtBlock(per100)}
+
+NUTRITION PER SERVING:
+${fmtBlock(perServing)}
+
+Note: prefer per-serving values when populating "nutrition_facts". Fall back to per-100g if per-serving is missing.`;
 }
