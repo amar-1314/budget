@@ -16094,7 +16094,7 @@ function buildIngredientAnalysisPrompt(extraContext) {
     const profile = getActiveIngredientProfile();
     const profileBlock = formatProfileForPrompt(profile);
 
-    return `You are a board-certified clinical nutritionist with deep knowledge of food science, ingredient additives, and macronutrient density.
+    return `You are a board-certified clinical nutritionist with deep knowledge of food science, ingredient additives, and macronutrient density. You judge food the way a thoughtful dietitian would: in CONTEXT of what kind of food it is, not against a one-size-fits-all rubric.
 
 ${profileBlock}
 
@@ -16103,11 +16103,13 @@ You will be given ${extraContext} from a packaged food's ingredient label and/or
 Return ONLY valid JSON in this EXACT schema (no markdown, no prose):
 {
   "product_guess": "best guess of product type (e.g. 'Protein bar', 'Greek yogurt', 'Whole-wheat bread')",
+  "category": "dessert_sweets" | "snack_salty" | "snack_sweet" | "meal_main" | "sandwich_wrap" | "soup" | "beverage_sweet" | "beverage_unsweet" | "protein_bar" | "protein_powder" | "breakfast_cereal" | "yogurt_dairy" | "milk_alt_milk" | "cheese" | "bread_grain" | "pasta_rice" | "frozen_meal" | "condiment_sauce" | "spread_nutbutter" | "oil_fat" | "baby_food" | "supplement" | "fresh_produce" | "fresh_meat_seafood" | "candy" | "alcohol" | "other",
+  "category_context": "<=160 chars; explain how this category should be judged (what criteria matter for THIS type of food)",
   "score": <integer 0-100>,
   "verdict": "Excellent" | "Good" | "Mediocre" | "Avoid" | "Unclear",
   "goal_alignment": {
-    "high_protein":  { "score": <integer 0-10>, "note": "<=120 chars" },
-    "high_fiber":    { "score": <integer 0-10>, "note": "<=120 chars" },
+    "high_protein":  { "score": <integer 0-10>, "note": "<=120 chars — if irrelevant for this category, say so" },
+    "high_fiber":    { "score": <integer 0-10>, "note": "<=120 chars — if irrelevant for this category, say so" },
     "overall_health":{ "score": <integer 0-10>, "note": "<=120 chars" }
   },
   "macro_estimate": {
@@ -16144,54 +16146,185 @@ Return ONLY valid JSON in this EXACT schema (no markdown, no prose):
   "consumption_frequency": {
     "tier": "daily" | "few_times_week" | "weekly" | "monthly" | "rarely" | "never",
     "label": "<human-readable label matching the tier>",
-    "portion_hint": "<optional, <=80 chars; e.g. '1 serving (30g)' or empty string>",
-    "reason": "<=140 chars explaining why this cadence is appropriate>"
+    "portion_hint": "<optional, <=80 chars; e.g. '1 serving (25g)' or empty string>",
+    "reason": "<=140 chars explaining why this cadence is appropriate FOR THIS CATEGORY"
   },
-  "verdict_summary": "<1-2 sentence overall verdict>",
-  "recommendation": "<1-3 sentence actionable recommendation given the user's high-protein, high-fiber, overall-health goals>"
+  "verdict_summary": "<1-2 sentences. MUST begin with the category framing, e.g. 'As a dessert, this is one of the cleaner options…' or 'As a protein bar, this falls short on protein density…'>",
+  "recommendation": "<1-3 sentence actionable recommendation, calibrated to the food's category and the user's profile>"
 }
 
-Scoring rubric (target the 0-100 score):
-- Start from 50.
-- Protein density: high +15, medium +5, low -8
-- Fiber density:   high +15, medium +5, low -8
-- Whole-food / minimally processed first ingredients: +10
-- Quality protein source visible (whey, casein, egg, lean meat, legumes, soy isolate): +5 each (cap +10)
-- Significant fiber source (whole grains, psyllium, legumes, chia, flax, oats, vegetables): +5 each (cap +10)
-- Added sugar: none 0, low -5, medium -12, high -20
-- Sodium: low 0, medium -5, high -10
-- Processing level: minimally processed +5, processed 0, ultra-processed -15
-- Artificial colors, sweeteners (sucralose, aspartame, ace-K), preservatives (BHA/BHT/TBHQ/nitrites), seed oils as primary: -5 each (cap -20)
-- Trans fats / partially hydrogenated: -25 (auto-cap score <= 25)
-- Hard dietary violations from the user's profile (e.g. dairy when user is dairy-free, gluten when gluten-free, animal products when vegan): -40 AND ensure verdict is "Avoid" and frequency is "never"
-- Custom-avoid hits from the user's avoid-list: -10 each (cap -30)
-- Final score must be clamped to [0, 100].
+═══════════════════════════════════════════════════════════════════
+SCORING PHILOSOPHY — READ THIS BEFORE ASSIGNING A SCORE
+═══════════════════════════════════════════════════════════════════
 
-Nutrition facts extraction:
-- If a nutrition facts panel is visible (or available from a database), populate "nutrition_facts" with numeric per-serving values. Use null for fields that are not clearly stated. Do NOT invent numbers.
-- If no nutrition panel is available, set "nutrition_facts" to an object with all-null fields.
+STEP 1 — Classify the food FIRST.
+   The category determines what "good" means. Do NOT judge a dessert by
+   the same rubric as a chicken sandwich. Do NOT penalize an 85% dark
+   chocolate bar for being low in protein or fiber — that is normal and
+   appropriate for its category. Do NOT reward a protein powder for
+   being low in fiber — fiber is not its job.
 
-Alternatives:
-- If score < 70 OR there is any dietary violation, suggest 2-3 specific better products (real product names where well-known, otherwise generic categories) that meet the user's goals AND respect every dietary restriction.
+STEP 2 — Score against BEST-IN-CLASS within the category.
+   Ask: "Is this one of the cleaner, more sensible options of its kind?"
+   - A clean 85% dark chocolate bar (real chocolate, cocoa butter, small
+     amount of sugar, soy lecithin, vanilla, nothing else) is a GREAT
+     dessert. It should score 80-90 with verdict "Good" or "Excellent".
+   - A typical milk-chocolate candy bar (sugar first, palm oil, artificial
+     flavors, emulsifiers) is a POOR dessert. 25-40, "Mediocre" or "Avoid".
+   - A clean protein bar with 20g protein, real nut/whey sources, low sugar
+     scores 85+. A "protein bar" that is 10g protein and 18g sugar scores 40.
+   - A grilled chicken wrap with whole-wheat tortilla, lean protein, and
+     vegetables scores 80+. A microwave burrito of refined flour, processed
+     meat, and saturated fat scores 30-45.
+
+STEP 3 — Apply UNIVERSAL quality signals to EVERY category:
+   - Short ingredient list of recognizable items: +
+   - Whole-food primary ingredients: +
+   - Trans fats / partially hydrogenated oils present: HARD CAP score <= 25, verdict = "Avoid"
+   - Artificial colors (Red 40, Yellow 5/6, Blue 1, etc.): −
+   - Artificial sweeteners (sucralose, aspartame, ace-K, saccharin) unless category is explicitly a "diet" product: −
+   - BHA / BHT / TBHQ / sodium nitrite / nitrate: −
+   - Seed oils (soybean, corn, canola, cottonseed) as a PRIMARY ingredient (top 3): − (allowed but penalized)
+   - Refined-flour first ingredient where whole-grain is expected: −
+   - "Ultra-processed" designation: −
+   - Recognizable real-food primary ingredient (e.g. "Cocoa", "Oats", "Chicken breast", "Tomatoes"): +
+
+STEP 4 — Apply CATEGORY-SPECIFIC signals (only the ones that fit):
+
+   dessert_sweets / snack_sweet / candy:
+     · Low added sugar relative to typical for that sub-category: ++
+     · Real fats (butter, cocoa butter, cream) > seed oils: +
+     · Dark chocolate (>=70% cocoa) is GENERALLY a good dessert option
+     · Do NOT penalize for low protein/fiber — that is expected.
+
+   snack_salty / chip / cracker:
+     · Whole-grain or legume base: +
+     · Oil quality (avocado/olive > seed oils): +
+     · Sodium per serving (lower is better)
+
+   meal_main / sandwich_wrap / soup / frozen_meal:
+     · Protein quality and adequacy: ++
+     · Fiber from whole grains, legumes, vegetables: ++
+     · Macro balance, not extreme in any direction
+     · Sodium (frozen meals are often very high): −
+     · Hidden sugar in savory items: −
+
+   beverage_sweet / beverage_unsweet:
+     · Added sugar (any in a beverage is a meaningful negative): −−
+     · Artificial sweeteners (penalize even in "diet" sodas, though less than sugar)
+     · Real fruit or whole-food base: +
+     · Water, plain tea, plain coffee = "daily"
+     · Soda = "rarely" or "never"
+
+   protein_bar / protein_powder:
+     · Protein density (>15g per ~200kcal): ++
+     · Source quality (whey isolate, casein, egg, pea+rice combo): +
+     · Sugar / sugar alcohols: −
+     · Filler proteins / proprietary blends: −
+
+   breakfast_cereal:
+     · Fiber per serving (>=5g): ++
+     · Added sugar (cereals are notorious): −−
+     · Whole-grain first: +
+
+   yogurt_dairy / milk_alt_milk / cheese:
+     · Protein per serving: +
+     · Added sugar (flavored yogurts are often desserts in disguise): −
+     · Live cultures / fermentation: +
+     · Carrageenan / gums in alt milks: minor −
+
+   bread_grain / pasta_rice:
+     · Whole grain first ingredient: ++
+     · Fiber: +
+     · Added sugar / dough conditioners: −
+
+   condiment_sauce / spread_nutbutter / oil_fat:
+     · Judge sparingly — small portion sizes
+     · Oil quality, sodium per serving, sugar per serving
+     · A nut butter with ONLY nuts (and maybe salt) scores 90+
+
+   fresh_produce / fresh_meat_seafood:
+     · Default 90-100 unless processed/cured
+     · "daily" frequency for most produce
+
+   supplement / baby_food / alcohol: judge with appropriate context.
+
+STEP 5 — User goals are PREFERENCES for FREQUENCY, not a stick to beat every food with.
+   - If the user's profile says "high protein, high fiber" and they scan
+     a chocolate bar, that does NOT make the chocolate bar bad. The
+     overall score still reflects category-relative quality. Adjust the
+     goal_alignment.notes to say "not a protein source — typical for
+     dessert; ok occasionally" instead of giving it 0/10 and tanking
+     the score.
+   - goal_alignment.score reflects RELEVANCE/CONTRIBUTION to that goal
+     (0 = does not contribute, 10 = strongly contributes). It is NOT
+     subtracted from the overall score.
+   - If the user's PROFILE category prioritizes "weight loss" and the
+     scanned item is a calorie-dense dessert, lower the FREQUENCY but
+     keep the score honest to category.
+
+STEP 6 — Hard dietary violations OVERRIDE everything.
+   Allergen present that the user opted out of, animal product when
+   vegan, etc.:
+   · Set verdict = "Avoid", frequency = "never", score ≤ 25.
+   · Explain in red_flags AND verdict_summary.
+
+═══════════════════════════════════════════════════════════════════
+SCORE RANGE GUIDANCE (after category-relative judgment)
+═══════════════════════════════════════════════════════════════════
+  90-100  Best-in-class for its category; clean ingredients; aligns with user goals
+  75-89   Solid choice in its category; minor caveats
+  60-74   Mediocre; some concerns but acceptable in moderation
+  40-59   Frequent concerns; consume sparingly
+  20-39   Mostly junk; avoid most of the time
+   0-19   Trans fats / banned additives / extreme processing; do not consume
+
+Verdict-to-score mapping:
+  Excellent ↔ 85-100   Good ↔ 70-84   Mediocre ↔ 45-69   Avoid ↔ 0-44
+
+═══════════════════════════════════════════════════════════════════
+CONSUMPTION FREQUENCY (category-aware, not score-only)
+═══════════════════════════════════════════════════════════════════
+Adjust the default for the CATEGORY:
+  · fresh_produce / plain water / plain whole-grain → "daily"
+  · clean yogurt / clean protein source / whole-grain bread → "daily" or "few_times_week"
+  · clean dark chocolate / clean nut bar / clean dessert → "few_times_week" to "weekly"
+  · typical packaged snack with concerns → "weekly" to "monthly"
+  · sugary cereal / sugary yogurt / ultra-processed dessert → "monthly" to "rarely"
+  · soda / candy / trans-fat-containing items → "rarely" to "never"
+Frequency reflects WHAT MAKES SENSE for the category, not just the score.
+Tier MUST be one of the six allowed values. Label MUST match the tier
+("Daily", "A few times a week", "Once a week", "Once a month",
+"Rarely / special occasions", "Avoid").
+
+═══════════════════════════════════════════════════════════════════
+ALTERNATIVES
+═══════════════════════════════════════════════════════════════════
+- If score < 70 OR a dietary violation, suggest 2-3 alternatives IN THE
+  SAME CATEGORY that are better. Don't recommend a chicken sandwich as
+  an alternative to a chocolate bar — recommend a better chocolate bar.
 - If score >= 70 and no violations, return an empty alternatives array.
 - Never recommend an alternative that violates a hard dietary flag.
 
-Consumption frequency guidance (default mapping; adjust for category context like protein powders, condiments, etc.):
-- score 85-100 AND minimally processed AND no red flags → "daily"
-- score 70-84 → "few_times_week"
-- score 55-69 → "weekly"
-- score 40-54 → "monthly"
-- score 20-39 → "rarely"
-- score 0-19 OR contains trans fats / banned additives / heavy ultra-processing → "never"
-Override the score-based default only when category warrants it (e.g. high-quality protein powder may still be "daily" even at score 75; pure sugar candy is "rarely" or "never" regardless). Tier MUST be one of the six allowed values. Label MUST be human-readable and match the tier ("Daily", "A few times a week", "Once a week", "Once a month", "Rarely / special occasions", "Avoid").
+═══════════════════════════════════════════════════════════════════
+NUTRITION FACTS
+═══════════════════════════════════════════════════════════════════
+- Populate per-serving numeric values from the panel. Use null for fields
+  not clearly stated. Do NOT invent numbers.
+- If no panel visible, set "nutrition_facts" to an object with all-null fields.
 
-If the text is clearly not an ingredient list (random receipts, recipes, blank, gibberish), set:
-- "score": null
-- "verdict": "Unclear"
-- "verdict_summary": explain what was found instead
-- "recommendation": ask the user to retake the photo of the back-of-pack ingredient panel
-- empty arrays for healthy_ingredients, concerning_ingredients, red_flags
-- "consumption_frequency": { "tier": "never", "label": "Unknown", "portion_hint": "", "reason": "Could not determine — retake the photo." }
+═══════════════════════════════════════════════════════════════════
+UNCLEAR INPUT
+═══════════════════════════════════════════════════════════════════
+If the text is clearly not an ingredient list (random receipts, recipes,
+blank, gibberish):
+  · "category": "other", "category_context": "Could not identify the product"
+  · "score": null
+  · "verdict": "Unclear"
+  · "verdict_summary": explain what was found instead
+  · "recommendation": ask the user to retake the photo of the back-of-pack ingredient panel
+  · empty arrays for healthy_ingredients, concerning_ingredients, red_flags
+  · "consumption_frequency": { "tier": "never", "label": "Unknown", "portion_hint": "", "reason": "Could not determine — retake the photo." }
 
 Be concise. Return ONLY the JSON object.`;
 }
@@ -16241,6 +16374,55 @@ async function analyzeIngredientHealthFromImage(imageDataUrl) {
     return normalizeIngredientAnalysis(parsed);
 }
 
+const INGREDIENT_CATEGORY_ALLOWED = new Set([
+    'dessert_sweets', 'snack_salty', 'snack_sweet', 'meal_main',
+    'sandwich_wrap', 'soup', 'beverage_sweet', 'beverage_unsweet',
+    'protein_bar', 'protein_powder', 'breakfast_cereal', 'yogurt_dairy',
+    'milk_alt_milk', 'cheese', 'bread_grain', 'pasta_rice', 'frozen_meal',
+    'condiment_sauce', 'spread_nutbutter', 'oil_fat', 'baby_food',
+    'supplement', 'fresh_produce', 'fresh_meat_seafood', 'candy',
+    'alcohol', 'other'
+]);
+
+const INGREDIENT_CATEGORY_LABELS = {
+    dessert_sweets:      'Dessert',
+    snack_salty:         'Salty snack',
+    snack_sweet:         'Sweet snack',
+    meal_main:           'Meal',
+    sandwich_wrap:       'Sandwich / wrap',
+    soup:                'Soup',
+    beverage_sweet:      'Sweet beverage',
+    beverage_unsweet:    'Beverage',
+    protein_bar:         'Protein bar',
+    protein_powder:      'Protein powder',
+    breakfast_cereal:    'Cereal',
+    yogurt_dairy:        'Yogurt / dairy',
+    milk_alt_milk:       'Milk / alt-milk',
+    cheese:              'Cheese',
+    bread_grain:         'Bread / grain',
+    pasta_rice:          'Pasta / rice',
+    frozen_meal:         'Frozen meal',
+    condiment_sauce:     'Condiment / sauce',
+    spread_nutbutter:    'Spread / nut butter',
+    oil_fat:             'Oil / fat',
+    baby_food:           'Baby food',
+    supplement:          'Supplement',
+    fresh_produce:       'Fresh produce',
+    fresh_meat_seafood:  'Fresh meat / seafood',
+    candy:               'Candy',
+    alcohol:             'Alcohol',
+    other:               'Other'
+};
+
+function normalizeIngredientCategory(raw) {
+    const v = String(raw || '').toLowerCase().trim().replace(/[\s\-/]+/g, '_');
+    return INGREDIENT_CATEGORY_ALLOWED.has(v) ? v : 'other';
+}
+
+function getIngredientCategoryLabel(category) {
+    return INGREDIENT_CATEGORY_LABELS[category] || 'Other';
+}
+
 function normalizeIngredientAnalysis(raw) {
     const allowedDensity = new Set(['low', 'medium', 'high']);
     const allowedSugar = new Set(['none', 'low', 'medium', 'high']);
@@ -16269,8 +16451,12 @@ function normalizeIngredientAnalysis(raw) {
         score = null;
     }
 
+    const category = normalizeIngredientCategory(raw?.category);
+
     return {
         product_guess: String(raw?.product_guess || '').trim() || 'Unknown product',
+        category,
+        category_context: String(raw?.category_context || '').trim().slice(0, 200),
         score,
         verdict,
         goal_alignment: {
@@ -16487,6 +16673,20 @@ function renderIngredientAnalysis(analysis, ocrText, sourceLabel) {
 
     const guess = document.getElementById('ingredientProductGuess');
     if (guess) guess.textContent = analysis.product_guess || '—';
+
+    const catBadge = document.getElementById('ingredientCategoryBadge');
+    const catLabel = document.getElementById('ingredientCategoryLabel');
+    const catContext = document.getElementById('ingredientCategoryContext');
+    if (catBadge && catLabel) {
+        const cat = analysis.category;
+        if (cat && cat !== 'other') {
+            catLabel.textContent = `Judged as: ${getIngredientCategoryLabel(cat)}`;
+            if (catContext) catContext.textContent = analysis.category_context || '';
+            catBadge.classList.remove('hidden');
+        } else {
+            catBadge.classList.add('hidden');
+        }
+    }
 
     const summary = document.getElementById('ingredientVerdictSummary');
     if (summary) summary.textContent = analysis.verdict_summary || 'No summary available.';
