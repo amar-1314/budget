@@ -16107,11 +16107,11 @@ Return ONLY valid JSON in this EXACT schema (no markdown, no prose):
   "category_context": "<=160 chars; explain how this category should be judged (what criteria matter for THIS type of food)",
   "score": <integer 0-100>,
   "verdict": "Excellent" | "Good" | "Mediocre" | "Avoid" | "Unclear",
-  "goal_alignment": {
-    "high_protein":  { "score": <integer 0-10>, "note": "<=120 chars — if irrelevant for this category, say so" },
-    "high_fiber":    { "score": <integer 0-10>, "note": "<=120 chars — if irrelevant for this category, say so" },
-    "overall_health":{ "score": <integer 0-10>, "note": "<=120 chars" }
-  },
+  "goal_alignment": [
+    { "axis": "<axis_id from the AXIS REGISTRY below>", "score": <integer 0-10>, "note": "<=120 chars, neutral, category-aware>" },
+    { "axis": "<axis_id>", "score": <integer 0-10>, "note": "<=120 chars>" },
+    { "axis": "overall_health", "score": <integer 0-10>, "note": "<=120 chars>" }
+  ],
   "macro_estimate": {
     "protein_density":  "low" | "medium" | "high",
     "fiber_density":    "low" | "medium" | "high",
@@ -16149,9 +16149,85 @@ Return ONLY valid JSON in this EXACT schema (no markdown, no prose):
     "portion_hint": "<optional, <=80 chars; e.g. '1 serving (25g)' or empty string>",
     "reason": "<=140 chars explaining why this cadence is appropriate FOR THIS CATEGORY"
   },
-  "verdict_summary": "<1-2 sentences. MUST begin with the category framing, e.g. 'As a dessert, this is one of the cleaner options…' or 'As a protein bar, this falls short on protein density…'>",
-  "recommendation": "<1-3 sentence actionable recommendation, calibrated to the food's category and the user's profile>"
+  "verdict_summary": "<1-2 sentences. MUST begin with the category framing — 'As a [category], this is…'. If it's a clean, best-in-class option, the FIRST sentence MUST acknowledge that positively (e.g. 'As a dessert, this is one of the cleaner options on the shelf — short ingredient list, real cocoa, low added sugar.'). Do NOT lead with a generic negative like 'this is a processed treat with added sugar' if the item is actually clean for its category.>",
+  "recommendation": "<1-3 sentence actionable recommendation, calibrated to the food's category and the user's profile. For clean category-appropriate items, recommend a realistic positive habit (e.g. '1 serving (25g) daily after dinner is a perfectly reasonable habit') instead of arbitrarily restricting it.>"
 }
+
+═══════════════════════════════════════════════════════════════════
+GOAL ALIGNMENT — PICK 3 AXES THAT ACTUALLY MATTER
+═══════════════════════════════════════════════════════════════════
+The "goal_alignment" array MUST contain EXACTLY 3 entries. One MUST be
+"overall_health". The other 2 are picked from the AXIS REGISTRY based
+on (a) what kind of food this is and (b) the user's stated goals.
+Do NOT force protein/fiber onto every scan. Judge a salad by protein
+and fiber; judge rice by carb quality; judge chocolate by sugar load
+and fat quality; judge chips by sodium and fat quality.
+
+Allowed axis IDs (use exactly these strings):
+  overall_health      — universal: holistic verdict of healthfulness
+  protein_quality     — for meals, meats, dairy, beans, protein products
+  fiber_content       — for grains, fruits, vegetables, legumes, cereals
+  carb_quality        — for rice, pasta, bread, cereals, tortillas
+  fat_quality         — for oils, nut butters, dressings, cheese, chocolate, fried snacks
+  sugar_load          — for desserts, sweet drinks, yogurts, cereals, sauces
+  sodium_load         — for chips, soups, frozen meals, deli meat, condiments
+  satiety             — for meals, snack bars, anything portion-controlled
+  nutrient_density    — for produce, whole foods, fortified items
+  glycemic_impact     — for carb-heavy items, sweet drinks, refined grains
+  whole_food_basis    — for items where ingredients should be recognizable foods
+  processing_level    — for ultra-processed packaged products
+  ingredient_quality  — for items judged primarily by their ingredient list
+
+DEFAULT AXIS PICKS BY CATEGORY (pick these unless the user's profile
+calls for something different):
+  dessert_sweets / candy / snack_sweet → sugar_load, fat_quality, overall_health
+  snack_salty                          → sodium_load, fat_quality, overall_health
+  meal_main / sandwich_wrap / soup     → protein_quality, fiber_content, overall_health
+  frozen_meal                          → protein_quality, sodium_load, overall_health
+  beverage_sweet                       → sugar_load, ingredient_quality, overall_health
+  beverage_unsweet                     → ingredient_quality, processing_level, overall_health
+  protein_bar / protein_powder         → protein_quality, sugar_load, overall_health
+  breakfast_cereal                     → fiber_content, sugar_load, overall_health
+  yogurt_dairy                         → protein_quality, sugar_load, overall_health
+  milk_alt_milk                        → protein_quality, ingredient_quality, overall_health
+  cheese                               → protein_quality, fat_quality, overall_health
+  bread_grain                          → carb_quality, fiber_content, overall_health
+  pasta_rice                           → carb_quality, fiber_content, overall_health
+  condiment_sauce                      → sodium_load, ingredient_quality, overall_health
+  spread_nutbutter                     → fat_quality, ingredient_quality, overall_health
+  oil_fat                              → fat_quality, processing_level, overall_health
+  fresh_produce                        → nutrient_density, fiber_content, overall_health
+  fresh_meat_seafood                   → protein_quality, fat_quality, overall_health
+  supplement                           → ingredient_quality, processing_level, overall_health
+  baby_food                            → ingredient_quality, sugar_load, overall_health
+  alcohol                              → sugar_load, ingredient_quality, overall_health
+
+OVERRIDE RULE: if the user's profile lists a goal that is RELEVANT to
+the food category, swap one of the non-overall_health axes for that
+goal's axis. Goal → axis mapping:
+  high protein   → protein_quality
+  high fiber     → fiber_content
+  low sugar      → sugar_load
+  low sodium     → sodium_load
+  whole foods    → whole_food_basis or ingredient_quality
+  muscle gain    → protein_quality
+  weight loss    → satiety (for meals/snacks) or sugar_load (for sweets)
+Only swap if the axis is genuinely relevant. Do NOT add "protein_quality"
+to a chocolate bar just because the user wants high protein — that's
+exactly the rigidity we're trying to avoid.
+
+SCORING WITHIN EACH AXIS (0-10):
+  Read the score AS A QUALITY READING for that axis relative to the
+  user's goal direction. Examples:
+    · protein_quality 9/10 = excellent protein source for this category
+    · sugar_load 9/10 = LOW sugar load (good); 2/10 = HIGH sugar (bad)
+    · sodium_load 9/10 = LOW sodium; 2/10 = high sodium
+    · fat_quality 9/10 = clean fats (olive, avocado, cocoa butter)
+    · carb_quality 9/10 = whole grain, intact, high fiber
+    · processing_level 9/10 = minimally processed
+  Higher is ALWAYS better in the UI, regardless of axis. Notes should
+  be neutral facts, not warnings. E.g. "Cocoa butter — clean saturated
+  fat, normal for dark chocolate" instead of "High in saturated fat".
 
 ═══════════════════════════════════════════════════════════════════
 SCORING PHILOSOPHY — READ THIS BEFORE ASSIGNING A SCORE
@@ -16193,9 +16269,17 @@ STEP 4 — Apply CATEGORY-SPECIFIC signals (only the ones that fit):
 
    dessert_sweets / snack_sweet / candy:
      · Low added sugar relative to typical for that sub-category: ++
+       (a 25g dessert with <=6g added sugar is LOW; <=4g is excellent)
      · Real fats (butter, cocoa butter, cream) > seed oils: +
      · Dark chocolate (>=70% cocoa) is GENERALLY a good dessert option
+     · 85%+ dark chocolate with a short clean list (cocoa, cocoa butter,
+       sugar, lecithin, vanilla) should land at 80-90, verdict "Good"
+       or "Excellent". Do NOT mark it "Mediocre" or "Avoid" and do NOT
+       set added_sugar to "medium/high" if it's 3-6g per serving.
      · Do NOT penalize for low protein/fiber — that is expected.
+     · "Added sugar" belongs in red_flags ONLY when added sugar is high
+       for the sub-category (e.g. >12g/serving for chocolate, >15g for
+       a typical dessert). Do NOT list small expected sugar as a red flag.
 
    snack_salty / chip / cracker:
      · Whole-grain or legume base: +
@@ -16252,13 +16336,12 @@ STEP 4 — Apply CATEGORY-SPECIFIC signals (only the ones that fit):
 STEP 5 — User goals are PREFERENCES for FREQUENCY, not a stick to beat every food with.
    - If the user's profile says "high protein, high fiber" and they scan
      a chocolate bar, that does NOT make the chocolate bar bad. The
-     overall score still reflects category-relative quality. Adjust the
-     goal_alignment.notes to say "not a protein source — typical for
-     dessert; ok occasionally" instead of giving it 0/10 and tanking
-     the score.
-   - goal_alignment.score reflects RELEVANCE/CONTRIBUTION to that goal
-     (0 = does not contribute, 10 = strongly contributes). It is NOT
-     subtracted from the overall score.
+     overall score still reflects category-relative quality. Do NOT
+     force protein_quality or fiber_content into the goal_alignment for
+     a dessert — pick the axes that ACTUALLY matter for the category.
+   - The goal_alignment NOTE must NOT be moralizing. Phrase as a neutral
+     fact, not a warning. Good: "Low added sugar for the category."
+     Bad: "This product is not a good protein source."
    - If the user's PROFILE category prioritizes "weight loss" and the
      scanned item is a calorie-dense dessert, lower the FREQUENCY but
      keep the score honest to category.
@@ -16285,13 +16368,22 @@ Verdict-to-score mapping:
 ═══════════════════════════════════════════════════════════════════
 CONSUMPTION FREQUENCY (category-aware, not score-only)
 ═══════════════════════════════════════════════════════════════════
-Adjust the default for the CATEGORY:
+Anchor the frequency to what a thoughtful dietitian would tell a healthy
+adult — NOT to a worst-case "never eat sugar" stance. Single small
+serving cadence:
   · fresh_produce / plain water / plain whole-grain → "daily"
-  · clean yogurt / clean protein source / whole-grain bread → "daily" or "few_times_week"
-  · clean dark chocolate / clean nut bar / clean dessert → "few_times_week" to "weekly"
-  · typical packaged snack with concerns → "weekly" to "monthly"
-  · sugary cereal / sugary yogurt / ultra-processed dessert → "monthly" to "rarely"
-  · soda / candy / trans-fat-containing items → "rarely" to "never"
+  · clean yogurt / clean protein source / whole-grain bread → "daily"
+  · clean dark chocolate (>=70% cocoa, short clean ingredient list,
+    <=6g added sugar per serving) → "daily" (1 small serving/day is fine)
+  · clean nut bar / clean dessert with whole-food base → "daily" to "few_times_week"
+  · typical packaged sweet snack with some concerns → "few_times_week" to "weekly"
+  · sugary cereal / flavored sugary yogurt / standard milk-chocolate candy → "weekly" to "monthly"
+  · ultra-processed dessert / cookies / pastries from a package → "monthly" to "rarely"
+  · soda / energy drinks / trans-fat-containing items / candy with artificial colors → "rarely" to "never"
+DO NOT collapse a clean dessert to "monthly" just because it contains
+ANY added sugar — small added sugar is normal and expected for the
+category. Only push to "monthly" or "rarely" when the item is clearly
+junk for its category.
 Frequency reflects WHAT MAKES SENSE for the category, not just the score.
 Tier MUST be one of the six allowed values. Label MUST match the tier
 ("Daily", "A few times a week", "Once a week", "Once a month",
@@ -16314,10 +16406,24 @@ NUTRITION FACTS
 - If no panel visible, set "nutrition_facts" to an object with all-null fields.
 
 ═══════════════════════════════════════════════════════════════════
-UNCLEAR INPUT
+UNCLEAR INPUT — STRICT RULES
 ═══════════════════════════════════════════════════════════════════
-If the text is clearly not an ingredient list (random receipts, recipes,
-blank, gibberish):
+"Unclear" is reserved EXCLUSIVELY for inputs that are NOT a food product
+(random receipts, recipes, blank images, gibberish, non-food packaging).
+
+If you can identify the product type at all (e.g. you can write
+"product_guess": "Dark chocolate bar"), you MUST:
+  · pick a real category from the enum (never "other" for an identified food)
+  · assign a real integer score (never null)
+  · assign a real verdict from {Excellent, Good, Mediocre, Avoid}
+  · NEVER use "Unclear"
+
+Use "Unclear" ONLY when product_guess is itself unknowable. Partial
+nutrition data, missing serving size, or a hard-to-read label are NOT
+reasons to fall back to "Unclear" — make your best category-aware
+assessment from what you can see.
+
+When (and only when) the input truly is not a food product:
   · "category": "other", "category_context": "Could not identify the product"
   · "score": null
   · "verdict": "Unclear"
@@ -16325,6 +16431,44 @@ blank, gibberish):
   · "recommendation": ask the user to retake the photo of the back-of-pack ingredient panel
   · empty arrays for healthy_ingredients, concerning_ingredients, red_flags
   · "consumption_frequency": { "tier": "never", "label": "Unknown", "portion_hint": "", "reason": "Could not determine — retake the photo." }
+
+═══════════════════════════════════════════════════════════════════
+WORKED EXAMPLE — calibrate to this for a clean dark chocolate bar
+═══════════════════════════════════════════════════════════════════
+Input: an 85% dark chocolate bar with ingredients
+"Chocolate, cocoa butter, sugar, cocoa processed with alkali, soy
+lecithin, vanilla powder", 25g serving, 3g added sugar, 3g protein,
+3g fiber, 7g saturated fat.
+
+Expected analysis (do NOT copy verbatim — calibrate):
+  · product_guess: "85% dark chocolate bar"
+  · category: "dessert_sweets"
+  · category_context: "Judge as a dessert — low added sugar, clean fats, and short ingredient list matter more than protein/fiber."
+  · score: 85
+  · verdict: "Good" (could justify "Excellent" if 88+)
+  · goal_alignment: [
+      { axis: "sugar_load",     score: 8, note: "Only 3g added sugar per 25g serving — low for chocolate." },
+      { axis: "fat_quality",    score: 7, note: "Cocoa butter — clean saturated fat, natural for dark chocolate." },
+      { axis: "overall_health", score: 8, note: "Clean dessert; flavonoids in cocoa are a small plus in moderation." }
+    ]
+    (Notice we did NOT use protein_quality or fiber_content — they are
+     irrelevant for a dessert. Even though the user's profile has "high
+     protein", we did NOT shoehorn it in.)
+  · macro_estimate.added_sugar: "low"
+  · macro_estimate.processing_level: "processed" (not ultra-processed — short clean list)
+  · healthy_ingredients: cocoa, cocoa butter (real fats)
+  · concerning_ingredients: [] or just "sugar" at severity "low"
+  · red_flags: [] (NOT "Added sugar" — 3g is low for the category)
+  · consumption_frequency.tier: "daily"
+  · consumption_frequency.label: "Daily"
+  · consumption_frequency.portion_hint: "1 serving (25g)"
+  · consumption_frequency.reason: "1 small serving/day is a reasonable habit for a clean dark chocolate."
+  · verdict_summary: "As a dessert, this is one of the cleaner options on the shelf — short ingredient list, real cocoa, only 3g added sugar per serving."
+  · recommendation: "1 serving (25g) after dinner or with coffee is a perfectly reasonable daily habit. Just keep it to one serving — dark chocolate is calorie-dense."
+
+Counter-example — a typical milk-chocolate candy bar (sugar listed
+first, palm oil, artificial flavors, 22g added sugar per serving):
+score 30, verdict "Avoid", frequency "monthly" to "rarely".
 
 Be concise. Return ONLY the JSON object.`;
 }
@@ -16438,7 +16582,7 @@ function normalizeIngredientAnalysis(raw) {
 
     const sanitizeArr = (arr, fn) => Array.isArray(arr) ? arr.map(fn).filter(Boolean) : [];
 
-    const goal = raw?.goal_alignment || {};
+    const goalAxes = normalizeGoalAxes(raw?.goal_alignment);
     const macro = raw?.macro_estimate || {};
 
     let verdict = String(raw?.verdict || '').trim();
@@ -16459,11 +16603,7 @@ function normalizeIngredientAnalysis(raw) {
         category_context: String(raw?.category_context || '').trim().slice(0, 200),
         score,
         verdict,
-        goal_alignment: {
-            high_protein:  normalizeGoalEntry(goal.high_protein),
-            high_fiber:    normalizeGoalEntry(goal.high_fiber),
-            overall_health: normalizeGoalEntry(goal.overall_health)
-        },
+        goal_alignment: goalAxes,
         macro_estimate: {
             protein_density: allowedDensity.has(macro.protein_density) ? macro.protein_density : 'low',
             fiber_density:   allowedDensity.has(macro.fiber_density)   ? macro.fiber_density   : 'low',
@@ -16529,6 +16669,34 @@ function normalizeNutritionFacts(raw) {
     };
 }
 
+// Registry of axes the AI may pick for the per-scan "Goal Alignment" panel.
+// The model picks EXACTLY 3 axes per scan, chosen for what actually matters
+// for THIS food category and the user's stated goals (e.g. carb_quality for
+// rice/pasta, sugar_load for chocolate, protein_quality for a chicken bowl).
+const INGREDIENT_GOAL_AXIS_REGISTRY = {
+    overall_health:     { label: 'Overall health',     icon: 'fa-heart-pulse' },
+    protein_quality:    { label: 'Protein quality',    icon: 'fa-drumstick-bite' },
+    fiber_content:      { label: 'Fiber content',      icon: 'fa-seedling' },
+    carb_quality:       { label: 'Carb quality',       icon: 'fa-wheat-awn' },
+    fat_quality:        { label: 'Fat quality',        icon: 'fa-bacon' },
+    sugar_load:         { label: 'Sugar load',         icon: 'fa-cube' },
+    sodium_load:        { label: 'Sodium load',        icon: 'fa-droplet' },
+    satiety:            { label: 'Satiety',            icon: 'fa-utensils' },
+    nutrient_density:   { label: 'Nutrient density',   icon: 'fa-carrot' },
+    glycemic_impact:    { label: 'Glycemic impact',    icon: 'fa-chart-line' },
+    whole_food_basis:   { label: 'Whole-food basis',   icon: 'fa-apple-whole' },
+    processing_level:   { label: 'Processing level',   icon: 'fa-industry' },
+    ingredient_quality: { label: 'Ingredient quality', icon: 'fa-list-check' }
+};
+
+// For backward compatibility with previously-saved scans that used the old
+// fixed-keys schema { high_protein, high_fiber, overall_health }.
+const INGREDIENT_LEGACY_GOAL_AXIS_MAP = {
+    high_protein:   'protein_quality',
+    high_fiber:     'fiber_content',
+    overall_health: 'overall_health'
+};
+
 const INGREDIENT_FREQUENCY_TIERS = {
     daily:           { label: 'Daily',                      icon: 'fa-sun',           tone: 'great' },
     few_times_week:  { label: 'A few times a week',         icon: 'fa-calendar-week', tone: 'good'  },
@@ -16563,13 +16731,57 @@ function normalizeConsumptionFrequency(entry, scoreForFallback) {
     };
 }
 
-function normalizeGoalEntry(entry) {
-    const score = Number(entry?.score);
-    const safeScore = isFinite(score) ? Math.max(0, Math.min(10, Math.round(score))) : 0;
+function normalizeGoalAxisEntry(rawAxisId, score, note) {
+    const axisKey = String(rawAxisId || '').trim();
+    const resolved = INGREDIENT_GOAL_AXIS_REGISTRY[axisKey]
+        ? axisKey
+        : (INGREDIENT_LEGACY_GOAL_AXIS_MAP[axisKey] || null);
+    if (!resolved) return null;
+
+    const numericScore = Number(score);
+    const safeScore = isFinite(numericScore)
+        ? Math.max(0, Math.min(10, Math.round(numericScore)))
+        : 0;
+
     return {
+        axis: resolved,
+        label: INGREDIENT_GOAL_AXIS_REGISTRY[resolved].label,
+        icon:  INGREDIENT_GOAL_AXIS_REGISTRY[resolved].icon,
         score: safeScore,
-        note: String(entry?.note || '').trim()
+        note:  String(note || '').trim().slice(0, 160)
     };
+}
+
+// Accepts the new array shape OR the legacy object shape
+// { high_protein, high_fiber, overall_health }. Always returns an array.
+function normalizeGoalAxes(raw) {
+    const result = [];
+    const seen = new Set();
+    const pushIfNew = (entry) => {
+        if (!entry) return;
+        if (seen.has(entry.axis)) return;
+        seen.add(entry.axis);
+        result.push(entry);
+    };
+
+    if (Array.isArray(raw)) {
+        for (const item of raw) {
+            if (!item || typeof item !== 'object') continue;
+            pushIfNew(normalizeGoalAxisEntry(item.axis, item.score, item.note));
+        }
+    } else if (raw && typeof raw === 'object') {
+        // Legacy { high_protein: {score, note}, ... } shape from older saved scans.
+        for (const [key, value] of Object.entries(raw)) {
+            if (!value || typeof value !== 'object') continue;
+            pushIfNew(normalizeGoalAxisEntry(key, value.score, value.note));
+        }
+    }
+
+    // Always guarantee overall_health is present so the UI has a stable anchor.
+    if (!seen.has('overall_health')) {
+        pushIfNew(normalizeGoalAxisEntry('overall_health', 0, ''));
+    }
+    return result.slice(0, 4);
 }
 
 function getIngredientVerdictTier(verdict, score) {
@@ -16753,20 +16965,24 @@ function renderIngredientFrequency(freq) {
 function renderIngredientGoals(goals) {
     const grid = document.getElementById('ingredientGoalGrid');
     if (!grid) return;
-    const items = [
-        { key: 'high_protein', label: 'High Protein', icon: 'fa-drumstick-bite' },
-        { key: 'high_fiber', label: 'High Fiber', icon: 'fa-seedling' },
-        { key: 'overall_health', label: 'Overall Health', icon: 'fa-heart-pulse' }
-    ];
 
-    grid.innerHTML = items.map(({ key, label, icon }) => {
-        const g = goals?.[key] || { score: 0, note: '' };
-        const pct = Math.max(0, Math.min(10, g.score)) * 10;
+    const axes = Array.isArray(goals) ? goals : normalizeGoalAxes(goals);
+    if (!axes.length) {
+        grid.innerHTML = '';
+        return;
+    }
+
+    grid.innerHTML = axes.map((g) => {
+        const meta = INGREDIENT_GOAL_AXIS_REGISTRY[g.axis] || { label: g.label, icon: g.icon };
+        const label = g.label || meta.label || g.axis;
+        const icon = g.icon || meta.icon || 'fa-bullseye';
+        const score = Math.max(0, Math.min(10, Number(g.score) || 0));
+        const pct = score * 10;
         return `
             <div class="ingredient-goal-card">
                 <div class="ingredient-goal-card-header">
                     <div class="ingredient-goal-card-name"><i class="fas ${icon} mr-1 text-emerald-600"></i>${escapeIngredientHtml(label)}</div>
-                    <div class="ingredient-goal-card-score">${g.score}<span style="font-size:11px;color:#94a3b8;font-weight:600">/10</span></div>
+                    <div class="ingredient-goal-card-score">${score}<span style="font-size:11px;color:#94a3b8;font-weight:600">/10</span></div>
                 </div>
                 <div class="ingredient-goal-bar"><div class="ingredient-goal-bar-fill" style="width:${pct}%"></div></div>
                 <div class="ingredient-goal-card-note">${escapeIngredientHtml(g.note || '')}</div>
