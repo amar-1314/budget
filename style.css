@@ -839,7 +839,20 @@ body.modal-open {
        header is always visible on iPhones. !important is needed because the
        HTML carries inline max-height:92vh. */
     max-height: 92vh; /* fallback for browsers without dvh support */
-    max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px)) !important;
+    max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)) !important;
+}
+
+/* Anchor any modal that hosts an ingredient-modal-content to the TOP of the
+   safe area instead of vertical-centering it. iOS Safari's position:fixed +
+   align-items:center combo otherwise pushes the centered modal's top edge
+   behind the notch/status bar, hiding the header + close button. */
+.modal:has(.ingredient-modal-content) {
+    align-items: flex-start;
+    padding-top: max(env(safe-area-inset-top, 0px), 12px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 12px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    box-sizing: border-box;
 }
 .ingredient-modal-header {
     position: relative;
