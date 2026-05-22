@@ -832,6 +832,14 @@ body.modal-open {
 /* ============================================================ */
 .ingredient-modal-content {
     overflow: hidden;
+    /* iOS Safari fix: .modal centers content vertically with overflow:hidden,
+       so a 92vh modal can extend above the visible viewport (behind the
+       notch/status bar) and clip the header + close X. Switch to dvh (which
+       excludes browser chrome) and subtract safe-area insets so the entire
+       header is always visible on iPhones. !important is needed because the
+       HTML carries inline max-height:92vh. */
+    max-height: 92vh; /* fallback for browsers without dvh support */
+    max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px)) !important;
 }
 .ingredient-modal-header {
     position: relative;
