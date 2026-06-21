@@ -12988,6 +12988,7 @@ function renderBudgetTable() {
 
   // Get spending for selected month per category
   const monthSpending = {};
+  const monthTransfers = {};
   allExpenses.forEach((exp) => {
     if (
       exp.fields.Year == selectedYear &&
@@ -12995,7 +12996,14 @@ function renderBudgetTable() {
       exp.fields.Category
     ) {
       const cat = exp.fields.Category.trim();
-      monthSpending[cat] = (monthSpending[cat] || 0) + (exp.fields.Actual || 0);
+      if (exp.fields.Tags && exp.fields.Tags.includes("Transfer")) {
+        // Negative actual means the category received money, so transfer is positive
+        monthTransfers[cat] =
+          (monthTransfers[cat] || 0) - (exp.fields.Actual || 0);
+      } else {
+        monthSpending[cat] =
+          (monthSpending[cat] || 0) + (exp.fields.Actual || 0);
+      }
     }
   });
 
@@ -13016,10 +13024,11 @@ function renderBudgetTable() {
       const baseBudget = budgetInfo.amount || 0;
       const isRecurring = budgetInfo.recurring || false;
       const spent = monthSpending[category] || 0;
+      const transferred = monthTransfers[category] || 0;
 
       // Calculate rollover from previous month
       const rollover = calculateRollover(category, selectedYear, selectedMonth);
-      const totalBudget = baseBudget + rollover;
+      const totalBudget = baseBudget + rollover + transferred;
       const percentage = totalBudget > 0 ? (spent / totalBudget) * 100 : 0;
 
       let statusHTML = "";
@@ -13056,22 +13065,38 @@ function renderBudgetTable() {
                             onchange="updateCategoryBudget('${category.replace(/'/g, "\\'")}', this.value)">
                  `;
 
-      if (rollover > 0) {
+      const rolloverDisplay = rollover + transferred;
+      if (rolloverDisplay > 0) {
+        let text = rollover !== 0 ? `$${rollover.toFixed(2)} rollover` : "";
+        if (transferred !== 0)
+          text +=
+            (text ? " " : "") +
+            `${transferred > 0 ? "+" : "-"} $${Math.abs(transferred).toFixed(2)} transfer`;
         budgetDisplayHTML += `
                          <div class="text-xs text-green-600 mt-1 flex items-center gap-1">
                              <i class="fas fa-plus-circle"></i>
-                             <span>$${rollover.toFixed(2)} rollover</span>
-                             <span class="text-gray-400">→</span>
-                             <span class="font-semibold">$${totalBudget.toFixed(2)} total</span>
+                             <span>${text} → $${totalBudget.toFixed(2)} total</span>
                          </div>
                      `;
-      } else if (rollover < 0) {
+      } else if (rolloverDisplay < 0) {
+        let text =
+          rollover !== 0 ? `-$${Math.abs(rollover).toFixed(2)} deficit` : "";
+        if (transferred !== 0)
+          text +=
+            (text ? " " : "") +
+            `${transferred > 0 ? "+" : "-"} $${Math.abs(transferred).toFixed(2)} transfer`;
         budgetDisplayHTML += `
                          <div class="text-xs text-red-600 mt-1 flex items-center gap-1">
                              <i class="fas fa-minus-circle"></i>
-                             <span>-$${Math.abs(rollover).toFixed(2)} deficit</span>
-                             <span class="text-gray-400">→</span>
-                             <span class="font-semibold">$${totalBudget.toFixed(2)} total</span>
+                             <span>${text} → $${totalBudget.toFixed(2)} total</span>
+                         </div>
+                     `;
+      } else if (transferred !== 0) {
+        let text = `${transferred > 0 ? "+" : "-"}$${Math.abs(transferred).toFixed(2)} transfer`;
+        budgetDisplayHTML += `
+                         <div class="text-xs ${transferred > 0 ? "text-green-600" : "text-red-600"} mt-1 flex items-center gap-1">
+                             <i class="fas ${transferred > 0 ? "fa-plus-circle" : "fa-minus-circle"}"></i>
+                             <span>${text} → $${totalBudget.toFixed(2)} total</span>
                          </div>
                      `;
       }
@@ -13113,21 +13138,28 @@ function renderBudgetTable() {
                                         onchange="updateCategoryBudget('${category.replace(/'/g, "\\'")}', this.value)">
                              </div>
                              ${
-                               rollover > 0
+                               rolloverDisplay > 0
                                  ? `
                                  <div class="budget-rollover text-green-600">
                                      <i class="fas fa-plus-circle"></i>
-                                     <span>${rollover.toFixed(2)} rollover → ${totalBudget.toFixed(2)} total</span>
+                                     <span>${rollover !== 0 ? `${rollover.toFixed(2)} rollover` : ""}${transferred !== 0 ? (rollover !== 0 ? " " : "") + `${transferred > 0 ? "+" : "-"} ${Math.abs(transferred).toFixed(2)} transfer` : ""} → $${totalBudget.toFixed(2)} total</span>
                                  </div>
                              `
-                                 : rollover < 0
+                                 : rolloverDisplay < 0
                                    ? `
                                  <div class="budget-rollover text-red-600">
                                      <i class="fas fa-minus-circle"></i>
-                                     <span>-${Math.abs(rollover).toFixed(2)} deficit → ${totalBudget.toFixed(2)} total</span>
+                                     <span>${rollover !== 0 ? `-${Math.abs(rollover).toFixed(2)} deficit` : ""}${transferred !== 0 ? (rollover !== 0 ? " " : "") + `${transferred > 0 ? "+" : "-"} ${Math.abs(transferred).toFixed(2)} transfer` : ""} → $${totalBudget.toFixed(2)} total</span>
                                  </div>
                              `
-                                   : ""
+                                   : transferred !== 0
+                                     ? `
+                                 <div class="budget-rollover ${transferred > 0 ? "text-green-600" : "text-red-600"}">
+                                     <i class="fas ${transferred > 0 ? "fa-plus-circle" : "fa-minus-circle"}"></i>
+                                     <span>${transferred > 0 ? "+" : "-"}$${Math.abs(transferred).toFixed(2)} transfer → $${totalBudget.toFixed(2)} total</span>
+                                 </div>
+                             `
+                                     : ""
                              }
                              ${
                                Math.abs(leftover) > 0.01
@@ -22984,50 +23016,93 @@ async function confirmMoveFunds() {
       throw new Error("Budget info not found");
     }
 
-    let newFromAmount = fromBudgetInfo.amount;
-    let newToAmount = toBudgetInfo.amount;
+    const transferDate = new Date();
+    let dayVal = transferDate.getDate();
+    // Clamp day to a sensible range
+    dayVal = Math.min(31, Math.max(1, dayVal));
 
     if (type === "surplus") {
-      // Subtract from source, add to target
-      newFromAmount -= amount;
-      newToAmount += amount;
+      // Create expense in source to remove surplus (positive actual)
+      await supabasePost(TABLE_NAME, {
+        id: "exp" + Date.now() + Math.random().toString(36).substr(2, 9),
+        Item: `Fund Transfer to ${toCategory}`,
+        Category: fromCategory,
+        Year: selectedYear,
+        Month: selectedMonth,
+        Day: dayVal,
+        Actual: amount,
+        LLC: "No",
+        AmarContribution: 0,
+        PriyaContribution: 0,
+        Tags: "Transfer",
+        Notes: `Moved surplus funds to ${toCategory}`,
+      });
+
+      // Create expense in target to receive surplus (negative actual)
+      await supabasePost(TABLE_NAME, {
+        id: "exp" + Date.now() + Math.random().toString(36).substr(2, 9),
+        Item: `Fund Transfer from ${fromCategory}`,
+        Category: toCategory,
+        Year: selectedYear,
+        Month: selectedMonth,
+        Day: dayVal,
+        Actual: -amount,
+        LLC: "No",
+        AmarContribution: 0,
+        PriyaContribution: 0,
+        Tags: "Transfer",
+        Notes: `Received surplus funds from ${fromCategory}`,
+      });
     } else {
-      // amount is negative. Subtract the absolute value from target, add absolute to source
+      // Covering deficit. Source pays for it (negative actual), Target pays for it (positive actual)
       const absAmount = Math.abs(amount);
-      newFromAmount += absAmount;
-      newToAmount -= absAmount;
+      await supabasePost(TABLE_NAME, {
+        id: "exp" + Date.now() + Math.random().toString(36).substr(2, 9),
+        Item: `Covered deficit using funds from ${toCategory}`,
+        Category: fromCategory,
+        Year: selectedYear,
+        Month: selectedMonth,
+        Day: dayVal,
+        Actual: -absAmount,
+        LLC: "No",
+        AmarContribution: 0,
+        PriyaContribution: 0,
+        Tags: "Transfer",
+        Notes: `Covered deficit using funds from ${toCategory}`,
+      });
+
+      await supabasePost(TABLE_NAME, {
+        id: "exp" + Date.now() + Math.random().toString(36).substr(2, 9),
+        Item: `Funded deficit in ${fromCategory}`,
+        Category: toCategory,
+        Year: selectedYear,
+        Month: selectedMonth,
+        Day: dayVal,
+        Actual: absAmount,
+        LLC: "No",
+        AmarContribution: 0,
+        PriyaContribution: 0,
+        Tags: "Transfer",
+        Notes: `Funded deficit in ${fromCategory}`,
+      });
     }
 
-    // We allow budgets to be negative if it's offsetting historical positive rollovers
-    // Update target in Supabase
-    await supabasePatch(BUDGETS_TABLE, toBudgetInfo.id, {
-      Amount: newToAmount,
-    });
-
-    if (deleteAfter && newFromAmount === 0) {
+    if (deleteAfter) {
       await supabaseDelete(BUDGETS_TABLE, fromBudgetInfo.id);
       showNotification(
         `Funds moved and ${fromCategory} removed from this month`,
         "success",
       );
     } else {
-      await supabasePatch(BUDGETS_TABLE, fromBudgetInfo.id, {
-        Amount: newFromAmount,
-      });
-      if (deleteAfter) {
-        showNotification(
-          `Funds moved. Budget entry retained to balance accounting.`,
-          "success",
-        );
-      } else {
-        showNotification(
-          `Successfully moved funds between ${fromCategory} and ${toCategory}`,
-          "success",
-        );
-      }
+      showNotification(
+        `Successfully moved funds between ${fromCategory} and ${toCategory}`,
+        "success",
+      );
     }
 
     closeMoveFundsModal();
+    // We must fully reload expenses and budgets since we added expenses
+    await loadData({ silent: true });
     await loadCategoryBudgets();
     renderBudgetTable();
   } catch (e) {
