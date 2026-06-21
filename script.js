@@ -22874,3 +22874,143 @@ Return ONLY a JSON array of objects, like this:
     }
   }
 }
+
+// Move Funds Implementation
+function initiateMoveFunds(category, amount, deleteAfter = false) {
+  document.getElementById("moveFundsFromCategory").value = category;
+  document.getElementById("moveFundsAmount").value = amount;
+  document.getElementById("moveFundsDeleteAfter").value = deleteAfter
+    ? "true"
+    : "false";
+  document.getElementById("moveFundsType").value =
+    amount > 0 ? "surplus" : "deficit";
+
+  const descEl = document.getElementById("moveFundsDescription");
+  const selectLabelEl = document.getElementById("moveFundsSelectLabel");
+
+  if (amount > 0) {
+    descEl.innerHTML = `Move <strong>$${amount.toFixed(2)} surplus</strong> from <strong>${category}</strong> to:`;
+    selectLabelEl.textContent = "Select Category to Receive Funds";
+  } else {
+    descEl.innerHTML = `Cover <strong>$${Math.abs(amount).toFixed(2)} deficit</strong> in <strong>${category}</strong> using funds from:`;
+    selectLabelEl.textContent = "Select Category to Pull Funds From";
+  }
+
+  // Populate the categories dropdown
+  const selectEl = document.getElementById("moveFundsToCategory");
+  selectEl.innerHTML = "";
+
+  const selectedYear = document.getElementById("budgetYearFilter").value;
+  const selectedMonth = document.getElementById("budgetMonthFilter").value;
+  const monthKey = `${selectedYear}-${selectedMonth}`;
+
+  let hasOptions = false;
+  if (categoryBudgets[monthKey]) {
+    for (const cat of Object.keys(categoryBudgets[monthKey])) {
+      if (cat !== category) {
+        const opt = document.createElement("option");
+        opt.value = cat;
+        opt.textContent = cat;
+        selectEl.appendChild(opt);
+        hasOptions = true;
+      }
+    }
+  }
+
+  if (!hasOptions) {
+    showNotification(
+      "No other categories available in this month's budget.",
+      "error",
+    );
+    return;
+  }
+
+  document.getElementById("moveFundsModal").classList.add("active");
+}
+
+function closeMoveFundsModal() {
+  document.getElementById("moveFundsModal").classList.remove("active");
+}
+
+async function confirmMoveFunds() {
+  const fromCategory = document.getElementById("moveFundsFromCategory").value;
+  const toCategory = document.getElementById("moveFundsToCategory").value;
+  const amount = parseFloat(document.getElementById("moveFundsAmount").value);
+  const type = document.getElementById("moveFundsType").value;
+  const deleteAfter =
+    document.getElementById("moveFundsDeleteAfter").value === "true";
+
+  if (!toCategory) {
+    showNotification("Please select a target category", "error");
+    return;
+  }
+
+  const selectedYear = parseInt(
+    document.getElementById("budgetYearFilter").value,
+  );
+  const selectedMonth = document.getElementById("budgetMonthFilter").value;
+  const monthKey = `${selectedYear}-${selectedMonth}`;
+
+  showLoader("Moving funds...");
+
+  try {
+    const fromBudgetInfo = categoryBudgets[monthKey][fromCategory];
+    const toBudgetInfo = categoryBudgets[monthKey][toCategory];
+
+    if (!fromBudgetInfo || !toBudgetInfo) {
+      throw new Error("Budget info not found");
+    }
+
+    let newFromAmount = fromBudgetInfo.amount;
+    let newToAmount = toBudgetInfo.amount;
+
+    if (type === "surplus") {
+      // Subtract from source, add to target
+      newFromAmount -= amount;
+      newToAmount += amount;
+    } else {
+      // amount is negative. Subtract the absolute value from target, add absolute to source
+      const absAmount = Math.abs(amount);
+      newFromAmount += absAmount;
+      newToAmount -= absAmount;
+    }
+
+    // We allow budgets to be negative if it's offsetting historical positive rollovers
+    // Update target in Supabase
+    await supabasePatch(BUDGETS_TABLE, toBudgetInfo.id, {
+      Amount: newToAmount,
+    });
+
+    if (deleteAfter && newFromAmount === 0) {
+      await supabaseDelete(BUDGETS_TABLE, fromBudgetInfo.id);
+      showNotification(
+        `Funds moved and ${fromCategory} removed from this month`,
+        "success",
+      );
+    } else {
+      await supabasePatch(BUDGETS_TABLE, fromBudgetInfo.id, {
+        Amount: newFromAmount,
+      });
+      if (deleteAfter) {
+        showNotification(
+          `Funds moved. Budget entry retained to balance accounting.`,
+          "success",
+        );
+      } else {
+        showNotification(
+          `Successfully moved funds between ${fromCategory} and ${toCategory}`,
+          "success",
+        );
+      }
+    }
+
+    closeMoveFundsModal();
+    await loadCategoryBudgets();
+    renderBudgetTable();
+  } catch (e) {
+    console.error("Error moving funds:", e);
+    showNotification("Failed to move funds: " + e.message, "error");
+  } finally {
+    hideLoader();
+  }
+}
