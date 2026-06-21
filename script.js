@@ -9627,9 +9627,33 @@ async function saveExpense(event) {
     // Clamp day to a sensible range so it never becomes null/NaN in JSON
     dayVal = Math.min(31, Math.max(1, dayVal));
 
+    const category = formatCategory(document.getElementById("category").value);
+    const monthKey = `${yearVal}-${monthVal}`;
+
+    // Check if category exists in budget manager for this month (Requirement 2)
+    if (!recordId && category) {
+      if (!categoryBudgets[monthKey] || !categoryBudgets[monthKey][category]) {
+        hideLoader();
+        if (submitBtn) setButtonLoading(submitBtn, false);
+        isSavingExpense = false;
+
+        // Show custom modal or alert
+        alert(
+          "No budget allocated for '" +
+            category +
+            "' in " +
+            monthVal +
+            "/" +
+            yearVal +
+            ". Please add an entry in Budget Manager first, then add the expense.",
+        );
+        return;
+      }
+    }
+
     const fields = {
       Item: document.getElementById("itemName").value.trim(),
-      Category: formatCategory(document.getElementById("category").value),
+      Category: category,
       Year: yearVal,
       Month: monthVal,
       Day: dayVal,
@@ -13060,6 +13084,17 @@ function renderBudgetTable() {
                      `;
       }
 
+      // Calculate leftover for Move Funds
+      const leftover = totalBudget - spent;
+      if (Math.abs(leftover) > 0.01) {
+        budgetDisplayHTML +=
+          '<div class="mt-2"><button onclick="initiateMoveFunds(\'' +
+          category.replace(/'/g, "\\'") +
+          "', " +
+          leftover +
+          ')" class="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded border border-blue-200"><i class="fas fa-exchange-alt mr-1"></i> Move Funds</button></div>';
+      }
+
       // Mobile card HTML
       const mobileCard = `
                      <div class="budget-card ${statusClass}">
@@ -13316,6 +13351,48 @@ async function deleteCategoryBudget(category) {
   );
   const selectedMonth = document.getElementById("budgetMonthFilter").value;
   const monthKey = `${selectedYear}-${selectedMonth}`;
+
+  // Calculate leftover before deleting
+  const budgetInfo =
+    categoryBudgets[monthKey] && categoryBudgets[monthKey][category];
+  if (!budgetInfo || !budgetInfo.id) return;
+
+  const baseBudget = budgetInfo.amount || 0;
+  const rollover = calculateRollover(category, selectedYear, selectedMonth);
+  const totalBudget = baseBudget + rollover;
+
+  // Calculate spending
+  let spent = 0;
+  allExpenses.forEach((exp) => {
+    if (
+      exp.fields.Year == selectedYear &&
+      exp.fields.Month == selectedMonth &&
+      exp.fields.Category &&
+      exp.fields.Category.trim() === category
+    ) {
+      spent += exp.fields.Actual || 0;
+    }
+  });
+
+  const leftover = totalBudget - spent;
+
+  // If there's surplus or deficit, prompt to move funds instead
+  if (Math.abs(leftover) > 0.01) {
+    if (
+      confirm(
+        "You have a " +
+          (leftover > 0 ? "surplus" : "deficit") +
+          " of $" +
+          Math.abs(leftover).toFixed(2) +
+          " in " +
+          category +
+          ". Do you want to move these funds to another category before deleting?",
+      )
+    ) {
+      initiateMoveFunds(category, leftover, true);
+      return;
+    }
+  }
 
   if (
     confirm(
