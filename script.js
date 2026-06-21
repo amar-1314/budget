@@ -9637,16 +9637,8 @@ async function saveExpense(event) {
         if (submitBtn) setButtonLoading(submitBtn, false);
         isSavingExpense = false;
 
-        // Show custom modal or alert
-        alert(
-          "No budget allocated for '" +
-            category +
-            "' in " +
-            monthVal +
-            "/" +
-            yearVal +
-            ". Please add an entry in Budget Manager first, then add the expense.",
-        );
+        // Show missing budget modal
+        showMissingBudgetModal(category, monthVal, yearVal);
         return;
       }
     }
@@ -22878,7 +22870,8 @@ Return ONLY a JSON array of objects, like this:
 // Move Funds Implementation
 function initiateMoveFunds(category, amount, deleteAfter = false) {
   document.getElementById("moveFundsFromCategory").value = category;
-  document.getElementById("moveFundsAmount").value = amount;
+  document.getElementById("moveFundsAmount").value =
+    Math.abs(amount).toFixed(2);
   document.getElementById("moveFundsDeleteAfter").value = deleteAfter
     ? "true"
     : "false";
@@ -22889,11 +22882,11 @@ function initiateMoveFunds(category, amount, deleteAfter = false) {
   const selectLabelEl = document.getElementById("moveFundsSelectLabel");
 
   if (amount > 0) {
-    descEl.innerHTML = `Move <strong>$${amount.toFixed(2)} surplus</strong> from <strong>${category}</strong> to:`;
-    selectLabelEl.textContent = "Select Category to Receive Funds";
+    descEl.innerHTML = `You have a surplus of <strong>$${amount.toFixed(2)}</strong> in <strong>${category}</strong>.`;
+    selectLabelEl.textContent = "Select Category to Receive Funds:";
   } else {
-    descEl.innerHTML = `Cover <strong>$${Math.abs(amount).toFixed(2)} deficit</strong> in <strong>${category}</strong> using funds from:`;
-    selectLabelEl.textContent = "Select Category to Pull Funds From";
+    descEl.innerHTML = `You have a deficit of <strong>$${Math.abs(amount).toFixed(2)}</strong> in <strong>${category}</strong>.`;
+    selectLabelEl.textContent = "Select Category to Pull Funds From:";
   }
 
   // Populate the categories dropdown
@@ -22942,6 +22935,11 @@ async function confirmMoveFunds() {
 
   if (!toCategory) {
     showNotification("Please select a target category", "error");
+    return;
+  }
+
+  if (isNaN(amount) || amount <= 0) {
+    showNotification("Please enter a valid amount greater than 0", "error");
     return;
   }
 
@@ -23013,4 +23011,22 @@ async function confirmMoveFunds() {
   } finally {
     hideLoader();
   }
+}
+
+// Missing Budget Modal Functions
+function showMissingBudgetModal(category, month, year) {
+  const msgEl = document.getElementById("missingBudgetMessage");
+  if (msgEl) {
+    msgEl.innerHTML = `No budget allocated for <strong>${category}</strong> in <strong>${month}/${year}</strong>.<br><br>Please add an entry in the Budget Manager first, then add the expense.`;
+  }
+  document.getElementById("missingBudgetModal").classList.add("active");
+}
+
+function closeMissingBudgetModal() {
+  document.getElementById("missingBudgetModal").classList.remove("active");
+}
+
+function openBudgetManagerFromMissing() {
+  closeMissingBudgetModal();
+  openBudgetManager();
 }

@@ -1978,6 +1978,92 @@
         </div>
       </div>
     </div>
+
+    <!-- Move Funds Modal -->
+    <div id="moveFundsModal" class="modal" style="z-index: 1050">
+      <div class="modal-content" style="max-width: 500px">
+        <div class="modal-header flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-gray-800">
+            <i class="fas fa-exchange-alt mr-2 text-blue-600"></i>Move Funds
+          </h2>
+          <button
+            onclick="closeMoveFundsModal()"
+            class="text-gray-400 hover:text-gray-600"
+          >
+            <i class="fas fa-times text-2xl"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p id="moveFundsDescription" class="text-gray-600 mb-4"></p>
+
+          <input type="hidden" id="moveFundsFromCategory" />
+          <input type="hidden" id="moveFundsType" />
+          <input type="hidden" id="moveFundsDeleteAfter" />
+
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2"
+              >Amount to Move ($)</label
+            >
+            <input
+              type="number"
+              id="moveFundsAmount"
+              min="0.01"
+              step="0.01"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            />
+          </div>
+
+          <div class="mb-4">
+            <label
+              class="block text-sm font-semibold text-gray-700 mb-2"
+              id="moveFundsSelectLabel"
+              >Select Category</label
+            >
+            <select
+              id="moveFundsToCategory"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+            >
+              <!-- Populated dynamically -->
+            </select>
+          </div>
+
+          <div class="flex gap-3 mt-6">
+            <button onclick="confirmMoveFunds()" class="btn-primary flex-1">
+              <i class="fas fa-check mr-2"></i>Confirm
+            </button>
+            <button onclick="closeMoveFundsModal()" class="btn-secondary">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Missing Budget Modal -->
+    <div id="missingBudgetModal" class="modal" style="z-index: 1050">
+      <div class="modal-content" style="max-width: 400px; text-align: center">
+        <div class="mb-4 text-yellow-500">
+          <i class="fas fa-exclamation-triangle text-5xl"></i>
+        </div>
+        <h2 class="text-xl font-bold text-gray-800 mb-2">Budget Required</h2>
+        <p id="missingBudgetMessage" class="text-gray-600 mb-6"></p>
+        <div class="flex gap-3 justify-center">
+          <button
+            onclick="closeMissingBudgetModal()"
+            class="btn-secondary flex-1"
+          >
+            Cancel
+          </button>
+          <button
+            onclick="openBudgetManagerFromMissing()"
+            class="btn-primary flex-1"
+          >
+            <i class="fas fa-wallet mr-2"></i>Budget Manager
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Budget Manager Modal -->
     <div id="budgetManagerModal" class="modal">
       <div class="modal-content" style="max-width: 900px">
