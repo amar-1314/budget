@@ -13115,9 +13115,27 @@ function renderBudgetTable() {
                              ${
                                rollover > 0
                                  ? `
-                                 <div class="budget-rollover">
+                                 <div class="budget-rollover text-green-600">
                                      <i class="fas fa-plus-circle"></i>
-                                     <span>$${rollover.toFixed(2)} rollover → $${totalBudget.toFixed(2)} total</span>
+                                     <span>${rollover.toFixed(2)} rollover → ${totalBudget.toFixed(2)} total</span>
+                                 </div>
+                             `
+                                 : rollover < 0
+                                   ? `
+                                 <div class="budget-rollover text-red-600">
+                                     <i class="fas fa-minus-circle"></i>
+                                     <span>-${Math.abs(rollover).toFixed(2)} deficit → ${totalBudget.toFixed(2)} total</span>
+                                 </div>
+                             `
+                                   : ""
+                             }
+                             ${
+                               Math.abs(leftover) > 0.01
+                                 ? `
+                                 <div class="mt-2 mb-2">
+                                     <button onclick="initiateMoveFunds('${category.replace(/'/g, "\\'")}', ${leftover})" class="text-xs text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded border border-blue-200">
+                                         <i class="fas fa-exchange-alt mr-1"></i> Move Funds
+                                     </button>
                                  </div>
                              `
                                  : ""
@@ -13368,29 +13386,7 @@ async function deleteCategoryBudget(category) {
 
   const leftover = totalBudget - spent;
 
-  // If there's surplus or deficit, prompt to move funds instead
-  if (Math.abs(leftover) > 0.01) {
-    if (
-      confirm(
-        "You have a " +
-          (leftover > 0 ? "surplus" : "deficit") +
-          " of $" +
-          Math.abs(leftover).toFixed(2) +
-          " in " +
-          category +
-          ". Do you want to move these funds to another category before deleting?",
-      )
-    ) {
-      initiateMoveFunds(category, leftover, true);
-      return;
-    }
-  }
-
-  if (
-    confirm(
-      `Remove budget for ${category} from ${selectedMonth}/${selectedYear}?`,
-    )
-  ) {
+  const doDelete = async () => {
     showLoader("Removing budget...");
     try {
       const budgetInfo =
@@ -13412,7 +13408,36 @@ async function deleteCategoryBudget(category) {
       hideLoader();
       showNotification("Error: " + error.message, "error");
     }
+  };
+
+  // If there's surplus or deficit, prompt to move funds instead
+  if (Math.abs(leftover) > 0.01) {
+    document.getElementById("deleteWithFundsTitle").textContent =
+      `Outstanding ${leftover > 0 ? "Surplus" : "Deficit"}`;
+    document.getElementById("deleteWithFundsMessage").innerHTML =
+      `You have a <strong>${leftover > 0 ? "surplus" : "deficit"} of $${Math.abs(leftover).toFixed(2)}</strong> in <strong>${category}</strong>.<br><br>Do you want to move these funds to another category before deleting?`;
+
+    document.getElementById("btnProceedDeleteWithoutMove").onclick = () => {
+      closeDeleteWithFundsModal();
+      doDelete();
+    };
+
+    document.getElementById("btnProceedMoveFunds").onclick = () => {
+      closeDeleteWithFundsModal();
+      initiateMoveFunds(category, leftover, true);
+    };
+
+    document.getElementById("deleteWithFundsModal").classList.add("active");
+    return;
   }
+
+  // Standard confirmation without funds
+  showConfirmAction(
+    "Delete Category Budget",
+    `Are you sure you want to remove the budget for <strong>${category}</strong> from <strong>${selectedMonth}/${selectedYear}</strong>?`,
+    "Delete",
+    doDelete,
+  );
 }
 
 async function addNewCategoryBudget() {
@@ -23029,4 +23054,49 @@ function closeMissingBudgetModal() {
 function openBudgetManagerFromMissing() {
   closeMissingBudgetModal();
   openBudgetManager();
+}
+
+// --- Custom Modal Confirmations ---
+
+function closeConfirmActionModal() {
+  document.getElementById("confirmActionModal").classList.remove("active");
+}
+
+function showConfirmAction(
+  title,
+  message,
+  confirmText,
+  confirmCallback,
+  iconClass = "fa-trash-alt",
+  isDestructive = true,
+) {
+  document.getElementById("confirmActionTitle").textContent = title;
+  document.getElementById("confirmActionMessage").innerHTML = message;
+
+  const iconContainer = document.getElementById("confirmActionIconContainer");
+  iconContainer.innerHTML = `<i class="fas ${iconClass} text-5xl"></i>`;
+  if (isDestructive) {
+    iconContainer.className = "mb-4 text-red-500";
+  } else {
+    iconContainer.className = "mb-4 text-blue-500";
+  }
+
+  const btnConfirm = document.getElementById("btnConfirmActionProceed");
+  btnConfirm.innerHTML = confirmText;
+  if (isDestructive) {
+    btnConfirm.className = "btn-primary flex-1 bg-red-600 hover:bg-red-700";
+  } else {
+    btnConfirm.className = "btn-primary flex-1";
+  }
+
+  btnConfirm.onclick = () => {
+    closeConfirmActionModal();
+    if (confirmCallback) confirmCallback();
+  };
+
+  document.getElementById("confirmActionModal").classList.add("active");
+}
+
+function closeDeleteWithFundsModal() {
+  document.getElementById("deleteWithFundsModal").classList.remove("active");
 }
