@@ -2450,7 +2450,10 @@ function filterByPeriod() {
 function getFilteredExpenses() {
   const selectedYear = document.getElementById("yearSelector").value;
   const selectedMonth = document.getElementById("monthSelector").value;
-  let filtered = allExpenses;
+  // Completely hide internal Transfer records from standard reports/lists
+  let filtered = allExpenses.filter(
+    (exp) => !(exp.fields.Tags && exp.fields.Tags.includes("Transfer")),
+  );
   if (selectedYear !== "all")
     filtered = filtered.filter(
       (exp) => String(exp.fields.Year) === selectedYear,
@@ -4689,13 +4692,18 @@ function updateStats() {
   const selectedMonth = monthFilterEl ? monthFilterEl.value : "all";
 
   let monthKey = "";
+  let budgetYear, budgetMonth;
   if (selectedYear !== "all" && selectedMonth !== "all") {
     monthKey = `${selectedYear}-${selectedMonth}`;
+    budgetYear = selectedYear;
+    budgetMonth = selectedMonth;
   } else {
     // Fallback to current month if showing all
     const currentYear = new Date().getFullYear();
     const currentMonth = String(new Date().getMonth() + 1).padStart(2, "0");
     monthKey = `${currentYear}-${currentMonth}`;
+    budgetYear = currentYear;
+    budgetMonth = currentMonth;
   }
 
   console.log("   Budget monthKey:", monthKey);
@@ -4703,6 +4711,22 @@ function updateStats() {
   console.log("   Budgets for month:", categoryBudgets[monthKey]);
 
   // Sum up budgets for categories in filtered month (including rollover)
+  // Calculate current month transfers to adjust total budget limits
+  const monthTransfers = {};
+  allExpenses.forEach((exp) => {
+    if (
+      exp.fields.Year == budgetYear &&
+      exp.fields.Month == budgetMonth &&
+      exp.fields.Category &&
+      exp.fields.Tags &&
+      exp.fields.Tags.includes("Transfer")
+    ) {
+      const cat = exp.fields.Category.trim();
+      monthTransfers[cat] =
+        (monthTransfers[cat] || 0) - (exp.fields.Actual || 0);
+    }
+  });
+
   if (categoryBudgets[monthKey]) {
     console.log("   📊 Found budgets for", monthKey);
     Object.keys(categoryBudgets[monthKey]).forEach((cat) => {
@@ -4713,12 +4737,13 @@ function updateStats() {
         // Add rollover from previous month
         const rollover = calculateRollover(
           cat,
-          parseInt(selectedYear),
-          selectedMonth,
+          parseInt(budgetYear),
+          budgetMonth,
         );
-        const categoryTotal = baseBudget + rollover;
+        const transferred = monthTransfers[cat] || 0;
+        const categoryTotal = baseBudget + rollover + transferred;
         console.log(
-          `   📊 ${cat}: base=${baseBudget}, rollover=${rollover}, total=${categoryTotal}`,
+          `   📊 ${cat}: base=${baseBudget}, rollover=${rollover}, transferred=${transferred}, total=${categoryTotal}`,
         );
         totalBudget += categoryTotal;
       }
@@ -4750,12 +4775,13 @@ function updateStats() {
     const budgetInfo =
       categoryBudgets[monthKey] && categoryBudgets[monthKey][cat];
     const baseBudget = budgetInfo ? budgetInfo.amount : 0;
+    const transferred = monthTransfers[cat] || 0;
     const rollover = calculateRollover(
       cat,
       parseInt(selectedYear),
       selectedMonth,
     );
-    const totalCategoryBudget = baseBudget + rollover;
+    const totalCategoryBudget = baseBudget + rollover + transferred;
     const spent = categorySpending[cat];
     const difference = spent - totalCategoryBudget;
     if (totalCategoryBudget > 0 && difference > tolerance) {
