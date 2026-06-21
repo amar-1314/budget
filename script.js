@@ -308,6 +308,8 @@ const RECEIPT_ITEMS_TABLE = "ReceiptItems";
 const FIXED_EXPENSES_TABLE = "FixedExpenses";
 const LLC_EXPENSES_TABLE = "LLCEligibleExpenses";
 const BUDGETS_TABLE = "Budgets";
+const BUDGET_TRANSFERS_TABLE = "BudgetTransfers";
+let allBudgetTransfers = [];
 
 function updateAppVersionDisplay() {
   const versionEl = document.getElementById("appVersionDisplay");
@@ -2450,10 +2452,13 @@ function filterByPeriod() {
 function getFilteredExpenses() {
   const selectedYear = document.getElementById("yearSelector").value;
   const selectedMonth = document.getElementById("monthSelector").value;
-  // Completely hide internal Transfer records from standard reports/lists
-  let filtered = allExpenses.filter(
+
+  let filtered = allExpenses;
+  // Also hide legacy Transfer tags if they exist
+  filtered = filtered.filter(
     (exp) => !(exp.fields.Tags && exp.fields.Tags.includes("Transfer")),
   );
+
   if (selectedYear !== "all")
     filtered = filtered.filter(
       (exp) => String(exp.fields.Year) === selectedYear,
@@ -4713,17 +4718,14 @@ function updateStats() {
   // Sum up budgets for categories in filtered month (including rollover)
   // Calculate current month transfers to adjust total budget limits
   const monthTransfers = {};
-  allExpenses.forEach((exp) => {
-    if (
-      exp.fields.Year == budgetYear &&
-      exp.fields.Month == budgetMonth &&
-      exp.fields.Category &&
-      exp.fields.Tags &&
-      exp.fields.Tags.includes("Transfer")
-    ) {
-      const cat = exp.fields.Category.trim();
-      monthTransfers[cat] =
-        (monthTransfers[cat] || 0) - (exp.fields.Actual || 0);
+  allBudgetTransfers.forEach((t) => {
+    if (t.Year == budgetYear && t.Month == budgetMonth) {
+      if (t.ToCategory)
+        monthTransfers[t.ToCategory] =
+          (monthTransfers[t.ToCategory] || 0) + parseFloat(t.Amount);
+      if (t.FromCategory)
+        monthTransfers[t.FromCategory] =
+          (monthTransfers[t.FromCategory] || 0) - parseFloat(t.Amount);
     }
   });
 
@@ -12811,7 +12813,15 @@ function calculateRollover(category, year, month) {
       }
     });
 
-    cumulativeLeftover += baseBudget - spent;
+    let transfers = 0;
+    allBudgetTransfers.forEach((t) => {
+      if (t.Year == curY && t.Month == String(curM).padStart(2, "0")) {
+        if (t.ToCategory === category) transfers += parseFloat(t.Amount);
+        if (t.FromCategory === category) transfers -= parseFloat(t.Amount);
+      }
+    });
+
+    cumulativeLeftover += baseBudget + transfers - spent;
 
     curM++;
     if (curM > 12) {
@@ -13014,7 +13024,6 @@ function renderBudgetTable() {
 
   // Get spending for selected month per category
   const monthSpending = {};
-  const monthTransfers = {};
   allExpenses.forEach((exp) => {
     if (
       exp.fields.Year == selectedYear &&
@@ -13022,13 +13031,20 @@ function renderBudgetTable() {
       exp.fields.Category
     ) {
       const cat = exp.fields.Category.trim();
-      if (exp.fields.Tags && exp.fields.Tags.includes("Transfer")) {
-        // Negative actual means the category received money, so transfer is positive
-        monthTransfers[cat] =
-          (monthTransfers[cat] || 0) - (exp.fields.Actual || 0);
-      } else {
-        monthSpending[cat] =
-          (monthSpending[cat] || 0) + (exp.fields.Actual || 0);
+      monthSpending[cat] = (monthSpending[cat] || 0) + (exp.fields.Actual || 0);
+    }
+  });
+
+  const monthTransfers = {};
+  allBudgetTransfers.forEach((t) => {
+    if (t.Year == selectedYear && t.Month == selectedMonth) {
+      if (t.ToCategory) {
+        monthTransfers[t.ToCategory] =
+          (monthTransfers[t.ToCategory] || 0) + parseFloat(t.Amount);
+      }
+      if (t.FromCategory) {
+        monthTransfers[t.FromCategory] =
+          (monthTransfers[t.FromCategory] || 0) - parseFloat(t.Amount);
       }
     }
   });
@@ -23047,71 +23063,18 @@ async function confirmMoveFunds() {
     // Clamp day to a sensible range
     dayVal = Math.min(31, Math.max(1, dayVal));
 
-    if (type === "surplus") {
-      // Create expense in source to remove surplus (positive actual)
-      await supabasePost(TABLE_NAME, {
-        id: "exp" + Date.now() + Math.random().toString(36).substr(2, 9),
-        Item: `Fund Transfer to ${toCategory}`,
-        Category: fromCategory,
-        Year: selectedYear,
-        Month: selectedMonth,
-        Day: dayVal,
-        Actual: amount,
-        LLC: "No",
-        AmarContribution: 0,
-        PriyaContribution: 0,
-        Tags: "Transfer",
-        Notes: `Moved surplus funds to ${toCategory}`,
-      });
+    const transferData = {
+      id: "tr" + Date.now() + Math.random().toString(36).substr(2, 9),
+      FromCategory: type === "surplus" ? fromCategory : toCategory,
+      ToCategory: type === "surplus" ? toCategory : fromCategory,
+      Amount: Math.abs(amount),
+      Year: selectedYear,
+      Month: selectedMonth,
+      Date: transferDate.toISOString(),
+      Notes: type === "surplus" ? `Moved surplus funds` : `Covered deficit`,
+    };
 
-      // Create expense in target to receive surplus (negative actual)
-      await supabasePost(TABLE_NAME, {
-        id: "exp" + Date.now() + Math.random().toString(36).substr(2, 9),
-        Item: `Fund Transfer from ${fromCategory}`,
-        Category: toCategory,
-        Year: selectedYear,
-        Month: selectedMonth,
-        Day: dayVal,
-        Actual: -amount,
-        LLC: "No",
-        AmarContribution: 0,
-        PriyaContribution: 0,
-        Tags: "Transfer",
-        Notes: `Received surplus funds from ${fromCategory}`,
-      });
-    } else {
-      // Covering deficit. Source pays for it (negative actual), Target pays for it (positive actual)
-      const absAmount = Math.abs(amount);
-      await supabasePost(TABLE_NAME, {
-        id: "exp" + Date.now() + Math.random().toString(36).substr(2, 9),
-        Item: `Covered deficit using funds from ${toCategory}`,
-        Category: fromCategory,
-        Year: selectedYear,
-        Month: selectedMonth,
-        Day: dayVal,
-        Actual: -absAmount,
-        LLC: "No",
-        AmarContribution: 0,
-        PriyaContribution: 0,
-        Tags: "Transfer",
-        Notes: `Covered deficit using funds from ${toCategory}`,
-      });
-
-      await supabasePost(TABLE_NAME, {
-        id: "exp" + Date.now() + Math.random().toString(36).substr(2, 9),
-        Item: `Funded deficit in ${fromCategory}`,
-        Category: toCategory,
-        Year: selectedYear,
-        Month: selectedMonth,
-        Day: dayVal,
-        Actual: absAmount,
-        LLC: "No",
-        AmarContribution: 0,
-        PriyaContribution: 0,
-        Tags: "Transfer",
-        Notes: `Funded deficit in ${fromCategory}`,
-      });
-    }
+    await supabasePost(BUDGET_TRANSFERS_TABLE, transferData);
 
     if (deleteAfter) {
       await supabaseDelete(BUDGETS_TABLE, fromBudgetInfo.id);
