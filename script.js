@@ -18633,15 +18633,11 @@ let swRegistration = null;
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try {
-      // Determine the correct path for service worker
-      // For GitHub Pages: https://amar-1314.github.io/budget/
-      // For local: http://localhost/ or file://
-      const isGitHubPages = window.location.hostname.includes("github.io");
+      // Register the service worker relative to the current path. Works for the
+      // custom domain (budget.amarmacha.com -> /service-worker.js) as well as
+      // local dev and any sub-path hosting.
       const swPath =
-        isGitHubPages && window.location.pathname.includes("/budget/")
-          ? "/budget/service-worker.js" // GitHub Pages project site
-          : window.location.pathname.replace(/\/[^/]*$/, "/") +
-            "service-worker.js"; // Local or root
+        window.location.pathname.replace(/\/[^/]*$/, "/") + "service-worker.js";
 
       console.log("Registering Service Worker at:", swPath);
       swRegistration = await navigator.serviceWorker.register(swPath);
