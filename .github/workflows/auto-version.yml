@@ -30,9 +30,14 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
       
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Update Version
         run: |
-          bash update-version.sh
+          node update-version.js
       
       - name: Check for changes
         id: check_changes
@@ -46,7 +51,7 @@ jobs:
       - name: Commit and Push Version Update
         if: steps.check_changes.outputs.changes == 'true'
         run: |
-          git add VERSION script.js service-worker.js
+          git add VERSION script.js service-worker.js index.html
           NEW_VERSION=$(cat VERSION)
           git commit -m "chore: Auto-update version to v$NEW_VERSION [skip ci]"
           git push

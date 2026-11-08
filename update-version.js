@@ -77,30 +77,32 @@ try {
   process.exit(1);
 }
 
-// Files to update
+const quotedConst = (name, value) => ({
+  pattern: new RegExp(`const ${name} = (["'])[^"']*\\1;`),
+  replacement: (_match, quote) => `const ${name} = ${quote}${value}${quote};`,
+});
+
+const cacheBuster = (asset) => ({
+  pattern: new RegExp(`${asset.replace('.', '\\.')}\\?v=[^"']+`, 'g'),
+  replacement: `${asset}?v=${versionInfo.version}`,
+});
+
 const filesToUpdate = [
-  { 
-    file: 'script.js', 
+  {
+    file: 'script.js',
     patterns: [
-      { 
-        pattern: /const BUILD_TIMESTAMP = '[^']+';/,
-        replacement: `const BUILD_TIMESTAMP = '${timestamp}';`
-      },
-      {
-        pattern: /const APP_VERSION = '[^']*';/,
-        replacement: `const APP_VERSION = '${versionInfo.version}';`
-      }
-    ]
+      quotedConst('BUILD_TIMESTAMP', timestamp),
+      quotedConst('APP_VERSION', versionInfo.version),
+    ],
   },
-  { 
-    file: 'service-worker.js', 
-    patterns: [
-      { 
-        pattern: /const BUILD_TIMESTAMP = '[^']+';/,
-        replacement: `const BUILD_TIMESTAMP = '${timestamp}';`
-      }
-    ]
-  }
+  {
+    file: 'service-worker.js',
+    patterns: [quotedConst('BUILD_TIMESTAMP', timestamp)],
+  },
+  {
+    file: 'index.html',
+    patterns: [cacheBuster('script.js'), cacheBuster('style.css')],
+  },
 ];
 
 let updated = 0;
@@ -113,12 +115,12 @@ filesToUpdate.forEach(({ file, patterns }) => {
     // Read file
     let content = fs.readFileSync(filePath, 'utf8');
     
-    // Apply all patterns
+    const missing = patterns.filter(({ pattern }) => !content.match(pattern));
+    if (missing.length > 0) {
+      throw new Error(`pattern not found: ${missing.map(({ pattern }) => pattern).join(', ')}`);
+    }
+
     patterns.forEach(({ pattern, replacement }) => {
-      if (!pattern.test(content)) {
-        console.log(`⚠️  Warning: Pattern not found in ${file}`);
-        return;
-      }
       content = content.replace(pattern, replacement);
     });
     
