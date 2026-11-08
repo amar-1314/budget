@@ -1338,19 +1338,7 @@ async function supabaseGet(
 
     let url = `${SUPABASE_URL}/rest/v1/${tableName}?select=${columns}`;
 
-    // Add limit for large tables to prevent timeout
-    // Budget table: limit to last 1000 records by default
-    if (limit) {
-      url += `&limit=${limit}`;
-    } else if (tableName === TABLE_NAME) {
-      // For Budget table, add default limit and order by id desc to get latest
-      url += `&limit=1000&order=id.desc`;
-    }
-
-    // Add custom order if specified (overrides default)
-    if (orderBy) {
-      url += `&order=${orderBy}`;
-    }
+    url += `&order=${orderBy || "id.desc"}`;
 
     // Add filters if provided - supports operators: eq, gt, gte, lt, lte, like, ilike, in
     if (Object.keys(filters).length > 0) {
@@ -1378,30 +1366,51 @@ async function supabaseGet(
       url += `&${filterParams}`;
     }
 
-    const response = await fetchWithRetry(url, {
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        "Content-Type": "application/json",
-        Prefer: "return=representation",
-      },
-    });
+    if (limit) {
+      return (await supabaseFetchPage(`${url}&limit=${limit}`)).rows;
+    }
+    return await supabaseFetchAllPages(url);
+  }, `Supabase GET ${tableName}`);
+}
 
-    // Check for redirect responses (Supabase paused/billing issue)
-    if (
-      response.status === 301 ||
-      response.status === 302 ||
-      response.status === 307 ||
-      response.status === 308
-    ) {
-      const redirectUrl = response.headers.get("Location") || "unknown";
-      console.error(
-        "❌ Supabase is redirecting - Project may be PAUSED or has billing issues",
-      );
-      console.error("🔗 Redirect to:", redirectUrl);
+const SUPABASE_PAGE_SIZE = 1000;
 
-      // Show user-friendly error
-      const errorMsg = `
+async function supabaseFetchAllPages(url) {
+  const rows = [];
+  while (true) {
+    const page = await supabaseFetchPage(
+      `${url}&offset=${rows.length}&limit=${SUPABASE_PAGE_SIZE}`,
+    );
+    rows.push(...page.rows);
+    if (page.rows.length === 0 || rows.length >= page.total) return rows;
+  }
+}
+
+async function supabaseFetchPage(url) {
+  const response = await fetchWithRetry(url, {
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "count=exact",
+    },
+  });
+
+  // Check for redirect responses (Supabase paused/billing issue)
+  if (
+    response.status === 301 ||
+    response.status === 302 ||
+    response.status === 307 ||
+    response.status === 308
+  ) {
+    const redirectUrl = response.headers.get("Location") || "unknown";
+    console.error(
+      "❌ Supabase is redirecting - Project may be PAUSED or has billing issues",
+    );
+    console.error("🔗 Redirect to:", redirectUrl);
+
+    // Show user-friendly error
+    const errorMsg = `
 ⏸️ Supabase Project Appears to be PAUSED
 
 Your Supabase project needs to be reactivated:
@@ -1414,33 +1423,33 @@ Your Supabase project needs to be reactivated:
 
 Note: Free tier projects pause after 1 week of inactivity.
 `;
-      alert(errorMsg);
+    alert(errorMsg);
+    throw new Error(
+      `Supabase project is redirecting (likely paused). Visit dashboard to restore project.`,
+    );
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    // Check if response is HTML (common for paused projects)
+    if (errorText.includes("<html") || errorText.includes("<!DOCTYPE")) {
+      console.error(
+        "❌ Received HTML instead of JSON - Supabase project likely PAUSED",
+      );
+      alert(
+        "⏸️ Your Supabase project appears to be paused.\n\nPlease go to https://supabase.com/dashboard/projects and restore your project.",
+      );
       throw new Error(
-        `Supabase project is redirecting (likely paused). Visit dashboard to restore project.`,
+        "Supabase project appears to be paused (received HTML instead of JSON)",
       );
     }
 
-    if (!response.ok) {
-      const errorText = await response.text();
+    throw new Error(`Supabase GET error (${response.status}): ${errorText}`);
+  }
 
-      // Check if response is HTML (common for paused projects)
-      if (errorText.includes("<html") || errorText.includes("<!DOCTYPE")) {
-        console.error(
-          "❌ Received HTML instead of JSON - Supabase project likely PAUSED",
-        );
-        alert(
-          "⏸️ Your Supabase project appears to be paused.\n\nPlease go to https://supabase.com/dashboard/projects and restore your project.",
-        );
-        throw new Error(
-          "Supabase project appears to be paused (received HTML instead of JSON)",
-        );
-      }
-
-      throw new Error(`Supabase GET error (${response.status}): ${errorText}`);
-    }
-
-    return await response.json();
-  }, `Supabase GET ${tableName}`);
+  const total = Number(response.headers.get("Content-Range")?.split("/")[1]);
+  return { rows: await response.json(), total };
 }
 
 // Supabase API helper - POST request with retry logic
@@ -12833,6 +12842,32 @@ function calculateRollover(category, year, month) {
   return cumulativeLeftover;
 }
 
+function budgetAdjustmentLine(rollover, transferred, totalBudget, wrapperClass) {
+  const cent = 0.005;
+  const parts = [];
+  if (Math.abs(rollover) > cent) {
+    parts.push(
+      rollover > 0
+        ? `+${formatCurrency(rollover)} rollover`
+        : `${formatCurrency(rollover)} deficit`,
+    );
+  }
+  if (Math.abs(transferred) > cent) {
+    parts.push(
+      `${transferred > 0 ? "+" : ""}${formatCurrency(transferred)} transfer`,
+    );
+  }
+  if (parts.length === 0) return "";
+
+  const inDeficit = totalBudget < -cent;
+  return `
+    <div class="${wrapperClass} ${inDeficit ? "text-red-600" : "text-green-600"}">
+      <i class="fas ${inDeficit ? "fa-minus-circle" : "fa-plus-circle"}"></i>
+      <span>${parts.join(" ")} &rarr; ${formatCurrency(totalBudget)} total</span>
+    </div>
+  `;
+}
+
 async function loadBudgetTransfers() {
   try {
     allBudgetTransfers = await supabaseGet(BUDGET_TRANSFERS_TABLE);
@@ -13091,7 +13126,7 @@ function renderBudgetTable() {
       const tolerance = 0.01;
       const difference = spent - totalBudget;
 
-      if (totalBudget === 0) {
+      if (baseBudget === 0 && Math.abs(totalBudget) < tolerance) {
         statusHTML =
           '<span class="inline-block px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-medium"><i class="fas fa-minus-circle mr-1"></i>No Budget Set</span>';
       } else if (difference > tolerance) {
@@ -13118,41 +13153,12 @@ function renderBudgetTable() {
                             onchange="updateCategoryBudget('${category.replace(/'/g, "\\'")}', this.value)">
                  `;
 
-      const rolloverDisplay = rollover + transferred;
-      if (rolloverDisplay > 0) {
-        let text = rollover !== 0 ? `$${rollover.toFixed(2)} rollover` : "";
-        if (transferred !== 0)
-          text +=
-            (text ? " " : "") +
-            `${transferred > 0 ? "+" : "-"} $${Math.abs(transferred).toFixed(2)} transfer`;
-        budgetDisplayHTML += `
-                         <div class="text-xs text-green-600 mt-1 flex items-center gap-1">
-                             <i class="fas fa-plus-circle"></i>
-                             <span>${text} → $${totalBudget.toFixed(2)} total</span>
-                         </div>
-                     `;
-      } else if (rolloverDisplay < 0) {
-        let text =
-          rollover !== 0 ? `-$${Math.abs(rollover).toFixed(2)} deficit` : "";
-        if (transferred !== 0)
-          text +=
-            (text ? " " : "") +
-            `${transferred > 0 ? "+" : "-"} $${Math.abs(transferred).toFixed(2)} transfer`;
-        budgetDisplayHTML += `
-                         <div class="text-xs text-red-600 mt-1 flex items-center gap-1">
-                             <i class="fas fa-minus-circle"></i>
-                             <span>${text} → $${totalBudget.toFixed(2)} total</span>
-                         </div>
-                     `;
-      } else if (transferred !== 0) {
-        let text = `${transferred > 0 ? "+" : "-"}$${Math.abs(transferred).toFixed(2)} transfer`;
-        budgetDisplayHTML += `
-                         <div class="text-xs ${transferred > 0 ? "text-green-600" : "text-red-600"} mt-1 flex items-center gap-1">
-                             <i class="fas ${transferred > 0 ? "fa-plus-circle" : "fa-minus-circle"}"></i>
-                             <span>${text} → $${totalBudget.toFixed(2)} total</span>
-                         </div>
-                     `;
-      }
+      budgetDisplayHTML += budgetAdjustmentLine(
+        rollover,
+        transferred,
+        totalBudget,
+        "text-xs mt-1 flex items-center gap-1",
+      );
 
       // Calculate leftover for Move Funds
       const leftover = totalBudget - spent;
@@ -13190,30 +13196,7 @@ function renderBudgetTable() {
                                         class="budget-card-input px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                                         onchange="updateCategoryBudget('${category.replace(/'/g, "\\'")}', this.value)">
                              </div>
-                             ${
-                               rolloverDisplay > 0
-                                 ? `
-                                 <div class="budget-rollover text-green-600">
-                                     <i class="fas fa-plus-circle"></i>
-                                     <span>${rollover !== 0 ? `${rollover.toFixed(2)} rollover` : ""}${transferred !== 0 ? (rollover !== 0 ? " " : "") + `${transferred > 0 ? "+" : "-"} ${Math.abs(transferred).toFixed(2)} transfer` : ""} → $${totalBudget.toFixed(2)} total</span>
-                                 </div>
-                             `
-                                 : rolloverDisplay < 0
-                                   ? `
-                                 <div class="budget-rollover text-red-600">
-                                     <i class="fas fa-minus-circle"></i>
-                                     <span>${rollover !== 0 ? `-${Math.abs(rollover).toFixed(2)} deficit` : ""}${transferred !== 0 ? (rollover !== 0 ? " " : "") + `${transferred > 0 ? "+" : "-"} ${Math.abs(transferred).toFixed(2)} transfer` : ""} → $${totalBudget.toFixed(2)} total</span>
-                                 </div>
-                             `
-                                   : transferred !== 0
-                                     ? `
-                                 <div class="budget-rollover ${transferred > 0 ? "text-green-600" : "text-red-600"}">
-                                     <i class="fas ${transferred > 0 ? "fa-plus-circle" : "fa-minus-circle"}"></i>
-                                     <span>${transferred > 0 ? "+" : "-"}$${Math.abs(transferred).toFixed(2)} transfer → $${totalBudget.toFixed(2)} total</span>
-                                 </div>
-                             `
-                                     : ""
-                             }
+                             ${budgetAdjustmentLine(rollover, transferred, totalBudget, "budget-rollover")}
                              ${
                                Math.abs(leftover) > 0.01
                                  ? `
