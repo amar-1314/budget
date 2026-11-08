@@ -12833,6 +12833,15 @@ function calculateRollover(category, year, month) {
   return cumulativeLeftover;
 }
 
+async function loadBudgetTransfers() {
+  try {
+    allBudgetTransfers = await supabaseGet(BUDGET_TRANSFERS_TABLE);
+  } catch (error) {
+    console.error("Could not load budget transfers:", error);
+    allBudgetTransfers = [];
+  }
+}
+
 async function loadCategoryBudgets() {
   try {
     let data;
@@ -12884,6 +12893,8 @@ async function loadCategoryBudgets() {
 
     console.log("📋 categoryBudgets structure:", categoryBudgets);
     console.log("📋 Available months:", Object.keys(categoryBudgets));
+
+    await loadBudgetTransfers();
 
     // Check if we need to auto-create budgets for current month from recurring
     await autoCreateRecurringBudgets();
